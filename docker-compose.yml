@@ -1,0 +1,65 @@
+version: '3.8'
+services:
+  prefect-server:
+    image: prefecthq/prefect:2.20-python3.11
+    ports:
+      - "4200:4200"
+    networks:
+      - prefect-network
+    environment:
+      - PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://prefect:yourpassword@postgres:5432/prefect
+    healthcheck:
+      test: echo "ready"
+      interval: 5s
+      retries: 5
+      start_period: 5s
+      timeout: 5s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["prefect", "server", "start", "--host", "0.0.0.0"]
+
+  mongodb:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      - type: bind
+        source: ./data
+        target: /data/db
+
+  prefect-agent:
+    image: prefecthq/prefect:2.20-python3.11
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    networks:
+      - prefect-network
+    environment:
+      - PREFECT_API_URL=http://172.17.0.1:4200/api
+      - PREFECT_API_DATABASE_CONNECTION_URL="postgresql+asyncpg://prefect:yourpassword@postgres:5432/prefect"
+    command: >
+      sh -c "prefect work-pool create --type process default-work-pool &&
+             prefect worker start --pool default-work-pool"
+
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: prefect
+      POSTGRES_USER: prefect
+      POSTGRES_PASSWORD: yourpassword
+    ports:
+      - "5432:5432"
+    restart: always
+    networks:
+      - prefect-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U prefect" ]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 5s
+
+networks:
+  prefect-network:
+    driver: bridge
