@@ -70,7 +70,7 @@ class Config(BaseModel):
 
 
 def read_config() -> Config:
-    with open("ingest.toml") as config_file:
+    with open("data_pipeline/ingest.toml") as config_file:
         ingest_config = tomllib.load(config_file)["config"]
 
     start = ingest_config["start"]
