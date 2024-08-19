@@ -23,6 +23,8 @@ services:
     image: mongo:latest
     ports:
       - "27017:27017"
+    networks:
+      - prefect-network
     volumes:
       - type: bind
         source: ./data
