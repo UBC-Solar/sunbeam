@@ -129,7 +129,7 @@ def ingest_data(targets: List[Target]) -> List[Datum]:
 @task
 def load_data(data: List[Datum]):
     # Connect to the local MongoDB server
-    client = MongoClient("mongodb://localhost:27017/")
+    client = MongoClient("mongodb://mongodb:27017/")
 
     # Access or create a database
     db = client["mydatabase"]
