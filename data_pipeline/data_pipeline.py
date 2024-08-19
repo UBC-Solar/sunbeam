@@ -40,7 +40,8 @@ class Datum(BaseModel):
 
 @task
 def collect_targets() -> List[Target]:
-    with open("ingest.toml") as config_file:
+    print(os.listdir(os.getcwd()))
+    with open("app/ingest.toml") as config_file:
         ingest_config = tomllib.load(config_file)
 
     targets = []

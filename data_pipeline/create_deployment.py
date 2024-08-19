@@ -1,7 +1,7 @@
 from prefect import flow
 from prefect_github import GitHubCredentials
 
-github_credentials_block = GitHubCredentials.load("github")
+# github_credentials_block = GitHubCredentials.load("github")
 
 # Source for the code to deploy (here, a GitHub repo)
 SOURCE_REPO = "https://github.com/joshuaRiefman/sunbeam.git"
@@ -12,5 +12,5 @@ if __name__ == "__main__":
         entrypoint="data_pipeline/data_pipeline.py:pipeline"
     ).deploy(
         name="test-deployment",
-        work_pool_name="test-work-pool"
+        work_pool_name="default-work-pool"
     )

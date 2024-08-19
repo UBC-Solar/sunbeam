@@ -29,7 +29,7 @@ services:
         target: /data/db
 
   prefect-agent:
-    image: prefecthq/prefect:2.20-python3.11
+    build: prefect_worker
     depends_on:
       prefect-server:
         condition: service_healthy
@@ -39,8 +39,8 @@ services:
       - PREFECT_API_URL=http://172.17.0.1:4200/api
       - PREFECT_API_DATABASE_CONNECTION_URL="postgresql+asyncpg://prefect:yourpassword@postgres:5432/prefect"
     command: >
-      sh -c "prefect work-pool create --type process default-work-pool &&
-             prefect worker start --pool default-work-pool"
+      sh -c "poetry run prefect work-pool create --type process default-work-pool &&
+             poetry run prefect worker start --pool default-work-pool"
 
   postgres:
     image: postgres:13
@@ -59,6 +59,21 @@ services:
       retries: 5
       start_period: 30s
       timeout: 5s
+
+  data_pipeline:
+    build: data_pipeline
+    networks:
+      - prefect-network
+    environment:
+      - PREFECT_API_URL=http://172.17.0.1:4200/api
+      - PREFECT_API_DATABASE_CONNECTION_URL="postgresql+asyncpg://prefect:yourpassword@postgres:5432/prefect"
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+
+    command: >
+      sh -c "poetry run python3 create_deployment.py &&
+             poetry run prefect deployment run 'pipeline/test-deployment'" 
 
 networks:
   prefect-network:

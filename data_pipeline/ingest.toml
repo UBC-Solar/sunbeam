@@ -1,0 +1,11 @@
+[[target]]
+field = "TotalPackVoltage"
+measurement = "BMS"
+frequency = 5.0
+units = "V"
+
+[[target]]
+field = "VehicleVelocity"
+measurement = "MDI"
+frequency = 1.0
+units = "m/s"
