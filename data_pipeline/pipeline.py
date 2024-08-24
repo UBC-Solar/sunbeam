@@ -180,8 +180,8 @@ def load_data(data: List[Datum]):
 def init_environment() -> InfluxCredentials:
     influxdb_credentials: InfluxCredentials = InfluxCredentials.load(INFLUXDB_CREDENTIAL_BLOCK_NAME)
 
-    print(f"INFLUX_TOKEN: {os.getenv('INFLUX_TOKEN')}\n")
-    print(f"INFLUX_ORG: {os.getenv('INFLUX_ORG')}")
+    print(f"INFLUX_TOKEN: {influxdb_credentials.influxdb_api_token}\n")
+    print(f"INFLUX_ORG: {influxdb_credentials.influxdb_org}")
 
     return influxdb_credentials
 
