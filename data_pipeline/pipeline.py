@@ -91,7 +91,7 @@ def ingest_data(targets: List[Target], influxdb_credentials: InfluxCredentials) 
     influxdb_org = influxdb_credentials.influxdb_org
 
     config = read_config()
-    client = InfluxClient(influxdb_org=influxdb_org, influxdb_token=influxdb_token)
+    client = InfluxClient(influxdb_org, influxdb_token)
 
     data: List[Datum] = []
     with tqdm(desc="Querying targets", total=len(targets), position=0) as pbar:
