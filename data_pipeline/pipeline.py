@@ -86,9 +86,12 @@ def read_config() -> Config:
 
 
 @task
-def ingest_data(targets: List[Target]) -> List[Datum]:
+def ingest_data(targets: List[Target], influxdb_credentials: InfluxCredentials) -> List[Datum]:
+    influxdb_token = influxdb_credentials.influxdb_api_token
+    influxdb_org = influxdb_credentials.influxdb_org
+
     config = read_config()
-    client = InfluxClient()
+    client = InfluxClient(influxdb_org=influxdb_org, influxdb_token=influxdb_token)
 
     data: List[Datum] = []
     with tqdm(desc="Querying targets", total=len(targets), position=0) as pbar:
@@ -174,18 +177,18 @@ def load_data(data: List[Datum]):
 
 
 @task
-def init_environment():
+def init_environment() -> InfluxCredentials:
     influxdb_credentials: InfluxCredentials = InfluxCredentials.load(INFLUXDB_CREDENTIAL_BLOCK_NAME)
-    os.environ["INFLUX_TOKEN"] = influxdb_credentials.influxdb_api_token
-    os.environ["INFLUX_ORG"] = influxdb_credentials.influxdb_org
 
     print(f"INFLUX_TOKEN: {os.getenv('INFLUX_TOKEN')}\n")
     print(f"INFLUX_ORG: {os.getenv('INFLUX_ORG')}")
 
+    return influxdb_credentials
+
 
 @flow(log_prints=True)
 def pipeline():
-    init_environment()
+    influxdb_credentials = init_environment()
     targets = collect_targets()
-    data = ingest_data(targets)
+    data = ingest_data(targets, influxdb_credentials)
     load_data(data)

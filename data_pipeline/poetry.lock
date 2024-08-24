@@ -3227,7 +3227,7 @@ python-dotenv = "^1.0.1"
 type = "git"
 url = "https://github.com/UBC-Solar/data_tools"
 reference = "main"
-resolved_reference = "c3dbb63a02d3c3d9f00186877952eaee9d62bddd"
+resolved_reference = "a7d8e5e757d85fb8cec75e6044ed1732848df279"
 
 [[package]]
 name = "ujson"
