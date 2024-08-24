@@ -11,6 +11,7 @@ import pickle
 from prefect import flow, task
 import os
 from pymongo import MongoClient
+from credentials import InfluxCredentials
 
 
 logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
@@ -172,8 +173,16 @@ def load_data(data: List[Datum]):
     #     pickle.dump(file_sizes, file_size_cache)
 
 
+@task
+def init_environment():
+    influxdb_credentials: InfluxCredentials = InfluxCredentials.load("influx_credentials")
+    os.environ["INFLUXDB_TOKEN"] = influxdb_credentials.influxdb_api_token
+    os.environ["INFLUXDB_ORG"] = influxdb_credentials.influxdb_org
+
+
 @flow(log_prints=True)
 def pipeline():
+    init_environment()
     targets = collect_targets()
     data = ingest_data(targets)
     load_data(data)

@@ -1,7 +1,14 @@
 from prefect import flow
-from prefect_github import GitHubCredentials
+from credentials import InfluxCredentials
+from dotenv import load_dotenv
+import os
 
-# github_credentials_block = GitHubCredentials.load("github")
+load_dotenv()
+
+InfluxCredentials(
+    influxdb_api_token=os.getenv("INFLUXDB_TOKEN"),
+    influxdb_org=os.getenv("INFLUXDB_ORG")
+).save("influx_credentials")
 
 # Source for the code to deploy (here, a GitHub repo)
 SOURCE_REPO = "https://github.com/joshuaRiefman/sunbeam.git"
