@@ -17,7 +17,7 @@ SOURCE_REPO = "https://github.com/joshuaRiefman/sunbeam.git"
 if __name__ == "__main__":
     flow.from_source(
         source=SOURCE_REPO,
-        entrypoint="data_pipeline/data_pipeline.py:pipeline"
+        entrypoint="data_pipeline/deploy.py:run_pipeline"
     ).deploy(
         name="test-deployment",
         work_pool_name="default-work-pool"

@@ -1,5 +1,9 @@
 from data_pipeline.pipeline import pipeline
 
 
-if __name__ == "__main__":
+def run_pipeline():
     pipeline()
+
+
+if __name__ == "__main__":
+    run_pipeline()
