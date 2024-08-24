@@ -1,1 +1,1 @@
-from .credentials import InfluxCredentials
+from .data_pipeline import influx_credentials

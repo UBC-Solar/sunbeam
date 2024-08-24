@@ -1,5 +1,6 @@
 from prefect import flow
-from credentials import InfluxCredentials
+from influx_credentials import InfluxCredentials, INFLUXDB_CREDENTIAL_BLOCK_NAME
+# from data_pipeline.influx_credentials import InfluxCredentials
 from dotenv import load_dotenv
 import os
 
@@ -8,7 +9,7 @@ load_dotenv()
 InfluxCredentials(
     influxdb_api_token=os.getenv("INFLUXDB_TOKEN"),
     influxdb_org=os.getenv("INFLUXDB_ORG")
-).save("influx_credentials")
+).save(INFLUXDB_CREDENTIAL_BLOCK_NAME)
 
 # Source for the code to deploy (here, a GitHub repo)
 SOURCE_REPO = "https://github.com/joshuaRiefman/sunbeam.git"

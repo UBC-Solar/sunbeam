@@ -7,7 +7,11 @@ WORKDIR /app
 
 COPY . .
 
+COPY .env .
+
 ENV POETRY_VERSION 1.8.3
+
+RUN ls
 
 RUN pip install poetry==$POETRY_VERSION
 
