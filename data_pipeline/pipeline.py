@@ -179,6 +179,9 @@ def init_environment():
     os.environ["INFLUXDB_TOKEN"] = influxdb_credentials.influxdb_api_token
     os.environ["INFLUXDB_ORG"] = influxdb_credentials.influxdb_org
 
+    print(f"INFLUXDB_TOKEN: {os.getenv('INFLUXDB_TOKEN')}\n")
+    print(f"INFLUXDB_ORG: {os.getenv('INFLUXDB_ORG')}")
+
 
 @flow(log_prints=True)
 def pipeline():
