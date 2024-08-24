@@ -175,8 +175,8 @@ def load_data(data: List[Datum]):
 @flow(log_prints=True)
 def pipeline():
     targets = collect_targets()
-    # data = ingest_data(targets)
-    load_data([])
+    data = ingest_data(targets)
+    load_data(data)
 
 
 if __name__ == "__main__":
