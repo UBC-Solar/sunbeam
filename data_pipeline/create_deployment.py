@@ -7,8 +7,8 @@ import os
 load_dotenv()
 
 InfluxCredentials(
-    influxdb_api_token=os.getenv("INFLUXDB_TOKEN"),
-    influxdb_org=os.getenv("INFLUXDB_ORG")
+    influxdb_api_token=os.getenv("INFLUX_TOKEN"),
+    influxdb_org=os.getenv("INFLUX_TOKEN")
 ).save(INFLUXDB_CREDENTIAL_BLOCK_NAME)
 
 # Source for the code to deploy (here, a GitHub repo)

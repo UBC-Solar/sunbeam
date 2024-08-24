@@ -176,11 +176,11 @@ def load_data(data: List[Datum]):
 @task
 def init_environment():
     influxdb_credentials: InfluxCredentials = InfluxCredentials.load(INFLUXDB_CREDENTIAL_BLOCK_NAME)
-    os.environ["INFLUXDB_TOKEN"] = influxdb_credentials.influxdb_api_token
-    os.environ["INFLUXDB_ORG"] = influxdb_credentials.influxdb_org
+    os.environ["INFLUX_TOKEN"] = influxdb_credentials.influxdb_api_token
+    os.environ["INFLUX_TOKEN"] = influxdb_credentials.influxdb_org
 
-    print(f"INFLUXDB_TOKEN: {os.getenv('INFLUXDB_TOKEN')}\n")
-    print(f"INFLUXDB_ORG: {os.getenv('INFLUXDB_ORG')}")
+    print(f"INFLUX_TOKEN: {os.getenv('INFLUX_TOKEN')}\n")
+    print(f"INFLUX_TOKEN: {os.getenv('INFLUX_TOKEN')}")
 
 
 @flow(log_prints=True)
