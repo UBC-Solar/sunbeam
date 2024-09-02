@@ -107,6 +107,7 @@ def ingest_data(targets: List[Target], influxdb_credentials: InfluxCredentials) 
                     .car("Brightside")
                 query_df = client.query_dataframe(query)
 
+                print(query_df.columns.tolist())
                 queried_data = query_df[target.field].tolist()
 
                 data.append(Datum(
@@ -126,7 +127,7 @@ def ingest_data(targets: List[Target], influxdb_credentials: InfluxCredentials) 
                 ))
                 logger.debug(f"Processed target: {target.field}!")
 
-            except ValueError:
+            except (ValueError, KeyError):
                 logger.error(f"Failed to query target: {target}! \n {traceback.format_exc()}")
 
     return data
