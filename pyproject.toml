@@ -21,6 +21,7 @@ tqdm = "^4.66.5"
 prefect-github = "^0.2.7"
 pymongo = "^4.8.0"
 python-dotenv = "^1.0.1"
+gitpython = "^3.1.43"
 
 [build-system]
 requires = ["poetry-core>=1.8.3"]

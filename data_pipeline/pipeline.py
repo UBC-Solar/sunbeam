@@ -1,5 +1,6 @@
 import pathlib
 
+import pymongo.collection
 from data_tools.influx_client import InfluxClient, FluxQuery
 import numpy as np
 import toml as tomllib
@@ -14,6 +15,7 @@ from prefect import flow, task
 import os
 from pymongo import MongoClient
 from influx_credentials import InfluxCredentials, INFLUXDB_CREDENTIAL_BLOCK_NAME
+from git import Repo
 
 
 logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
@@ -135,48 +137,27 @@ def ingest_data(targets: List[Target], influxdb_credentials: InfluxCredentials) 
 
 @task
 def load_data(data: List[Datum]):
-    # Connect to the local MongoDB server
     client = MongoClient("mongodb://mongodb:27017/")
 
-    # Access or create a database
-    db = client["mydatabase"]
+    db = client.sunbeam_db
+    time_series_collection: pymongo.collection.Collection = db.time_series_data
 
-    # Access or create a collection (similar to a table in SQL)
-    collection = db["people"]
+    repo_path = pathlib.Path(__file__).parent.parent
+    repo = Repo(repo_path)
+    git_hash = repo.head.commit.hexsha
+    reduced_hash = git_hash[:7]
 
-    # Example objects
-    person1 = {"age": 30, "gender": "male", "nationality": "USA"}
-    person2 = {"age": 25, "gender": "female", "nationality": "Canada"}
+    time_series_collection.insert_many(
+        [{
+            "event": "FSGP",
+            "code_hash": reduced_hash,
+            "field": datum.meta.name,
+            "data": datum.data,
+            "meta": datum.meta
+        } for datum in data]
+    )
 
-    # Insert the objects into the collection
-    collection.insert_one(person1)
-    collection.insert_one(person2)
-
-    # Ensure unique index on the combination of fields
-    collection.create_index([("age", 1), ("gender", 1), ("nationality", 1)], unique=True)
-
-    # if not os.path.isdir("data"):
-    #     os.makedirs("data")
-    #
-    # file_sizes = {}
-    #
-    # for datum in data:
-    #     name = datum.meta.name
-    #     file_size = 0
-    #
-    #     with open(f'data/{name}.npy', "wb") as data_file:
-    #         np.save(data_file, datum.data)
-    #         file_size += data_file.tell()
-    #
-    #     with open(f'data/{name}.json', 'w') as meta_file:
-    #         meta_file.write(datum.meta.model_dump_json())
-    #         file_size += meta_file.tell()
-    #
-    #     logger.info(f"Wrote {file_size} bytes for {name}!")
-    #     file_sizes[name] = file_size
-    #
-    # with open("data/file_sizes.pkl", "wb") as file_size_cache:
-    #     pickle.dump(file_sizes, file_size_cache)
+    time_series_collection.create_index([("event", 1), ("code_hash", 1), ("field", 1)], unique=True)
 
 
 @task
@@ -195,3 +176,17 @@ def pipeline():
     targets = collect_targets()
     data = ingest_data(targets, influxdb_credentials)
     load_data(data)
+
+
+if __name__ == "__main__":
+    from dotenv import load_dotenv
+    import os
+
+    load_dotenv()
+
+    InfluxCredentials(
+        influxdb_api_token=os.getenv("INFLUX_TOKEN"),
+        influxdb_org=os.getenv("INFLUX_ORG")
+    ).save(INFLUXDB_CREDENTIAL_BLOCK_NAME, overwrite=True)
+
+    pipeline()
