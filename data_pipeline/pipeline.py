@@ -153,7 +153,7 @@ def load_data(data: List[Datum]):
             "code_hash": reduced_hash,
             "field": datum.meta.name,
             "data": datum.data,
-            "meta": datum.meta
+            "meta": datum.meta.dict()
         } for datum in data]
     )
 
