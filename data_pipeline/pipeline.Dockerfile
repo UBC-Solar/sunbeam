@@ -1,5 +1,6 @@
-FROM prefecthq/prefect:2.20-python3.11
+FROM python:3.11-slim
 
+# We need Git as the data pipeline source is a GitHub repo
 RUN apt-get update && apt-get install -y git && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -7,11 +8,7 @@ WORKDIR /app
 
 COPY . .
 
-COPY .env .
-
 ENV POETRY_VERSION 1.8.3
-
-RUN ls
 
 RUN pip install poetry==$POETRY_VERSION
 

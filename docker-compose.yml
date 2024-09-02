@@ -31,7 +31,9 @@ services:
         target: /data/db
 
   prefect-agent:
-    build: prefect_worker
+    build:
+      context: data_pipeline
+      dockerfile: ./prefect_worker.Dockerfile
     depends_on:
       prefect-server:
         condition: service_healthy
@@ -63,7 +65,9 @@ services:
       timeout: 5s
 
   data_pipeline:
-    build: data_pipeline
+    build:
+      context: data_pipeline
+      dockerfile: ./pipeline.Dockerfile
     networks:
       - prefect-network
     environment:
