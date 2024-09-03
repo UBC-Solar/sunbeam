@@ -100,7 +100,7 @@ def commission_pipeline(code_hash):
         name=f"pipeline-{code_hash}",
         work_pool_name="default-work-pool",
         parameters={
-            "code_hash": code_hash
+            "git_tag": code_hash
         }
     )
 
