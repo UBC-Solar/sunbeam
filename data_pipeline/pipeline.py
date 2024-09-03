@@ -15,11 +15,12 @@ from prefect import flow, task
 import os
 from pymongo import MongoClient
 from influx_credentials import InfluxCredentials, INFLUXDB_CREDENTIAL_BLOCK_NAME
-from git import Repo
 
 
 logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
 logger = logging.getLogger()
+
+code_hash = None
 
 
 class Target(BaseModel):
@@ -142,20 +143,16 @@ def load_data(data: List[Datum]):
     db = client.sunbeam_db
     time_series_collection: pymongo.collection.Collection = db.time_series_data
 
-    repo_path = pathlib.Path(__file__).parent.parent
-    repo = Repo(repo_path)
-    git_hash = repo.head.commit.hexsha
-    reduced_hash = git_hash[:7]
-
-    time_series_collection.insert_many(
-        [{
-            "event": "FSGP",
-            "code_hash": reduced_hash,
-            "field": datum.meta.name,
-            "data": datum.data,
-            "meta": datum.meta.dict()
-        } for datum in data]
-    )
+    for datum in data:
+        time_series_collection.insert_one(
+            {
+                "event": "FSGP",
+                "code_hash": code_hash,
+                "field": datum.meta.name,
+                "data": datum.data,
+                "meta": datum.meta.dict()
+            }
+        )
 
     time_series_collection.create_index([("event", 1), ("code_hash", 1), ("field", 1)], unique=True)
 
@@ -171,7 +168,9 @@ def init_environment() -> InfluxCredentials:
 
 
 @flow(log_prints=True)
-def pipeline():
+def pipeline(git_tag):
+    global code_hash
+    code_hash = git_tag
     influxdb_credentials = init_environment()
     targets = collect_targets()
     data = ingest_data(targets, influxdb_credentials)

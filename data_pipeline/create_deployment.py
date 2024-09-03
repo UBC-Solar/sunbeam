@@ -4,21 +4,16 @@ from influx_credentials import InfluxCredentials, INFLUXDB_CREDENTIAL_BLOCK_NAME
 from dotenv import load_dotenv
 import os
 
+
 load_dotenv()
 
-InfluxCredentials(
-    influxdb_api_token=os.getenv("INFLUX_TOKEN"),
-    influxdb_org=os.getenv("INFLUX_ORG")
-).save(INFLUXDB_CREDENTIAL_BLOCK_NAME)
 
-# Source for the code to deploy (here, a GitHub repo)
-SOURCE_REPO = "https://github.com/joshuaRiefman/sunbeam.git"
+def prepare_env():
+    InfluxCredentials(
+        influxdb_api_token=os.getenv("INFLUX_TOKEN"),
+        influxdb_org=os.getenv("INFLUX_ORG")
+    ).save(INFLUXDB_CREDENTIAL_BLOCK_NAME)
+
 
 if __name__ == "__main__":
-    flow.from_source(
-        source=SOURCE_REPO,
-        entrypoint="data_pipeline/pipeline.py:pipeline"
-    ).deploy(
-        name="test-deployment",
-        work_pool_name="default-work-pool"
-    )
+    prepare_env()

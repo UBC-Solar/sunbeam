@@ -58,7 +58,7 @@ services:
     networks:
       - prefect-network
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U prefect" ]
+      test: ["CMD-SHELL", "pg_isready -U prefect -d prefect"]
       interval: 10s
       retries: 5
       start_period: 30s
@@ -80,6 +80,25 @@ services:
     command: >
       sh -c "poetry run python3 create_deployment.py &&
              poetry run prefect deployment run 'pipeline/test-deployment'" 
+
+  external_api:
+    build: external
+    networks:
+      - prefect-network
+    ports:
+      - "8080:8080"
+    environment:
+      - PREFECT_API_URL=http://172.17.0.1:4200/api
+      - PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://prefect:yourpassword@postgres:5432/prefect
+
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+
+    command: >
+      sh -c "poetry show &&
+             poetry run python3 external.py" 
+
 
 networks:
   prefect-network:
