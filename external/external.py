@@ -105,10 +105,12 @@ async def commission_pipeline(code_hash):
     )
     repo_block.save(name=f"source", overwrite=True)
 
-    flow.from_source(
+    created_flow = await flow.from_source(
         source=repo_block,
         entrypoint="data_pipeline/pipeline.py:pipeline"
-    ).deploy(
+    )
+
+    await created_flow.deploy(
         name=f"pipeline-{code_hash}",
         work_pool_name="default-work-pool",
         parameters={
