@@ -65,7 +65,7 @@ def list_files():
 
 
 @app.route("/decommission_pipeline/<code_hash>")
-def decommission_pipeline(code_hash):
+async def decommission_pipeline(code_hash):
     commissioned_pipelines = metadata_collection.find_one(commissioned_pipelines_query)['data']
     if code_hash not in commissioned_pipelines:
         return f"Pipeline {code_hash} is not commissioned!"
@@ -94,7 +94,7 @@ def decommission_pipeline(code_hash):
 
 
 @app.route("/commission_pipeline/<code_hash>")
-def commission_pipeline(code_hash):
+async def commission_pipeline(code_hash):
     commissioned_pipelines = metadata_collection.find_one(commissioned_pipelines_query)['data']
     if code_hash in commissioned_pipelines:
         return f"Pipeline {code_hash} already commissioned!"
