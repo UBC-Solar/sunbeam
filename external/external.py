@@ -72,12 +72,12 @@ def decommission_pipeline(code_hash):
 
     time_series_collection.delete_many({"code_hash": code_hash})
 
-    with get_client(sync_client=True) as prefect_client:
+    async with get_client() as prefect_client:
         try:
-            deployment = prefect_client.read_deployment_by_name(code_hash)
+            deployment = await prefect_client.read_deployment_by_name(code_hash)
             assert isinstance(deployment, prefect.client.schemas.responses.DeploymentResponse)
 
-            prefect_client.delete_deployment(deployment.id)
+            await prefect_client.delete_deployment(deployment.id)
 
         except (AttributeError, AssertionError):
             logger.error(f"Failed to delete deployment: {code_hash}")
@@ -116,12 +116,12 @@ def commission_pipeline(code_hash):
         }
     )
 
-    with get_client(sync_client=True) as prefect_client:
+    async with get_client() as prefect_client:
         try:
-            deployment = prefect_client.read_deployment_by_name(code_hash)
+            deployment = await prefect_client.read_deployment_by_name(code_hash)
             assert isinstance(deployment, prefect.client.schemas.responses.DeploymentResponse)
 
-            prefect_client.create_flow_run_from_deployment(deployment.id)
+            await prefect_client.create_flow_run_from_deployment(deployment.id)
 
         except AssertionError:
             logger.error(f"Failed to run deployment {code_hash}")
