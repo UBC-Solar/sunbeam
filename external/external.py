@@ -1,9 +1,11 @@
+import prefect.client.schemas.responses
 from flask import Flask
 import pymongo
 from typing import List
 import logging
 from prefect import flow
 from prefect_github import GitHubRepository
+from prefect.client.orchestration import get_client
 
 SOURCE_REPO = "https://github.com/joshuaRiefman/sunbeam.git"
 
@@ -70,6 +72,16 @@ def decommission_pipeline(code_hash):
 
     time_series_collection.delete_many({"code_hash": code_hash})
 
+    with get_client(sync_client=True) as prefect_client:
+        try:
+            deployment = prefect_client.read_deployment_by_name(code_hash)
+            assert isinstance(deployment, prefect.client.schemas.responses.DeploymentResponse)
+
+            prefect_client.delete_deployment(deployment.id)
+
+        except (AttributeError, AssertionError):
+            logger.error(f"Failed to delete deployment: {code_hash}")
+
     update = {
         "$pull": {
             "data": code_hash
@@ -103,6 +115,16 @@ def commission_pipeline(code_hash):
             "git_tag": code_hash
         }
     )
+
+    with get_client(sync_client=True) as prefect_client:
+        try:
+            deployment = prefect_client.read_deployment_by_name(code_hash)
+            assert isinstance(deployment, prefect.client.schemas.responses.DeploymentResponse)
+
+            prefect_client.create_flow_run_from_deployment(deployment.id)
+
+        except AssertionError:
+            logger.error(f"Failed to run deployment {code_hash}")
 
     update = {
         "$push": {
