@@ -45,10 +45,11 @@ services:
     environment:
       - PREFECT_API_URL=http://172.17.0.1:4200/api
       - PREFECT_API_DATABASE_CONNECTION_URL="postgresql+asyncpg://prefect:yourpassword@postgres:5432/prefect"
-    command: >
-      sh -c "poetry run prefect work-pool create --type process default-work-pool &&
-             poetry run prefect worker start --pool default-work-pool && 
-             poetry run python worker.py"
+    # Note: the last command blocks (so insert any additonal commands before the last one!)
+    command: > 
+      sh -c "poetry run python worker.py && 
+             poetry run prefect work-pool create --type process default-work-pool &&
+             poetry run prefect worker start --pool default-work-pool"
 
   postgres:
     image: postgres:13
