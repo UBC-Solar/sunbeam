@@ -13,6 +13,7 @@ def prepare_environment():
         influxdb_api_token=os.getenv("INFLUX_TOKEN"),
         influxdb_org=os.getenv("INFLUX_ORG")
     ).save(INFLUXDB_CREDENTIAL_BLOCK_NAME)
+    print("Saving credentials...")
 
 
 if __name__ == "__main__":
