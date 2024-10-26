@@ -7,7 +7,7 @@ services:
     networks:
       - prefect-network
     environment:
-      - PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://prefect:yourpassword@postgres:5432/prefect
+      - PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://prefect:admin@postgres:5432/prefect
     healthcheck:
       test: echo "ready"
       interval: 5s
@@ -27,13 +27,16 @@ services:
       - prefect-network
     volumes:
       - type: bind
-        source: ./data
+        source: ./db/mongo_data
         target: /data/db
 
   prefect-agent:
     build:
-      context: data_pipeline
-      dockerfile: ./prefect_worker.Dockerfile
+      context: ./data_pipeline
+      dockerfile: ./Dockerfile
+      additional_contexts:
+        - root=.
+
     depends_on:
       prefect-server:
         condition: service_healthy
@@ -44,19 +47,24 @@ services:
       - PREFECT_API_DATABASE_CONNECTION_URL="postgresql+asyncpg://prefect:yourpassword@postgres:5432/prefect"
     command: >
       sh -c "poetry run prefect work-pool create --type process default-work-pool &&
-             poetry run prefect worker start --pool default-work-pool"
+             poetry run prefect worker start --pool default-work-pool && 
+             poetry run python worker.py"
 
   postgres:
     image: postgres:13
     environment:
       POSTGRES_DB: prefect
       POSTGRES_USER: prefect
-      POSTGRES_PASSWORD: yourpassword
+      POSTGRES_PASSWORD: admin
     ports:
       - "5432:5432"
     restart: always
     networks:
       - prefect-network
+    volumes:
+      - type: bind
+        source: ./db/pg_data
+        target: /var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U prefect -d prefect"]
       interval: 10s
@@ -64,25 +72,13 @@ services:
       start_period: 30s
       timeout: 5s
 
-  data_pipeline:
-    build:
-      context: data_pipeline
-      dockerfile: ./pipeline.Dockerfile
-    networks:
-      - prefect-network
-    environment:
-      - PREFECT_API_URL=http://172.17.0.1:4200/api
-      - PREFECT_API_DATABASE_CONNECTION_URL="postgresql+asyncpg://prefect:yourpassword@postgres:5432/prefect"
-    depends_on:
-      prefect-server:
-        condition: service_healthy
-
-    command: >
-      sh -c "poetry run python3 create_deployment.py &&
-             poetry run prefect deployment run 'pipeline/test-deployment'" 
-
   external_api:
-    build: external
+    build:
+      context: ./external
+      dockerfile: ./Dockerfile
+      additional_contexts:
+        - root=.
+
     networks:
       - prefect-network
     ports:
@@ -96,8 +92,7 @@ services:
         condition: service_healthy
 
     command: >
-      sh -c "poetry show &&
-             poetry run python3 external.py" 
+      sh -c "poetry show pymongo && poetry run python external.py" 
 
 
 networks:

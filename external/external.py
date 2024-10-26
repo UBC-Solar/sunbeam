@@ -4,10 +4,13 @@ import pymongo
 from typing import List
 import logging
 from prefect import flow
+from prefect import exceptions as prefect_exceptions
 from prefect_github import GitHubRepository
 from prefect.client.orchestration import get_client
+import asyncio
 
-SOURCE_REPO = "https://github.com/joshuaRiefman/sunbeam.git"
+
+SOURCE_REPO = "https://github.com/UBC-Solar/sunbeam.git"
 
 
 logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
@@ -32,8 +35,8 @@ client = pymongo.MongoClient("mongodb://mongodb:27017/")
 
 db = client.sunbeam_db
 
-metadata_collection: pymongo.collection.Collection = db.metadata
-time_series_collection: pymongo.collection.Collection = db.time_series_data
+metadata_collection = db.metadata
+time_series_collection = db.time_series_data
 db_status = metadata_collection.find_one({"type": "status"})
 
 
@@ -41,7 +44,9 @@ if db_status is None:
     logger.info("MongoDB is not initialized. Initializing...")
     init_db()
 
+
 logger.info("MongoDB is initialized!")
+
 
 commissioned_pipelines_query = {
     "type": "commissioned_pipelines"
@@ -65,22 +70,26 @@ def list_files():
 
 
 @app.route("/decommission_pipeline/<code_hash>")
-async def decommission_pipeline(code_hash):
+def decommission_pipeline(code_hash):
     commissioned_pipelines = metadata_collection.find_one(commissioned_pipelines_query)['data']
     if code_hash not in commissioned_pipelines:
         return f"Pipeline {code_hash} is not commissioned!"
 
     time_series_collection.delete_many({"code_hash": code_hash})
 
-    async with get_client() as prefect_client:
-        try:
-            deployment = await prefect_client.read_deployment_by_name(code_hash)
-            assert isinstance(deployment, prefect.client.schemas.responses.DeploymentResponse)
+    async def delete_deployment_by_name(deployment_name):
+        async with get_client() as prefect_client:
+            try:
+                # The name syntax needs to be updated to the same as when deployments are created
+                deployment = await prefect_client.read_deployment_by_name(f"pipeline/pipeline-{deployment_name}")
+                assert isinstance(deployment, prefect.client.schemas.responses.DeploymentResponse)
 
-            await prefect_client.delete_deployment(deployment.id)
+                await prefect_client.delete_deployment(deployment.id)
 
-        except (AttributeError, AssertionError):
-            logger.error(f"Failed to delete deployment: {code_hash}")
+            except (AttributeError, AssertionError, prefect_exceptions.ObjectNotFound):
+                logger.error(f"Failed to delete deployment: {deployment_name}")
+
+    asyncio.run(delete_deployment_by_name(code_hash))
 
     update = {
         "$pull": {
@@ -94,7 +103,7 @@ async def decommission_pipeline(code_hash):
 
 
 @app.route("/commission_pipeline/<code_hash>")
-async def commission_pipeline(code_hash):
+def commission_pipeline(code_hash):
     commissioned_pipelines = metadata_collection.find_one(commissioned_pipelines_query)['data']
     if code_hash in commissioned_pipelines:
         return f"Pipeline {code_hash} already commissioned!"
@@ -105,12 +114,10 @@ async def commission_pipeline(code_hash):
     )
     repo_block.save(name=f"source", overwrite=True)
 
-    created_flow = await flow.from_source(
+    flow.from_source(
         source=repo_block,
         entrypoint="data_pipeline/pipeline.py:pipeline"
-    )
-
-    await created_flow.deploy(
+    ).deploy(
         name=f"pipeline-{code_hash}",
         work_pool_name="default-work-pool",
         parameters={
@@ -118,15 +125,18 @@ async def commission_pipeline(code_hash):
         }
     )
 
-    async with get_client() as prefect_client:
-        try:
-            deployment = await prefect_client.read_deployment_by_name(code_hash)
-            assert isinstance(deployment, prefect.client.schemas.responses.DeploymentResponse)
+    async def run_deployment_by_name(deployment_name):
+        async with get_client() as prefect_client:
+            try:
+                deployment = await prefect_client.read_deployment_by_name(f"pipeline/pipeline-{deployment_name}")
+                assert isinstance(deployment, prefect.client.schemas.responses.DeploymentResponse)
 
-            await prefect_client.create_flow_run_from_deployment(deployment.id)
+                await prefect_client.create_flow_run_from_deployment(deployment.id)
 
-        except AssertionError:
-            logger.error(f"Failed to run deployment {code_hash}")
+            except AssertionError:
+                logger.error(f"Failed to run deployment {deployment_name}")
+
+    asyncio.run(run_deployment_by_name(code_hash))
 
     update = {
         "$push": {
@@ -137,6 +147,8 @@ async def commission_pipeline(code_hash):
     metadata_collection.update_one(commissioned_pipelines_query, update)
 
     return f"Commissioned {code_hash}"
+
+
 
 
 @app.route("/list_commissioned_pipelines")

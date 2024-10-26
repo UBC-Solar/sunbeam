@@ -1,14 +1,14 @@
-from prefect import flow
 from influx_credentials import InfluxCredentials, INFLUXDB_CREDENTIAL_BLOCK_NAME
-# from data_pipeline.influx_credentials import InfluxCredentials
 from dotenv import load_dotenv
 import os
 
 
-load_dotenv()
+def prepare_environment():
+    """
+    Prepare the environment for the worker that is executing workflows
+    """
+    load_dotenv()
 
-
-def prepare_env():
     InfluxCredentials(
         influxdb_api_token=os.getenv("INFLUX_TOKEN"),
         influxdb_org=os.getenv("INFLUX_ORG")
@@ -16,4 +16,4 @@ def prepare_env():
 
 
 if __name__ == "__main__":
-    prepare_env()
+    prepare_environment()

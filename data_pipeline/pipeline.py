@@ -1,7 +1,7 @@
 import pathlib
 
 import pymongo.collection
-from data_tools.influx_client import InfluxClient, FluxQuery
+from data_tools import DBClient, FluxQuery
 import numpy as np
 import toml as tomllib
 from pydantic import BaseModel, Field
@@ -10,9 +10,7 @@ import logging
 import traceback
 from tqdm import tqdm
 from datetime import datetime
-import pickle
 from prefect import flow, task
-import os
 from pymongo import MongoClient
 from influx_credentials import InfluxCredentials, INFLUXDB_CREDENTIAL_BLOCK_NAME
 
@@ -96,7 +94,7 @@ def ingest_data(targets: List[Target], influxdb_credentials: InfluxCredentials) 
     influxdb_org = influxdb_credentials.influxdb_org
 
     config = read_config()
-    client = InfluxClient(influxdb_org, influxdb_token)
+    client = DBClient(influxdb_org, influxdb_token)
 
     data: List[Datum] = []
     with tqdm(desc="Querying targets", total=len(targets), position=0) as pbar:
@@ -128,7 +126,7 @@ def ingest_data(targets: List[Target], influxdb_credentials: InfluxCredentials) 
                         }
                     )
                 ))
-                logger.debug(f"Processed target: {target.field}!")
+                logger.info(f"Processed target: {target.field}!")
 
             except (ValueError, KeyError):
                 logger.error(f"Failed to query target: {target}! \n {traceback.format_exc()}")
@@ -171,6 +169,7 @@ def init_environment() -> InfluxCredentials:
 def pipeline(git_tag):
     global code_hash
     code_hash = git_tag
+
     influxdb_credentials = init_environment()
     targets = collect_targets()
     data = ingest_data(targets, influxdb_credentials)
