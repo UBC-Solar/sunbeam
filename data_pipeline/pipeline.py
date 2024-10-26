@@ -1,8 +1,6 @@
 import pathlib
-
 import pymongo.collection
 from data_tools import DBClient, FluxQuery
-import numpy as np
 import toml as tomllib
 from pydantic import BaseModel, Field
 from typing import List, Dict
@@ -44,7 +42,6 @@ class Datum(BaseModel):
 
 @task
 def collect_targets() -> List[Target]:
-    print(os.listdir(os.getcwd()))
     with open(pathlib.Path(__file__).parent / "ingest.toml") as config_file:
         ingest_config = tomllib.load(config_file)
 
