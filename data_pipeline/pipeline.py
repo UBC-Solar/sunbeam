@@ -3,7 +3,7 @@ import pathlib
 import pymongo.collection
 from data_tools import Event, FileType, DataSource
 import toml as tomllib
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import List, Dict, Union
 import logging
 import traceback
@@ -13,8 +13,12 @@ import os
 from prefect import flow, task
 from pymongo import MongoClient
 
+from data_tools.query.influxdb_query import TimeSeriesTarget
 from data_pipeline.data_source import DataSourceFactory, DataSourceType
+from data_pipeline.overseer import Overseer
+from data_pipeline.stage.power_stage import PowerStage
 from influx_credentials import InfluxCredentials, INFLUXDB_CREDENTIAL_BLOCK_NAME
+from data_pipeline.stage.ingest_stage import IngestStage
 
 
 type PathLike = Union[str, pathlib.Path]
@@ -29,15 +33,6 @@ logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
 logger = logging.getLogger()
 
 code_hash = None
-
-
-class TimeSeriesTarget(BaseModel):
-    field: str
-    measurement: str
-    frequency: float = Field(gt=0)
-    units: str
-    car: str
-    bucket: str
 
 
 class DatumMeta(BaseModel):
@@ -56,28 +51,36 @@ class Datum(BaseModel):
     data: list
 
 
-@task
+# @task
 def collect_targets(ingest_config: dict) -> List[TimeSeriesTarget]:
     targets = []
-    for target in ingest_config["target"]:
+    seen_names = set()
 
+    for target in ingest_config["target"]:
         target_type = FileType(target["type"])
 
         match target_type:
             case FileType.TimeSeries:
-                try:
-                    targets.append(
-                        TimeSeriesTarget(
-                            field=target["field"],
-                            measurement=target["measurement"],
-                            frequency=target["frequency"],
-                            units=target["units"],
-                            car=target["car"],
-                            bucket=target["bucket"],
+                if not target["name"] in seen_names:
+                    try:
+                        targets.append(
+                            TimeSeriesTarget(
+                                name=target["name"],
+                                field=target["field"],
+                                measurement=target["measurement"],
+                                frequency=target["frequency"],
+                                units=target["units"],
+                                car=target["car"],
+                                bucket=target["bucket"],
+                            )
                         )
-                    )
-                except KeyError:
-                    logger.error(f"Missing key in target! \n {traceback.format_exc()}")
+
+                    except KeyError:
+                        logger.error(f"Missing key in target! \n {traceback.format_exc()}")
+
+                else:
+                    raise ValueError(f"Target names must be unique! {target['name']} "
+                                     f"is already the name of another target.")
 
             case FileType.Scalar:
                 raise NotImplementedError("Ingestion of `Scalar` type not implemented!")
@@ -107,7 +110,7 @@ def read_config() -> Config:
     return config
 
 
-@task
+# @task
 def collect_events(events_description_filepath: PathLike) -> List[Event]:
     with open(ROOT / events_description_filepath) as events_description_file:
         events_descriptions = tomllib.load(events_description_file)["event"]
@@ -116,48 +119,7 @@ def collect_events(events_description_filepath: PathLike) -> List[Event]:
     return list(events)
 
 
-@task
-def ingest_data(targets: List[TimeSeriesTarget], data_source: DataSource, config) -> List[Datum]:
-    data: List[Datum] = []
-    with tqdm(desc="Querying targets", total=len(targets), position=0) as pbar:
-        for target in targets:
-            try:
-                pbar.update(1)
-                # query = FluxQuery()\
-                #     .from_bucket("CAN_log")\
-                #     .range(start=config["start"], stop=config["end"])\
-                #     .filter(field=target.field, measurement=target.measurement)\
-                #     .car("Brightside")
-
-                data_source.get(f"{target.bucket}/{target.car}/{target.measurement}/{target.field}")
-
-                # print(query_df.columns.tolist())
-                # queried_data = query_df[target.field].tolist()
-
-                # data.append(Datum(
-                #     data=queried_data,
-                #     meta=DatumMeta(
-                #         name=target.field,
-                #         start_time=config.start,
-                #         end_time=config.end,
-                #         granularity=1.0 / target.frequency,
-                #         units=target.units,
-                #         meta={
-                #             "field": target.field,
-                #             "measurement": target.measurement,
-                #             "car": "Brightside"
-                #         }
-                #     )
-                # ))
-                logger.info(f"Processed target: {target.field}!")
-
-            except (ValueError, KeyError):
-                logger.error(f"Failed to query target: {target}! \n {traceback.format_exc()}")
-
-    return data
-
-
-@task
+# @task
 def load_data(data: List[Datum]):
     client = MongoClient("mongodb://mongodb:27017/")
 
@@ -178,8 +140,8 @@ def load_data(data: List[Datum]):
     time_series_collection.create_index([("event", 1), ("code_hash", 1), ("field", 1)], unique=True)
 
 
-@task
-def collect_config():
+# @task
+def collect_sunbeam_config():
     logger.info(f"Trying to find config at {CONFIG_PATH}...")
     with open(CONFIG_PATH) as config_file:
         config = tomllib.load(config_file)["config"]
@@ -193,31 +155,41 @@ def collect_config():
     return config
 
 
-@task
-def collect_ingest_config(ingest_config_filepath):
-    with open(ROOT / ingest_config_filepath) as ingest_config_file:
-        ingest_config = tomllib.load(ingest_config_file)
+# @task
+def collect_config(config_filepath):
+    with open(ROOT / f"{config_filepath}") as config_file:
+        config = tomllib.load(config_file)
 
-    return ingest_config
+    return config
 
 
 @flow(log_prints=True)
 def pipeline(git_tag):
-    global code_hash
-    code_hash = git_tag
+    pipeline_name = git_tag if git_tag is not None else "pipeline"
 
-    sunbeam_config = collect_config()
+    local_pipeline(pipeline_name)
 
-    ingest_config = collect_ingest_config()
 
-    ingest_data_source = DataSourceFactory.build(DataSourceType(sunbeam_config["ingest_data_source"]))
-
+def local_pipeline(pipeline_name):
+    sunbeam_config = collect_sunbeam_config()
+    data_source_config = collect_config(sunbeam_config["stage_data_source_description_file"])
+    ingest_config = collect_config(sunbeam_config["ingest_description_file"])
+    targets = collect_targets(ingest_config)
     events = collect_events(sunbeam_config["events_description_file"])
 
-    targets = collect_targets()
+    data_source = DataSourceFactory.build(sunbeam_config["stage_data_source"], data_source_config)
+    overseer = Overseer(pipeline_name, data_source)
 
-    data = ingest_data(targets, influxdb_credentials)
-    load_data(data)
+    ingest_stage = IngestStage(overseer, logger, ingest_config["config"])
+
+    ingest_stage.extract(logger, targets)
+    ingest_stage.transform(logger)
+    ingest_outputs = ingest_stage.load(logger)
+
+    power_stage = PowerStage(overseer, logger)
+    power_stage.extract(logger, ingest_outputs["TotalPackVoltage"], ingest_outputs["PackCurrent"])
+    power_stage.transform(logger)
+    pack_power = power_stage.load(logger)
 
 
 if __name__ == "__main__":
@@ -226,9 +198,9 @@ if __name__ == "__main__":
 
     load_dotenv()
 
-    InfluxCredentials(
-        influxdb_api_token=os.getenv("INFLUX_TOKEN"),
-        influxdb_org=os.getenv("INFLUX_ORG")
-    ).save(INFLUXDB_CREDENTIAL_BLOCK_NAME, overwrite=True)
+    # InfluxCredentials(
+    #     influxdb_api_token=os.getenv("INFLUX_TOKEN"),
+    #     influxdb_org=os.getenv("INFLUX_ORG")
+    # ).save(INFLUXDB_CREDENTIAL_BLOCK_NAME, overwrite=True)
 
-    pipeline()
+    local_pipeline("pipeline")

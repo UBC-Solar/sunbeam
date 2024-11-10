@@ -1,20 +1,29 @@
-from data_tools import File
+from datetime import datetime
+
+from data_tools.schema import File, Result
 from data_tools.schema import DataSource
 from data_tools.schema.data_source import FileLoader
 from data_tools.query import DBClient
 from data_pipeline.influx_credentials import InfluxCredentials, INFLUXDB_CREDENTIAL_BLOCK_NAME
+from datetime import datetime
+import os
 
 
 class InfluxDBDataSource(DataSource):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, start: datetime, stop: datetime, *args, **kwargs):
         super().__init__()
 
-        influxdb_credentials = InfluxDBDataSource._acquire_credentials()
+        self._start = start
+        self._stop = stop
 
-        influxdb_token = influxdb_credentials.influxdb_api_token
-        influxdb_org = influxdb_credentials.influxdb_org
+        # influxdb_credentials = InfluxDBDataSource._acquire_credentials()
+        #
+        # influxdb_token = influxdb_credentials.influxdb_api_token
+        # influxdb_org = influxdb_credentials.influxdb_org
+        influxdb_token = os.getenv("INFLUX_TOKEN")
+        influxdb_org = os.getenv("INFLUX_ORG")
 
-        self._influxdb_client = DBClient(influxdb_token, influxdb_org)
+        self._influxdb_client = DBClient(influxdb_org, influxdb_token)
 
     @staticmethod
     def _acquire_credentials() -> InfluxCredentials:
@@ -26,6 +35,19 @@ class InfluxDBDataSource(DataSource):
         raise NotImplementedError("`store` method is not implemented for InfluxDBDataSource "
                                   "as InfluxDB is read-only for Sunbeam!")
 
-    def get(self, canonical_path: str, **kwargs) -> File:
-        pass
+    def get(self, canonical_path: str, **kwargs) -> Result:
+        bucket, car, measurement, field = File.unwrap_canonical_path(canonical_path)
+        try:
+            return Result.Ok(
+                self._influxdb_client.query_series(
+                    start=self._start,
+                    stop=self._stop,
+                    bucket=bucket,
+                    car=car,
+                    measurement=measurement,
+                    field=field,
+                )
+            )
 
+        except Exception as e:
+            return Result.Err(e)

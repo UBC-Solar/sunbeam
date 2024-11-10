@@ -647,6 +647,21 @@ fasttext = ["fasttext"]
 langdetect = ["langdetect"]
 
 [[package]]
+name = "dill"
+version = "0.3.9"
+description = "serialize all of Python"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "dill-0.3.9-py3-none-any.whl", hash = "sha256:468dff3b89520b474c0397703366b7b95eebe6303f108adf9b19da1f702be87a"},
+    {file = "dill-0.3.9.tar.gz", hash = "sha256:81aa267dddf68cbfe8029c42ca9ec6a4ab3b22371d1c450abc54422577b4512c"},
+]
+
+[package.extras]
+graph = ["objgraph (>=1.7.2)"]
+profile = ["gprof2dot (>=2022.7.29)"]
+
+[[package]]
 name = "dnspython"
 version = "2.7.0"
 description = "DNS toolkit"
@@ -3459,7 +3474,7 @@ sqlalchemy = "^2.0.5"
 type = "git"
 url = "https://github.com/UBC-Solar/data_tools"
 reference = "sunbeam_utils"
-resolved_reference = "127fa2c5fb84a0a3c515143b6549cd7a4f37e035"
+resolved_reference = "d5f379f409f40fd5c4c6f4a7b8e452cdaa5c3ff5"
 
 [[package]]
 name = "ujson"
@@ -3714,4 +3729,4 @@ watchdog = ["watchdog (>=2.3)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "2278c2e8116f32164dd238ef8cee95a425cbec9b5fa022a102c96841440c37c4"
+content-hash = "5bb612a1eea89a91d7abd5f068db83a1107ca3caa9193319c71f77b302241ffa"
