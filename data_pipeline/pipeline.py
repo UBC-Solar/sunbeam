@@ -1,16 +1,28 @@
 import pathlib
+
 import pymongo.collection
-from data_tools import DBClient, FluxQuery
+from data_tools import Event, FileType, DataSource
 import toml as tomllib
 from pydantic import BaseModel, Field
-from typing import List, Dict
+from typing import List, Dict, Union
 import logging
 import traceback
 from tqdm import tqdm
 from datetime import datetime
+import os
 from prefect import flow, task
 from pymongo import MongoClient
+
+from data_pipeline.data_source import DataSourceFactory, DataSourceType
 from influx_credentials import InfluxCredentials, INFLUXDB_CREDENTIAL_BLOCK_NAME
+
+
+type PathLike = Union[str, pathlib.Path]
+
+
+CONFIG_PATH = os.getenv("SUNBEAM_PIPELINE_CONFIG_PATH", pathlib.Path(__file__).parent / "config" / "sunbeam.toml")
+REQUIRED_CONFIG = ["events_description_file", "ingest_data_source", "ingest_description_file", "stage_data_source"]
+ROOT = pathlib.Path(__file__).parent
 
 
 logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
@@ -19,11 +31,13 @@ logger = logging.getLogger()
 code_hash = None
 
 
-class Target(BaseModel):
+class TimeSeriesTarget(BaseModel):
     field: str
     measurement: str
     frequency: float = Field(gt=0)
     units: str
+    car: str
+    bucket: str
 
 
 class DatumMeta(BaseModel):
@@ -33,6 +47,8 @@ class DatumMeta(BaseModel):
     granularity: float
     meta: Dict
     units: str
+    car: str
+    bucket: str
 
 
 class Datum(BaseModel):
@@ -41,24 +57,30 @@ class Datum(BaseModel):
 
 
 @task
-def collect_targets() -> List[Target]:
-    with open(pathlib.Path(__file__).parent / "ingest.toml") as config_file:
-        ingest_config = tomllib.load(config_file)
-
+def collect_targets(ingest_config: dict) -> List[TimeSeriesTarget]:
     targets = []
     for target in ingest_config["target"]:
-        try:
-            targets.append(
-                Target(
-                    field=target["field"],
-                    measurement=target["measurement"],
-                    frequency=target["frequency"],
-                    units=target["units"]
-                )
-            )
 
-        except KeyError:
-            logger.error(f"Missing key in target! \n {traceback.format_exc()}")
+        target_type = FileType(target["type"])
+
+        match target_type:
+            case FileType.TimeSeries:
+                try:
+                    targets.append(
+                        TimeSeriesTarget(
+                            field=target["field"],
+                            measurement=target["measurement"],
+                            frequency=target["frequency"],
+                            units=target["units"],
+                            car=target["car"],
+                            bucket=target["bucket"],
+                        )
+                    )
+                except KeyError:
+                    logger.error(f"Missing key in target! \n {traceback.format_exc()}")
+
+            case FileType.Scalar:
+                raise NotImplementedError("Ingestion of `Scalar` type not implemented!")
 
     assert len(targets) > 0, "Unable to identify any targets in 'ingest.toml'!"
 
@@ -86,43 +108,47 @@ def read_config() -> Config:
 
 
 @task
-def ingest_data(targets: List[Target], influxdb_credentials: InfluxCredentials) -> List[Datum]:
-    influxdb_token = influxdb_credentials.influxdb_api_token
-    influxdb_org = influxdb_credentials.influxdb_org
+def collect_events(events_description_filepath: PathLike) -> List[Event]:
+    with open(ROOT / events_description_filepath) as events_description_file:
+        events_descriptions = tomllib.load(events_description_file)["event"]
 
-    config = read_config()
-    client = DBClient(influxdb_org, influxdb_token)
+    events = [Event.from_dict(event) for event in events_descriptions]
+    return list(events)
 
+
+@task
+def ingest_data(targets: List[TimeSeriesTarget], data_source: DataSource, config) -> List[Datum]:
     data: List[Datum] = []
     with tqdm(desc="Querying targets", total=len(targets), position=0) as pbar:
         for target in targets:
             try:
                 pbar.update(1)
-                query = FluxQuery()\
-                    .from_bucket("CAN_log")\
-                    .range(start=config.start, stop=config.end)\
-                    .filter(field=target.field, measurement=target.measurement)\
-                    .car("Brightside")
-                query_df = client.query_dataframe(query)
+                # query = FluxQuery()\
+                #     .from_bucket("CAN_log")\
+                #     .range(start=config["start"], stop=config["end"])\
+                #     .filter(field=target.field, measurement=target.measurement)\
+                #     .car("Brightside")
 
-                print(query_df.columns.tolist())
-                queried_data = query_df[target.field].tolist()
+                data_source.get(f"{target.bucket}/{target.car}/{target.measurement}/{target.field}")
 
-                data.append(Datum(
-                    data=queried_data,
-                    meta=DatumMeta(
-                        name=target.field,
-                        start_time=config.start,
-                        end_time=config.end,
-                        granularity=1.0 / target.frequency,
-                        units=target.units,
-                        meta={
-                            "field": target.field,
-                            "measurement": target.measurement,
-                            "car": "Brightside"
-                        }
-                    )
-                ))
+                # print(query_df.columns.tolist())
+                # queried_data = query_df[target.field].tolist()
+
+                # data.append(Datum(
+                #     data=queried_data,
+                #     meta=DatumMeta(
+                #         name=target.field,
+                #         start_time=config.start,
+                #         end_time=config.end,
+                #         granularity=1.0 / target.frequency,
+                #         units=target.units,
+                #         meta={
+                #             "field": target.field,
+                #             "measurement": target.measurement,
+                #             "car": "Brightside"
+                #         }
+                #     )
+                # ))
                 logger.info(f"Processed target: {target.field}!")
 
             except (ValueError, KeyError):
@@ -153,13 +179,26 @@ def load_data(data: List[Datum]):
 
 
 @task
-def init_environment() -> InfluxCredentials:
-    influxdb_credentials: InfluxCredentials = InfluxCredentials.load(INFLUXDB_CREDENTIAL_BLOCK_NAME)
+def collect_config():
+    logger.info(f"Trying to find config at {CONFIG_PATH}...")
+    with open(CONFIG_PATH) as config_file:
+        config = tomllib.load(config_file)["config"]
 
-    print(f"INFLUX_TOKEN: {influxdb_credentials.influxdb_api_token}\n")
-    print(f"INFLUX_ORG: {influxdb_credentials.influxdb_org}")
+    logger.info(f"Acquired config from {CONFIG_PATH}:\n")
+    logger.info(tomllib.dumps(config) + "\n")
 
-    return influxdb_credentials
+    for required_config in REQUIRED_CONFIG:
+        assert required_config in config, f"Missing Required Config: {required_config}\n"
+
+    return config
+
+
+@task
+def collect_ingest_config(ingest_config_filepath):
+    with open(ROOT / ingest_config_filepath) as ingest_config_file:
+        ingest_config = tomllib.load(ingest_config_file)
+
+    return ingest_config
 
 
 @flow(log_prints=True)
@@ -167,8 +206,16 @@ def pipeline(git_tag):
     global code_hash
     code_hash = git_tag
 
-    influxdb_credentials = init_environment()
+    sunbeam_config = collect_config()
+
+    ingest_config = collect_ingest_config()
+
+    ingest_data_source = DataSourceFactory.build(DataSourceType(sunbeam_config["ingest_data_source"]))
+
+    events = collect_events(sunbeam_config["events_description_file"])
+
     targets = collect_targets()
+
     data = ingest_data(targets, influxdb_credentials)
     load_data(data)
 
