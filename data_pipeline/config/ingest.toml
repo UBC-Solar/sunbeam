@@ -4,12 +4,19 @@ end = "2024-08-30T01:00:00Z"
 
 [[target]]
 field = "TotalPackVoltage"
+type = "TimeSeries"
 measurement = "BMS"
 frequency = 5.0
 units = "V"
+car = "Brightside"
+bucket = "CAN_log"
+type = "TimeSeries"
 
 [[target]]
 field = "VehicleVelocity"
+type = "TimeSeries"
 measurement = "MDI"
+car = "Brightside"
+bucket = "CAN_log"
 frequency = 1.0
 units = "m/s"

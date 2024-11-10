@@ -1,0 +1,5 @@
+[config]
+events_description_file = "config/events.toml"
+stage_data_source = "FSDataSource"
+ingest_description_file = "config/ingest.toml"
+ingest_data_source = "InfluxDBDataSource"
