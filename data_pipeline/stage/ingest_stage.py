@@ -1,15 +1,15 @@
 from argparse import FileType
-
 from data_pipeline.stage.stage import Stage
 from data_pipeline.data_source import InfluxDBDataSource
 from data_pipeline.stage.stage_registry import stage_registry
-from data_tools.schema import File, Result, FileLoader, FileType
+from data_tools.schema import File, Result, FileLoader, FileType, Event, UnwrappedError
 from data_tools.utils import parse_iso_datetime
-from data_pipeline.overseer import Overseer
+from data_pipeline.context import Context
 from data_tools.query.influxdb_query import TimeSeriesTarget
 from data_tools.collections.time_series import TimeSeries
 from typing import List, Dict
 import logging
+import traceback
 
 
 class IngestStage(Stage):
@@ -33,90 +33,95 @@ class IngestStage(Stage):
             parse_iso_datetime(config["stop"])
         )
 
-        self._extracted_time_series_data: Dict[str, Result] = {}
-        self._processed_time_series_data: Dict[str, Result] = {}
+        self._extracted_time_series_data: Dict[str, Dict[str, Result]] = {}
+        self._processed_time_series_data: Dict[str, Dict[str, Result]] = {}
 
-    # noinspection PyMethodOverriding
-    def extract(self, logger: logging.Logger, targets: List[TimeSeriesTarget]):
+    def extract(self, targets: List[TimeSeriesTarget], events: List[Event]):
         """
         Extract raw data and marshall it for use in the data pipeline.
 
+        :param events: the events that the raw time series data will be divided up into
         :param targets: the targets that will be acquired from InfluxDB
-        :param logger: logger for the extraction stage
         """
-        for target in targets:
-            try:
-                queried_data = self._ingest_data_source.get(File.make_canonical_path(
-                    origin=target.bucket,
-                    path=[target.car, target.measurement],
-                    name=target.field
-                )).unwrap()
+        for event in events:
+            self._extracted_time_series_data[event.name] = {}
 
-                self._extracted_time_series_data[target.name] = Result.Ok({
-                    "data": queried_data,
-                    "units": target.units,
-                    "granularity": 1 / target.frequency
-                })
+            for target in targets:
+                try:
+                    queried_data = self._ingest_data_source.get(File.make_canonical_path(
+                        origin=target.bucket,
+                        path=[target.car, target.measurement, event.start_as_iso_str, event.stop_as_iso_str],
+                        name=target.field
+                    )).unwrap()
 
-                logger.info(f"Successfully extracted time series data for {target.name}")
+                    self._extracted_time_series_data[event.name][target.name] = Result.Ok({
+                        "data": queried_data,
+                        "units": target.units,
+                        "granularity": 1 / target.frequency
+                    })
 
-            except Exception as e:
-                self._extracted_time_series_data[target.name] = Result.Err(e)
-                logger.error(f"Failed to extract time series data for {target.name}")
+                    self.logger.info(f"Successfully extracted time series data for {target.name} for {event.name}!")
 
-    # noinspection PyMethodOverriding
-    def transform(self, logger: logging.Logger) -> None:
+                except UnwrappedError as e:
+                    self._extracted_time_series_data[event.name][target.name] = Result.Err(e)
+                    self.logger.error(f"Failed to extract time series data for {target.name} for {event.name}: "
+                                      f"{traceback.format_exc()}")
+
+    def transform(self) -> None:
         """
         Process raw time series data into
-
-        :param logger:
-        :param args:
-        :param kwargs:
-        :return:
         """
-        for name, result in self._extracted_time_series_data.items():
-            # Check if we're going to get an error
-            if result:
+        for event_name, event_values in self._extracted_time_series_data.items():
+            self._processed_time_series_data[event_name] = {}
 
-                # If not, try to process the data
-                try:
-                    target = result.unwrap()
+            for name, result in event_values.items():
+                # Check if we're going to get an error
+                if result:
 
-                    data = target["data"]
-                    units = target["units"]
-                    granularity = target["granularity"]
+                    # If not, try to process the data
+                    try:
+                        target = result.unwrap()
 
-                    self._processed_time_series_data[name] = Result.Ok(TimeSeries.from_query_dataframe(
-                        query_df=data,
-                        granularity=granularity,
-                        field=name,
-                        units=units
-                    ))
+                        data = target["data"]
+                        units = target["units"]
+                        granularity = target["granularity"]
 
-                    logger.info(f"Successfully processed time series data {name}.")
+                        self._processed_time_series_data[event_name][name] = Result.Ok(TimeSeries.from_query_dataframe(
+                            query_df=data,
+                            granularity=granularity,
+                            field=name,
+                            units=units
+                        ))
 
-                # Oops, wrap the error
-                except Exception as e:
-                    self._processed_time_series_data[name] = Result.Err(e)
-                    logger.error(f"Failed to process time series data {name}!")
+                        self.logger.info(f"Successfully processed time series data {name}.")
 
-            # If we're going to get an error, forward it along
-            else:
-                self._processed_time_series_data[name] = result
+                    # Oops, wrap the error
+                    except Exception as e:
+                        self._processed_time_series_data[event_name][name] = Result.Err(e)
+                        self.logger.error(f"Failed to process time series data {name}: {traceback.format_exc()}")
 
-    def load(self, logger: logging.Logger, *args, **kwargs) -> Dict[str, FileLoader]:
-        result_dict = {}
+                # If we're going to get an error, forward it along
+                else:
+                    self._processed_time_series_data[event_name][name] = result
 
-        for name, result in self._processed_time_series_data.items():
-            file = File(
-                origin=self._overseer.title,
-                path=self.get_stage_name(),
-                name=name,
-                data=result.unwrap() if result else None,
-                file_type=FileType.TimeSeries
-            )
+    def load(self) -> Dict[str, Dict[str, FileLoader]]:
+        result_dict: Dict[str, Dict[str, FileLoader]] = {}
 
-            result_dict[name] = self._overseer.data_source.store(file)
+        for event_name, event_items in self._processed_time_series_data.items():
+            result_dict[event_name] = {}
+
+            for name, result in event_items.items():
+                file = File(
+                    origin=self.context.title,
+                    path=[event_name, self.get_stage_name()],
+                    name=name,
+                    data=result.unwrap() if result else None,
+                    file_type=FileType.TimeSeries
+                )
+
+                result_dict[event_name][name] = self.context.data_source.store(file)
+
+                self.logger.info(f"Successfully loaded {name} for {event_name}!")
 
         return result_dict
 
