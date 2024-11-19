@@ -4,7 +4,7 @@ import logging
 from data_tools.schema import FileLoader, File
 from data_pipeline.stage.stage_registry import stage_registry
 from functools import wraps
-from data_pipeline.overseer import Overseer
+from data_pipeline.context import Context
 
 type StageResult = Union[FileLoader, Tuple[FileLoader]]
 
@@ -16,7 +16,6 @@ def ensure_dependencies_declared(func):
     Ensure that all provided `File`s to this `Stage` belong to a listed dependency, and raises
     an `AssertionError` if an undeclared dependency is detected.
     """
-
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         dependencies = self.dependencies()
@@ -25,17 +24,15 @@ def ensure_dependencies_declared(func):
             if isinstance(arg, FileLoader):
                 _, stage_name, _ = File.unwrap_canonical_path(arg.canonical_path)
                 assert stage_name in dependencies, (f"{stage_name} must be declared in "
-                                                    f"declared dependencies of {self._stage_name}!")
+                                                    f"declared dependencies of {self.get_stage_name()}!")
         return func(self, *args, **kwargs)
 
     return wrapper
 
 
 class Stage(ABC):
-    _stage_name = ""
-
     def __new__(cls, *args, **kwargs):
-        assert cls.get_stage_name() in stage_registry, (f"Stage {cls._stage_name} declared in {__file__} has not "
+        assert cls.get_stage_name() in stage_registry, (f"Stage {cls.get_stage_name()} declared in {__file__} has not "
                                                         f"been registered to the stage registry!")
 
         return super().__new__(cls)
@@ -56,13 +53,21 @@ class Stage(ABC):
 
     @abstractmethod
     @ensure_dependencies_declared
-    def extract(self, logger: logging.Logger, **kwargs):
+    def extract(self, **kwargs):
         raise NotImplementedError
 
     @abstractmethod
-    def transform(self, logger: logging.Logger, **kwargs) -> None:
+    def transform(self, **kwargs) -> None:
         raise NotImplementedError
 
     @abstractmethod
-    def load(self, logger: logging.Logger, **kwargs) -> StageResult:
+    def load(self, **kwargs) -> StageResult:
         raise NotImplementedError
+
+    @property
+    def logger(self) -> logging.Logger:
+        return self._logger
+
+    @property
+    def context(self) -> Context:
+        return self._context
