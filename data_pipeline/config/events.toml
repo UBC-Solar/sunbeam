@@ -1,25 +1,25 @@
 [[event]]
 name = "FSGP_2024_Day_1"
-start = "2024-07-16T07:00:00Z"
-stop = "2024-07-16T18:00:00Z"
+start = "2024-07-16T14:00:00Z"
+stop = "2024-07-17T01:00:00Z"
 
 [[event]]
 name = "FSGP_2024_Day_2"
-start = "2024-07-17T07:00:00Z"
-stop = "2024-07-17T18:00:00Z"
+start = "2024-07-17T14:00:00Z"
+stop = "2024-07-18T01:00:00Z"
 
 [[event]]
 name = "FSGP_2024_Day_3"
-start = "2024-07-18T07:00:00Z"
-stop = "2024-07-18T18:00:00Z"
+start = "2024-07-18T14:00:00Z"
+stop = "2024-07-19T01:00:00Z"
 
 [[event]]
 name = "ASC_2024_Day_1"
-start = "2024-07-20T07:00:00Z"
-stop = "2024-07-20T18:00:00Z"
+start = "2024-07-20T14:00:00Z"
+stop = "2024-07-21T01:00:00Z"
 
 [[event]]
 name = "realtime"
 start = "2024-11-09T00:00:00Z"
-stop = "2024-11-09T00:00:00Z"
+stop = "2024-11-10T00:00:00Z"
 realtime = true
