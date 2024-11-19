@@ -1,9 +1,8 @@
 from data_tools.schema import FileLoader
-
 from data_pipeline.stage.stage import Stage, StageResult
 from data_pipeline.stage.stage_registry import stage_registry
-from data_tools.schema import DataSource, Result, UnwrappedError, File, FileType
-from data_pipeline.overseer import Overseer
+from data_tools.schema import Result, UnwrappedError, File, FileType
+from data_pipeline.context import Context
 from data_tools.collections import TimeSeries
 
 import logging
@@ -35,16 +34,13 @@ class PowerStage(Stage):
 
         self._total_pack_voltage_result = None
         self._pack_current_result = None
-
         self._pack_power = None
 
-    # noinspection PyMethodOverriding
-    def extract(self, logger: logging.Logger, total_pack_voltage_loader: FileLoader, pack_current_loader: FileLoader):
+    def extract(self, total_pack_voltage_loader: FileLoader, pack_current_loader: FileLoader):
         self._total_pack_voltage_result: Result = total_pack_voltage_loader()
         self._pack_current_result: Result = pack_current_loader()
 
-    # noinspection PyMethodOverriding
-    def transform(self, logger: logging.Logger) -> None:
+    def transform(self) -> None:
         try:
             total_pack_voltage: TimeSeries = self._total_pack_voltage_result.unwrap()
             pack_current: TimeSeries = self._pack_current_result.unwrap()
@@ -58,21 +54,22 @@ class PowerStage(Stage):
             self._pack_power = Result.Ok(pack_power)
 
         except UnwrappedError as e:
-            logger.error(f"Failed to unwrap result! \n {e}")
+            self.logger.error(f"Failed to unwrap result! \n {e}")
             self._pack_power = Result.Err(RuntimeError("Failed to process pack power!"))
 
-    # noinspection PyMethodOverriding
-    def load(self, logger: logging.Logger) -> StageResult:
+    def load(self) -> StageResult:
         pack_power_data = self._pack_power.unwrap() if self._pack_power else None
         pack_power_file = File(
-            origin=self._overseer.title,
-            path=PowerStage.get_stage_name(),
+            origin=self._context.title,
+            path=[self.event_name, PowerStage.get_stage_name()],
             name="PackPower",
             file_type=FileType.TimeSeries,
             data=pack_power_data
         )
 
-        pack_power_loader = self._overseer.data_source.store(pack_power_file)
+        pack_power_loader = self.context.data_source.store(pack_power_file)
+
+        self.logger.info(f"Successfully loaded PackPower!")
 
         return pack_power_loader
 
