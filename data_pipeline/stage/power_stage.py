@@ -18,8 +18,20 @@ class PowerStage(Stage):
     def dependencies():
         return ["ingest"]
 
-    def __init__(self, overseer: Overseer, logger: logging.Logger):
-        super().__init__(overseer, logger)
+    @property
+    def event_name(self):
+        return self._event_name
+
+    def __init__(self, context: Context, logger: logging.Logger, event_name: str):
+        """
+
+        :param Context context:
+        :param logging.Logger logger:
+        :param str event_name: which event is currently being processed
+        """
+        super().__init__(context, logger)
+
+        self._event_name = event_name
 
         self._total_pack_voltage_result = None
         self._pack_current_result = None

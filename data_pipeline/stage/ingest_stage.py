@@ -25,8 +25,8 @@ class IngestStage(Stage):
     def dependencies():
         return []
 
-    def __init__(self, overseer: Overseer, logger: logging.Logger, config: dict):
-        super().__init__(overseer, logger)
+    def __init__(self, context: Context, logger: logging.Logger, config: dict):
+        super().__init__(context, logger)
 
         self._ingest_data_source = InfluxDBDataSource(
             parse_iso_datetime(config["start"]),

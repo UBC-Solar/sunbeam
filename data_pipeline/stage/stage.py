@@ -40,8 +40,8 @@ class Stage(ABC):
 
         return super().__new__(cls)
 
-    def __init__(self, overseer: Overseer, logger: logging.Logger, *args, **kwargs):
-        self._overseer = overseer
+    def __init__(self, context: Context, logger: logging.Logger, *args, **kwargs):
+        self._context = context
         self._logger = logger
 
     @staticmethod
