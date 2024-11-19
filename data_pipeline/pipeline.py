@@ -1,4 +1,5 @@
 import pathlib
+from importlib.abc import FileLoader
 
 import pymongo.collection
 from data_tools import Event, FileType, DataSource
@@ -15,7 +16,7 @@ from pymongo import MongoClient
 
 from data_tools.query.influxdb_query import TimeSeriesTarget
 from data_pipeline.data_source import DataSourceFactory, DataSourceType
-from data_pipeline.overseer import Overseer
+from data_pipeline.context import Context
 from data_pipeline.stage.power_stage import PowerStage
 from influx_credentials import InfluxCredentials, INFLUXDB_CREDENTIAL_BLOCK_NAME
 from data_pipeline.stage.ingest_stage import IngestStage
@@ -133,7 +134,7 @@ def load_data(data: List[Datum]):
                 "code_hash": code_hash,
                 "field": datum.meta.name,
                 "data": datum.data,
-                "meta": datum.meta.dict()
+                "meta": datum.meta.model_dump()
             }
         )
 
@@ -171,25 +172,32 @@ def pipeline(git_tag):
 
 
 def local_pipeline(pipeline_name):
-    sunbeam_config = collect_sunbeam_config()
-    data_source_config = collect_config(sunbeam_config["stage_data_source_description_file"])
-    ingest_config = collect_config(sunbeam_config["ingest_description_file"])
-    targets = collect_targets(ingest_config)
-    events = collect_events(sunbeam_config["events_description_file"])
+    sunbeam_config: dict = collect_sunbeam_config()
+    data_source_config: dict = collect_config(sunbeam_config["stage_data_source_description_file"])
+    ingest_config: dict = collect_config(sunbeam_config["ingest_description_file"])
+    targets: List[TimeSeriesTarget] = collect_targets(ingest_config)
+    events: List[Event] = collect_events(sunbeam_config["events_description_file"])
 
-    data_source = DataSourceFactory.build(sunbeam_config["stage_data_source"], data_source_config)
-    overseer = Overseer(pipeline_name, data_source)
+    data_source: DataSource = DataSourceFactory.build(sunbeam_config["stage_data_source"], data_source_config)
+    context: Context = Context(pipeline_name, data_source)
 
-    ingest_stage = IngestStage(overseer, logger, ingest_config["config"])
+    ingest_stage: IngestStage = IngestStage(context, logger, ingest_config["config"])
+    ingest_stage.extract(targets, events)
+    ingest_stage.transform()
+    ingest_outputs: Dict[str, Dict[str, FileLoader]] = ingest_stage.load()
 
-    ingest_stage.extract(logger, targets)
-    ingest_stage.transform(logger)
-    ingest_outputs = ingest_stage.load(logger)
+    # We will process each event separately.
+    for event in events:
+        event_name = event.name
 
-    power_stage = PowerStage(overseer, logger)
-    power_stage.extract(logger, ingest_outputs["TotalPackVoltage"], ingest_outputs["PackCurrent"])
-    power_stage.transform(logger)
-    pack_power = power_stage.load(logger)
+        power_stage: PowerStage = PowerStage(context, logger, event_name)
+        power_stage.extract(
+            ingest_outputs[event_name]["TotalPackVoltage"],
+            ingest_outputs[event_name]["PackCurrent"]
+        )
+
+        power_stage.transform()
+        pack_power: FileLoader = power_stage.load()
 
 
 if __name__ == "__main__":
