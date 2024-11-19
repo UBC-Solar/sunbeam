@@ -4,3 +4,4 @@ data/
 .vscode/
 .env
 db/
+**/*.bin
