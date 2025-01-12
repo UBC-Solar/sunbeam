@@ -1,14 +1,20 @@
 from data_tools.schema import FileLoader
-from data_pipeline.stage.stage import Stage, StageResult
+from data_pipeline.stage.stage import Stage, StageResult, ensure_dependencies_declared, check_if_skip_stage
 from data_pipeline.stage.stage_registry import stage_registry
-from data_tools.schema import Result, UnwrappedError, File, FileType
+from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath
 from data_pipeline.context import Context
 from data_tools.collections import TimeSeries
 
-import logging
-
 
 class PowerStage(Stage):
+    @check_if_skip_stage
+    def run(self, total_pack_voltage_loader: FileLoader, pack_current_loader: FileLoader) -> FileLoader:
+        total_pack_voltage_result, pack_current_result = self.extract(total_pack_voltage_loader, pack_current_loader)
+        pack_power_result = self.transform(pack_current_result, total_pack_voltage_result)
+        pack_power_loader = self.load(pack_power_result)
+
+        return StageResult(self, {"pack_power": pack_power_loader}).__iter__()
+
     @classmethod
     def get_stage_name(cls):
         return "power"
@@ -21,29 +27,28 @@ class PowerStage(Stage):
     def event_name(self):
         return self._event_name
 
-    def __init__(self, context: Context, logger: logging.Logger, event_name: str):
+    def __init__(self, context: Context, event_name: str):
         """
-
         :param Context context:
-        :param logging.Logger logger:
         :param str event_name: which event is currently being processed
         """
-        super().__init__(context, logger)
+        super().__init__(context)
 
         self._event_name = event_name
 
-        self._total_pack_voltage_result = None
-        self._pack_current_result = None
-        self._pack_power = None
+        self.declare_output("pack_power")
 
-    def extract(self, total_pack_voltage_loader: FileLoader, pack_current_loader: FileLoader):
-        self._total_pack_voltage_result: Result = total_pack_voltage_loader()
-        self._pack_current_result: Result = pack_current_loader()
+    @ensure_dependencies_declared
+    def extract(self, total_pack_voltage_loader: FileLoader, pack_current_loader: FileLoader) -> tuple[Result, Result]:
+        total_pack_voltage_result: Result = total_pack_voltage_loader()
+        pack_current_result: Result = pack_current_loader()
 
-    def transform(self) -> None:
+        return total_pack_voltage_result, pack_current_result
+
+    def transform(self, total_pack_voltage_result, pack_current_result) -> Result:
         try:
-            total_pack_voltage: TimeSeries = self._total_pack_voltage_result.unwrap()
-            pack_current: TimeSeries = self._pack_current_result.unwrap()
+            total_pack_voltage: TimeSeries = total_pack_voltage_result.unwrap()
+            pack_current: TimeSeries = pack_current_result.unwrap()
 
             total_pack_voltage, pack_current = TimeSeries.align(total_pack_voltage, pack_current)
 
@@ -51,20 +56,24 @@ class PowerStage(Stage):
             pack_power.units = "W"
             pack_power.name = "Pack Power"
 
-            self._pack_power = Result.Ok(pack_power)
+            pack_power = Result.Ok(pack_power)
 
         except UnwrappedError as e:
             self.logger.error(f"Failed to unwrap result! \n {e}")
-            self._pack_power = Result.Err(RuntimeError("Failed to process pack power!"))
+            pack_power = Result.Err(RuntimeError("Failed to process pack power!"))
 
-    def load(self) -> StageResult:
-        pack_power_data = self._pack_power.unwrap() if self._pack_power else None
+        return pack_power
+
+    def load(self, pack_power) -> FileLoader:
         pack_power_file = File(
-            origin=self._context.title,
-            path=[self.event_name, PowerStage.get_stage_name()],
-            name="PackPower",
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                path=self.event_name,
+                source=PowerStage.get_stage_name(),
+                name="PackPower",
+            ),
             file_type=FileType.TimeSeries,
-            data=pack_power_data
+            data=pack_power.unwrap() if pack_power else None
         )
 
         pack_power_loader = self.context.data_source.store(pack_power_file)

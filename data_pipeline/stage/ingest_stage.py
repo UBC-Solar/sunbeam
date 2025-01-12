@@ -1,21 +1,27 @@
-from argparse import FileType
-from data_pipeline.stage.stage import Stage
-from data_pipeline.data_source import InfluxDBDataSource
+from data_pipeline.stage.stage import Stage, StageResult, StageError
+from data_pipeline.data_source import InfluxDBDataSource, FSDataSource, DataSourceType
 from data_pipeline.stage.stage_registry import stage_registry
-from data_tools.schema import File, Result, FileLoader, FileType, Event, UnwrappedError
+from data_tools.schema import File, Result, FileLoader, FileType, Event, UnwrappedError, CanonicalPath
 from data_tools.utils import parse_iso_datetime
 from data_pipeline.context import Context
 from data_tools.query.influxdb_query import TimeSeriesTarget
 from data_tools.collections.time_series import TimeSeries
 from typing import List, Dict
-import logging
 import traceback
 
 
 class IngestStage(Stage):
     """
-    Ingest raw time series data from InfluxDB and marshal it for use in the data pipeline.
+    Ingest raw time series data from InfluxDB and marshal it for use in the data pipeline, or load pre-existing data
+    from a local filesystem.
     """
+
+    def run(self, targets: List[TimeSeriesTarget], events: List[Event]) -> dict[str, Dict[str, FileLoader]]:
+        extracted_time_series_data = self.extract(targets, events)
+        processed_time_series_data = self.transform(extracted_time_series_data)
+        products = self.load(processed_time_series_data)
+
+        return StageResult(self, {"marshaled_ingest_data": products}).__iter__()
 
     @classmethod
     def get_stage_name(cls):
@@ -25,36 +31,118 @@ class IngestStage(Stage):
     def dependencies():
         return []
 
-    def __init__(self, context: Context, logger: logging.Logger, config: dict):
-        super().__init__(context, logger)
+    def __init__(self, context: Context, config: dict):
+        super().__init__(context)
 
-        self._ingest_data_source = InfluxDBDataSource(
-            parse_iso_datetime(config["start"]),
-            parse_iso_datetime(config["stop"])
-        )
+        match config["data_source"]:
+            case DataSourceType.FS:
+                self._ingest_data_source = FSDataSource(config)
 
-        self._extracted_time_series_data: Dict[str, Dict[str, Result]] = {}
-        self._processed_time_series_data: Dict[str, Dict[str, Result]] = {}
+                self._extract_method = self._extract_fs
+                self._transform_method = self._transform_fs
+                self._load_method = self._load_fs
 
-    def extract(self, targets: List[TimeSeriesTarget], events: List[Event]):
+            case DataSourceType.InfluxDB:
+                self._ingest_data_source = InfluxDBDataSource(
+                    parse_iso_datetime(config["start"]),
+                    parse_iso_datetime(config["stop"])
+                )
+
+                self._extract_method = self._extract_influxdb
+                self._transform_method = self._transform_influxdb
+                self._load_method = self._load_influxdb
+
+            case _:
+                raise StageError(self.get_stage_name(), f"Did not recognize {config["fs"]} as a valid Ingest "
+                                                        f"stage data source!")
+
+        self.declare_output("marshaled_ingest_data")
+
+    def _extract_fs(self, targets: List[TimeSeriesTarget], events: List[Event]) -> Dict[str, Dict[str, Result]]:
+        extracted_time_series_data = {}
+
+        for event in events:
+            extracted_time_series_data[event.name] = {}
+
+            for target in targets:
+                try:
+                    queried_data: Result = self._ingest_data_source.get(CanonicalPath(
+                        origin=self.context.title,
+                        source=self.get_stage_name(),
+                        path=[event.name],
+                        name=target.field
+                    )).unwrap()
+
+                    extracted_time_series_data[event.name][target.name] = Result.Ok(queried_data)
+
+                except UnwrappedError as e:
+                    extracted_time_series_data[event.name][target.name] = Result.Err(e)
+                    self.logger.error(f"Failed to find cached time series data for {target.name} for {event.name}: "
+                                      f"{traceback.format_exc()}")
+
+        return extracted_time_series_data
+
+    def _transform_fs(self, extracted_time_series_data: Dict[str, Dict[str, Result]]) -> Dict[str, Dict[str, Result]]:
+        return extracted_time_series_data
+
+    def _load_fs(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> Dict[str, Dict[str, FileLoader]]:
+        result_dict: Dict[str, Dict[str, FileLoader]] = {}
+
+        for event_name, event_items in processed_time_series_data.items():
+            result_dict[event_name] = {}
+
+            for name, result in event_items.items():
+                file = File(
+                    data=result.unwrap() if result else None,
+                    canonical_path=CanonicalPath(
+                        origin=self.context.title,
+                        source=self.get_stage_name(),
+                        path=event_name,
+                        name=name
+                    ),
+                    file_type=FileType.TimeSeries
+                )
+
+                result_dict[event_name][name] = FileLoader(
+                    lambda x: self.context.data_source.get(x),
+                    file.canonical_path
+                )
+
+                self.logger.info(f"Successfully loaded {name} for {event_name}!")
+
+        return result_dict
+
+    def extract(self, targets: List[TimeSeriesTarget], events: List[Event]) -> dict[str, dict[str, Result]]:
+        return self._extract_method(targets, events)
+
+    def transform(self, extracted_time_series_data: Dict[str, Dict[str, Result]]) -> Dict[str, Dict[str, Result]]:
+        return self._transform_method(extracted_time_series_data)
+
+    def load(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> Dict[str, Dict[str, FileLoader]]:
+        return self._load_method(processed_time_series_data)
+
+    def _extract_influxdb(self, targets: List[TimeSeriesTarget], events: List[Event]) -> Dict[str, Dict[str, Result]]:
         """
         Extract raw data and marshall it for use in the data pipeline.
 
         :param events: the events that the raw time series data will be divided up into
         :param targets: the targets that will be acquired from InfluxDB
         """
+        extracted_time_series_data = {}
+
         for event in events:
-            self._extracted_time_series_data[event.name] = {}
+            extracted_time_series_data[event.name] = {}
 
             for target in targets:
                 try:
-                    queried_data = self._ingest_data_source.get(File.make_canonical_path(
+                    queried_data = self._ingest_data_source.get(CanonicalPath(
                         origin=target.bucket,
-                        path=[target.car, target.measurement, event.start_as_iso_str, event.stop_as_iso_str],
+                        source=target.car,
+                        path=[target.measurement, event.start_as_iso_str, event.stop_as_iso_str],
                         name=target.field
                     )).unwrap()
 
-                    self._extracted_time_series_data[event.name][target.name] = Result.Ok({
+                    extracted_time_series_data[event.name][target.name] = Result.Ok({
                         "data": queried_data,
                         "units": target.units,
                         "granularity": 1 / target.frequency
@@ -63,16 +151,20 @@ class IngestStage(Stage):
                     self.logger.info(f"Successfully extracted time series data for {target.name} for {event.name}!")
 
                 except UnwrappedError as e:
-                    self._extracted_time_series_data[event.name][target.name] = Result.Err(e)
+                    extracted_time_series_data[event.name][target.name] = Result.Err(e)
                     self.logger.error(f"Failed to extract time series data for {target.name} for {event.name}: "
                                       f"{traceback.format_exc()}")
 
-    def transform(self) -> None:
+        return extracted_time_series_data
+
+    def _transform_influxdb(self, extracted_time_series_data: Dict[str, Dict[str, Result]]) -> Dict[str, Dict[str, Result]]:
         """
         Process raw time series data into
         """
-        for event_name, event_values in self._extracted_time_series_data.items():
-            self._processed_time_series_data[event_name] = {}
+        processed_time_series_data = {}
+
+        for event_name, event_values in extracted_time_series_data.items():
+            processed_time_series_data[event_name] = {}
 
             for name, result in event_values.items():
                 # Check if we're going to get an error
@@ -86,7 +178,7 @@ class IngestStage(Stage):
                         units = target["units"]
                         granularity = target["granularity"]
 
-                        self._processed_time_series_data[event_name][name] = Result.Ok(TimeSeries.from_query_dataframe(
+                        processed_time_series_data[event_name][name] = Result.Ok(TimeSeries.from_query_dataframe(
                             query_df=data,
                             granularity=granularity,
                             field=name,
@@ -97,25 +189,30 @@ class IngestStage(Stage):
 
                     # Oops, wrap the error
                     except Exception as e:
-                        self._processed_time_series_data[event_name][name] = Result.Err(e)
+                        processed_time_series_data[event_name][name] = Result.Err(e)
                         self.logger.error(f"Failed to process time series data {name}: {traceback.format_exc()}")
 
                 # If we're going to get an error, forward it along
                 else:
-                    self._processed_time_series_data[event_name][name] = result
+                    processed_time_series_data[event_name][name] = result
 
-    def load(self) -> Dict[str, Dict[str, FileLoader]]:
+        return processed_time_series_data
+
+    def _load_influxdb(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> Dict[str, Dict[str, FileLoader]]:
         result_dict: Dict[str, Dict[str, FileLoader]] = {}
 
-        for event_name, event_items in self._processed_time_series_data.items():
+        for event_name, event_items in processed_time_series_data.items():
             result_dict[event_name] = {}
 
             for name, result in event_items.items():
                 file = File(
-                    origin=self.context.title,
-                    path=[event_name, self.get_stage_name()],
-                    name=name,
                     data=result.unwrap() if result else None,
+                    canonical_path=CanonicalPath(
+                        origin=self.context.title,
+                        source=self.get_stage_name(),
+                        path=event_name,
+                        name=name
+                    ),
                     file_type=FileType.TimeSeries
                 )
 

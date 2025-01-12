@@ -1,6 +1,5 @@
-from .influx_credentials import InfluxCredentials
-
+from .logs import log_directory
 
 __all__ = [
-    "InfluxCredentials"
+    "log_directory"
 ]

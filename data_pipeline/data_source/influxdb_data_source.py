@@ -1,9 +1,6 @@
-from data_tools.schema import File, Result
-from data_tools.schema import DataSource
-from data_tools.schema.data_source import FileLoader
+from data_tools.schema import DataSource, FileLoader, File, Result, CanonicalPath
 from data_tools.query import DBClient
 from data_tools.utils import parse_iso_datetime
-from data_pipeline.influx_credentials import InfluxCredentials, INFLUXDB_CREDENTIAL_BLOCK_NAME
 from datetime import datetime
 import os
 
@@ -24,18 +21,12 @@ class InfluxDBDataSource(DataSource):
 
         self._influxdb_client = DBClient(influxdb_org, influxdb_token)
 
-    @staticmethod
-    def _acquire_credentials() -> InfluxCredentials:
-        influxdb_credentials: InfluxCredentials = InfluxCredentials.load(INFLUXDB_CREDENTIAL_BLOCK_NAME)
-
-        return influxdb_credentials
-
     def store(self, **kwargs) -> FileLoader:
         raise NotImplementedError("`store` method is not implemented for InfluxDBDataSource "
                                   "as InfluxDB is read-only for Sunbeam!")
 
-    def get(self, canonical_path: str, **kwargs) -> Result:
-        bucket, car, measurement, start, stop, field = File.unwrap_canonical_path(canonical_path)
+    def get(self, canonical_path: CanonicalPath, **kwargs) -> Result:
+        bucket, measurement, start, stop, car, field = canonical_path.unwrap()
         start_dt: datetime = parse_iso_datetime(start)
         stop_dt: datetime = parse_iso_datetime(stop)
 

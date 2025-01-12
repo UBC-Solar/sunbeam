@@ -1,8 +1,7 @@
 import pathlib
-from importlib.abc import FileLoader
 
 import pymongo.collection
-from data_tools import Event, FileType, DataSource
+from data_tools import Event, FileType, DataSource, FileLoader
 import toml as tomllib
 from pydantic import BaseModel
 from typing import List, Dict, Union
@@ -13,25 +12,33 @@ from datetime import datetime
 import os
 from prefect import flow, task
 from pymongo import MongoClient
+import networkx as nx
+import pprint
+from data_pipeline.logs import log_directory
+from data_tools.utils import configure_logger
 
 from data_tools.query.influxdb_query import TimeSeriesTarget
 from data_pipeline.data_source import DataSourceFactory, DataSourceType
 from data_pipeline.context import Context
 from data_pipeline.stage.power_stage import PowerStage
-from influx_credentials import InfluxCredentials, INFLUXDB_CREDENTIAL_BLOCK_NAME
+from data_pipeline.stage.energy_stage import EnergyStage
+from data_pipeline.stage.stage import StageResult, StageError, Stage
 from data_pipeline.stage.ingest_stage import IngestStage
-
+from data_pipeline.stage.stage_registry import StageRegistry, stage_registry
 
 type PathLike = Union[str, pathlib.Path]
 
 
 CONFIG_PATH = os.getenv("SUNBEAM_PIPELINE_CONFIG_PATH", pathlib.Path(__file__).parent / "config" / "sunbeam.toml")
-REQUIRED_CONFIG = ["events_description_file", "ingest_data_source", "ingest_description_file", "stage_data_source"]
+REQUIRED_CONFIG = ["events_description_file", "ingest_description_file", "stage_data_source"]
 ROOT = pathlib.Path(__file__).parent
 
+logger = logging.getLogger("sunbeam")
+configure_logger(logger, log_directory / "sunbeam.log")
 
-logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
-logger = logging.getLogger()
+# Test logging
+logger.info("This is an INFO message")  # This should now appear
+logger.error("This is an ERROR message")  # This will also appear
 
 code_hash = None
 
@@ -171,33 +178,52 @@ def pipeline(git_tag):
     local_pipeline(pipeline_name)
 
 
-def local_pipeline(pipeline_name):
+def add_dependencies(dependency_graph: nx.Graph, stage_id: str):
+    dependency_graph.add_node(stage_id)
+
+    stage_cls = stage_registry.get_stage(stage_id)
+    for dep_id in stage_cls.dependencies():
+        add_dependencies(dependency_graph, dep_id)
+
+
+def local_pipeline(pipeline_name: str, stages_to_run: List[str]):
+    # Build a dependency graph
+    dependency_graph = nx.DiGraph()
+
+    # Add nodes and edges based on dependencies
+    for stage_id in stages_to_run:
+        add_dependencies(dependency_graph, stage_id)
+
+    # Check for cycles and determine execution order
+    stages_to_run = list(nx.topological_sort(dependency_graph))
+    stages_to_run.reverse()  # The topological sort will be in the inverse order, so we need to just reverse it
+
+    logger.info(f"Executing stages in order: {" -> ".join(stages_to_run)}")
+
     sunbeam_config: dict = collect_sunbeam_config()
     data_source_config: dict = collect_config(sunbeam_config["stage_data_source_description_file"])
     ingest_config: dict = collect_config(sunbeam_config["ingest_description_file"])
     targets: List[TimeSeriesTarget] = collect_targets(ingest_config)
     events: List[Event] = collect_events(sunbeam_config["events_description_file"])
 
-    data_source: DataSource = DataSourceFactory.build(sunbeam_config["stage_data_source"], data_source_config)
-    context: Context = Context(pipeline_name, data_source)
+    data_source: DataSource = DataSourceFactory.build(sunbeam_config["stage_data_source"], data_source_config["config"])
+    context: Context = Context(pipeline_name, data_source, stages_to_run)
 
-    ingest_stage: IngestStage = IngestStage(context, logger, ingest_config["config"])
-    ingest_stage.extract(targets, events)
-    ingest_stage.transform()
-    ingest_outputs: Dict[str, Dict[str, FileLoader]] = ingest_stage.load()
+    ingest_stage: IngestStage = IngestStage(context, ingest_config["config"])
+    ingest_outputs: dict[str, Dict[str, FileLoader]] = ingest_stage.run(targets, events)
 
     # We will process each event separately.
     for event in events:
         event_name = event.name
 
-        power_stage: PowerStage = PowerStage(context, logger, event_name)
-        power_stage.extract(
+        power_stage: PowerStage = PowerStage(context, event_name)
+        pack_power = power_stage.run(
             ingest_outputs[event_name]["TotalPackVoltage"],
             ingest_outputs[event_name]["PackCurrent"]
         )
 
-        power_stage.transform()
-        pack_power: FileLoader = power_stage.load()
+        energy_stage: EnergyStage = EnergyStage(context, event_name)
+        pack_energy = energy_stage.run(pack_power)
 
 
 if __name__ == "__main__":
@@ -206,9 +232,4 @@ if __name__ == "__main__":
 
     load_dotenv()
 
-    # InfluxCredentials(
-    #     influxdb_api_token=os.getenv("INFLUX_TOKEN"),
-    #     influxdb_org=os.getenv("INFLUX_ORG")
-    # ).save(INFLUXDB_CREDENTIAL_BLOCK_NAME, overwrite=True)
-
-    local_pipeline("pipeline")
+    local_pipeline("pipeline", ["energy"])

@@ -30,6 +30,7 @@ services:
         target: /data/db
 
   prefect-agent:
+    image: sunbeam-prefect-agent:latest
     build:
       context: ./data_pipeline
       dockerfile: ./Dockerfile
@@ -73,6 +74,7 @@ services:
       timeout: 5s
 
   external_api:
+    image: sunbeam-external-api:latest
     build:
       context: ./external
       dockerfile: ./Dockerfile

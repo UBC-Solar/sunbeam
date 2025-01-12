@@ -1,12 +1,55 @@
-from abc import ABC, abstractmethod
-from typing import Union, Tuple
+from abc import ABC, abstractmethod, ABCMeta
 import logging
-from data_tools.schema import FileLoader, File
+from logging import Logger
+
+from data_tools.schema import FileLoader, File, Result
+from data_tools.utils import configure_logger
 from data_pipeline.stage.stage_registry import stage_registry
+from data_pipeline.logs import log_directory
 from functools import wraps
 from data_pipeline.context import Context
+from collections.abc import Iterable
+from typing import Any, Dict, Tuple
 
-type StageResult = Union[FileLoader, Tuple[FileLoader]]
+
+class StageError(RuntimeError):
+    """
+    Error raised when a Stage has been improperly constructed.
+    """
+
+    def __init__(self, stage_name: str, message: str):
+        self.stage_name = stage_name
+        self.message = message
+
+    def __str__(self):
+        return f"Error in {self.stage_name}: {self.message}"
+
+
+def validate_type(target_type: type, obj: Any) -> bool | type:
+    """
+    Validate that an object is an instance of a target type.
+    For iterables, recursively validate their contents.
+
+    :param Any obj: the object whose type is to be validated
+    :param type target_type: the type that ``obj`` is required to be
+
+    :returns: True if the type is valid, or the invalid type if not
+    """
+    # If it's a dictionary, check both keys and values
+    if isinstance(obj, dict):
+        for value in obj.values():
+            validate_type(value, target_type)
+
+    # If it's an iterable but not a string or bytes, check elements recursively
+    elif isinstance(obj, Iterable) and not isinstance(obj, (str, bytes)):
+        for item in obj:
+            validate_type(item, target_type)
+
+    # If it's not the target type and not iterable, return the Type
+    elif not isinstance(obj, target_type):
+        return type(obj)
+
+    return True
 
 
 def ensure_dependencies_declared(func):
@@ -16,30 +59,184 @@ def ensure_dependencies_declared(func):
     Ensure that all provided `File`s to this `Stage` belong to a listed dependency, and raises
     an `AssertionError` if an undeclared dependency is detected.
     """
+
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         dependencies = self.dependencies()
+        stage_name = self.__class__.get_stage_name()
 
         for arg in args:
             if isinstance(arg, FileLoader):
-                _, stage_name, _ = File.unwrap_canonical_path(arg.canonical_path)
-                assert stage_name in dependencies, (f"{stage_name} must be declared in "
-                                                    f"declared dependencies of {self.get_stage_name()}!")
+                source_name = arg.canonical_path.source
+                if source_name not in dependencies:
+                    raise StageError(stage_name, f"{source_name} must be "
+                                                 f"declared in declared dependencies "
+                                                 f"of {self.get_stage_name()}!")
         return func(self, *args, **kwargs)
 
     return wrapper
 
 
-class Stage(ABC):
+def ensure_outputs(func):
+    """
+    This decorator should only be applied to `Stage.load`!
+
+    Ensure that all declared products of the stage have been set.
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        result = func(self, *args, **kwargs)
+
+        for stage_product in self.products:
+            if stage_product not in result.keys():
+                raise StageError(self.__class__.get_stage_name(), f"{self.__class__.get_stage_name()} must"
+                                                                  f"produce {stage_product} but it was not found!")
+
+        return result
+
+    return wrapper
+
+
+def check_if_skip_stage(func):
+    """
+    This decorator should only be applied to `Stage.run`!
+
+    Check if the stage should be run, and if not, skips running the stage and produces empty outputs
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if self.get_stage_name() not in self.context.stages_to_run:
+            self.logger.info(f"Skipping stage {self.get_stage_name()}...")
+
+            return {
+                expected_output: FileLoader(
+                    lambda _: Result.Err(
+                        StageError(
+                            stage_name=self.get_stage_name(),
+                            message="Attempting to access the output of a "
+                                    "stage that has not been run!"
+                        )
+                    ),
+                    File.make_canonical_path(
+                        origin=self.context.title,
+                        path=self.get_stage_name(),
+                        name=expected_output)
+                ) for expected_output in self.expected_outputs
+            }
+
+        return func(self, *args, **kwargs)
+
+    return wrapper
+
+
+def mark_with_decorator(func, decorator):
+    """
+    Mark this function to be decorated with ``decorator``.
+
+    :param decorator:
+    :param func:
+    :return:
+    """
+
+    @wraps(func)
+    def wrapper():
+        if not hasattr(func, "__decorators__"):
+            func.__decorators__ = []
+        func.__decorators__.append(decorator)
+        return decorator(func)
+
+    return wrapper
+
+
+class StageResult:
+    def __init__(self, stage, outputs: dict[str, FileLoader]):
+        self._expected_results = stage.expected_outputs.copy()
+        self._outputs: dict[str, FileLoader] = outputs.copy()
+
+        for expected_result in self._expected_results:
+            if expected_result not in self._outputs.keys():
+                raise StageError(stage.get_stage_name(), f"Expected result {expected_result} from "
+                                                         f"stage {stage.get_stage_name()}!")
+
+    def __iter__(self) -> FileLoader | Tuple[FileLoader, ...]:
+        # If our output contains just one value, return just that value (not a one-tuple)
+        if len(self._expected_results) == 1:
+            values: FileLoader = list(self._outputs.values())[0]
+            return values
+
+        # Otherwise, unpack the result dictionary into a correctly-ordered tuple
+        return tuple(self._outputs[result] for result in self._expected_results)
+
+
+class StageMeta(ABCMeta):
+    def __call__(cls, *args, **kwargs):
+        # Create the instance by calling __new__ and __init__
+        instance = super(StageMeta, cls).__call__(*args, **kwargs)
+
+        # Automatically call finalize after __init__
+        if hasattr(instance, "__finalize__"):
+            instance.__finalize__()
+        else:
+            raise StageError(cls.__name__, f"Class {cls.__name__} "
+                                           f"must implement a `__finalize__` method")
+
+        return instance
+
+
+class Stage(ABC, metaclass=StageMeta):
     def __new__(cls, *args, **kwargs):
-        assert cls.get_stage_name() in stage_registry, (f"Stage {cls.get_stage_name()} declared in {__file__} has not "
-                                                        f"been registered to the stage registry!")
+        if cls.get_stage_name() not in stage_registry:
+            raise StageError(cls.get_stage_name(), f"Stage {cls.get_stage_name()} declared in {__file__} has not "
+                                                   f"been registered to the stage registry!")
 
         return super().__new__(cls)
 
-    def __init__(self, context: Context, logger: logging.Logger, *args, **kwargs):
+    def __init__(self, context: Context, *args, **kwargs):
+        self._finalized = False
+
         self._context = context
-        self._logger = logger
+        self._logger = logging.getLogger(self.__class__.get_stage_name())
+        self._expected_outputs = []
+
+        configure_logger(self._logger, log_directory / "sunbeam.log")
+
+    def __setattr__(self, key, value):
+        if hasattr(self, "_finalized"):
+            if self._finalized and key != "_items":
+                raise StageError(self.__class__.get_stage_name(), f"Trying to set stage property {key} "
+                                                                  f"after initialization! ")
+
+        super().__setattr__(key, value)
+
+    def __finalize__(self):
+        self._finalized = True
+
+    def declare_output(self, output_name: str):
+        self._expected_outputs.append(output_name)
+
+    @property
+    def expected_outputs(self):
+        return self._expected_outputs
+
+    def validate_stage_outputs(self):
+        """
+        Validate that all the declared items of a stage have been produced.
+        No effect if the stage items are valid, and raises a RuntimeError otherwise.
+
+        :raises RuntimeError: if an item of the stage has not been produced
+        """
+        pass
+
+    def run(self, *args) -> FileLoader | Tuple[FileLoader, ...]:
+        # validate args
+        extract = self.extract(*args)
+        transform = self.transform(*extract)
+        load = self.load(*transform)
+        #validate load
+
+        return StageResult(self, load).__iter__()
 
     @staticmethod
     @abstractmethod
@@ -52,16 +249,15 @@ class Stage(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    @ensure_dependencies_declared
-    def extract(self, **kwargs):
+    def extract(self, *args) -> Result | Iterable[Result] | Dict:
         raise NotImplementedError
 
     @abstractmethod
-    def transform(self, **kwargs) -> None:
+    def transform(self, *args) -> Result | Iterable[Result] | Dict:
         raise NotImplementedError
 
     @abstractmethod
-    def load(self, **kwargs) -> StageResult:
+    def load(self, *args) -> Dict:
         raise NotImplementedError
 
     @property
