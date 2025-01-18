@@ -1,4 +1,4 @@
-FROM prefecthq/prefect:2.20-python3.11
+FROM prefecthq/prefect:2.20-python3.12
 
 # Prefect uses Git to acquire the pipeline from GitHub, so we need to install Git
 RUN apt-get update && apt-get install -y git && \
@@ -16,4 +16,4 @@ ENV POETRY_VERSION 1.8.3
 
 RUN pip install poetry==$POETRY_VERSION
 
-RUN poetry install --with pipeline
+RUN poetry install

@@ -1,6 +1,6 @@
 services:
   prefect-server:
-    image: prefecthq/prefect:2.20-python3.11
+    image: prefecthq/prefect:2.20-python3.12
     ports:
       - "4200:4200"
     networks:
@@ -47,8 +47,7 @@ services:
       - PREFECT_API_DATABASE_CONNECTION_URL="postgresql+asyncpg://prefect:yourpassword@postgres:5432/prefect"
     # Note: the last command blocks (so insert any additonal commands before the last one!)
     command: > 
-      sh -c "poetry run python worker.py && 
-             poetry run prefect work-pool create --type process default-work-pool &&
+      sh -c "poetry run prefect work-pool create --type process default-work-pool &&
              poetry run prefect worker start --pool default-work-pool"
 
   postgres:
