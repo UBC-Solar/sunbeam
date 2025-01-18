@@ -149,8 +149,6 @@ def commission_pipeline(code_hash):
     return f"Commissioned {code_hash}"
 
 
-
-
 @app.route("/list_commissioned_pipelines")
 def list_commissioned_pipelines():
     commissioned_pipelines = metadata_collection.find_one(commissioned_pipelines_query)

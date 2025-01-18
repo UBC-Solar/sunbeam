@@ -1,7 +1,7 @@
 [config]
 start = "2024-07-01T01:00:00Z"
 stop = "2024-08-30T01:00:00Z"
-data_source = "FSDataSource"
+data_source = "InfluxDBDataSource"
 root = "fs_data"
 
 [[target]]
@@ -22,4 +22,54 @@ measurement = "ECU"
 car = "Brightside"
 bucket = "CAN_log"
 frequency = 10.0
+units = "A"
+
+[[target]]
+name = "MechBrakePressed"
+field = "MechBrakePressed"
+type = "TimeSeries"
+measurement = "MCB"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 10.0
+units = "A.U."
+
+[[target]]
+name = "VehicleVelocity"
+field = "VehicleVelocity"
+type = "TimeSeries"
+measurement = "MDI"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 5.0
+units = "m/s"
+
+[[target]]
+name = "AcceleratorPosition"
+field = "AcceleratorPosition"
+type = "TimeSeries"
+measurement = "MC"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 5.0
+units = "A.U."
+
+[[target]]
+name = "BatteryCurrent"
+field = "BatteryCurrent"
+type = "TimeSeries"
+measurement = "MC"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 5.0
+units = "A"
+
+[[target]]
+name = "BatteryVoltage"
+field = "BatteryVoltage"
+type = "TimeSeries"
+measurement = "MC"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 5.0
 units = "A"

@@ -59,7 +59,7 @@ class Datum(BaseModel):
     data: list
 
 
-# @task
+@task
 def collect_targets(ingest_config: dict) -> List[TimeSeriesTarget]:
     targets = []
     seen_names = set()
@@ -118,7 +118,7 @@ def read_config() -> Config:
     return config
 
 
-# @task
+@task
 def collect_events(events_description_filepath: PathLike) -> List[Event]:
     with open(ROOT / events_description_filepath) as events_description_file:
         events_descriptions = tomllib.load(events_description_file)["event"]
@@ -127,7 +127,7 @@ def collect_events(events_description_filepath: PathLike) -> List[Event]:
     return list(events)
 
 
-# @task
+@task
 def load_data(data: List[Datum]):
     client = MongoClient("mongodb://mongodb:27017/")
 
@@ -148,7 +148,7 @@ def load_data(data: List[Datum]):
     time_series_collection.create_index([("event", 1), ("code_hash", 1), ("field", 1)], unique=True)
 
 
-# @task
+@task
 def collect_sunbeam_config():
     logger.info(f"Trying to find config at {CONFIG_PATH}...")
     with open(CONFIG_PATH) as config_file:
@@ -163,7 +163,7 @@ def collect_sunbeam_config():
     return config
 
 
-# @task
+@task
 def collect_config(config_filepath):
     with open(ROOT / f"{config_filepath}") as config_file:
         config = tomllib.load(config_file)
@@ -172,10 +172,10 @@ def collect_config(config_filepath):
 
 
 @flow(log_prints=True)
-def pipeline(git_tag):
-    pipeline_name = git_tag if git_tag is not None else "pipeline"
+def pipeline(git_tag="pipeline"):
+    pipeline_name = git_tag
 
-    local_pipeline(pipeline_name)
+    local_pipeline(pipeline_name, ["energy"])
 
 
 def add_dependencies(dependency_graph: nx.Graph, stage_id: str):
@@ -217,9 +217,11 @@ def local_pipeline(pipeline_name: str, stages_to_run: List[str]):
         event_name = event.name
 
         power_stage: PowerStage = PowerStage(context, event_name)
-        pack_power = power_stage.run(
+        pack_power, motor_power = power_stage.run(
             ingest_outputs[event_name]["TotalPackVoltage"],
-            ingest_outputs[event_name]["PackCurrent"]
+            ingest_outputs[event_name]["PackCurrent"],
+            ingest_outputs[event_name]["BatteryCurrent"],
+            ingest_outputs[event_name]["BatteryVoltage"],
         )
 
         energy_stage: EnergyStage = EnergyStage(context, event_name)
@@ -232,4 +234,4 @@ if __name__ == "__main__":
 
     load_dotenv()
 
-    local_pipeline("pipeline", ["energy"])
+    pipeline()
