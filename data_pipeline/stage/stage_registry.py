@@ -11,7 +11,10 @@ class StageRegistry:
         self._registry[stage_id] = stage_cls
 
     def get_stage(self, stage_id):
-        return self._registry.get(stage_id)
+        if stage_id not in self._registry.keys():
+            raise KeyError(f"Stage {stage_id} not registered!")
+
+        return self._registry[stage_id]
 
     def get_all_stages(self):
         return self._registry.items()
