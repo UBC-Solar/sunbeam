@@ -209,7 +209,7 @@ def local_pipeline(pipeline_name: str, stages_to_run: List[str]):
     context: Context = Context(pipeline_name, data_source, stages_to_run)
 
     ingest_stage: IngestStage = IngestStage(context, ingest_config["config"])
-    ingest_outputs: dict[str, Dict[str, FileLoader]] = ingest_stage.run(targets, events)
+    ingest_outputs: StageResult = ingest_stage.run(targets, events)
 
     # We will process each event separately.
     for event in events:

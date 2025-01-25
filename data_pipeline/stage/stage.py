@@ -9,7 +9,8 @@ from data_pipeline.logs import log_directory
 from functools import wraps
 from data_pipeline.context import Context
 from collections.abc import Iterable
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, Generator
+from prefect import task
 
 
 class StageError(RuntimeError):
@@ -110,6 +111,8 @@ def check_if_skip_stage(func):
         if self.get_stage_name() not in self.context.stages_to_run:
             self.logger.info(f"Skipping stage {self.get_stage_name()}...")
 
+            # If we need to skip this stage, populate the outputs with the correct number of
+            # outputs which point to errors stating that this stage didn't run
             return {
                 expected_output: FileLoader(
                     lambda _: Result.Err(
@@ -126,48 +129,44 @@ def check_if_skip_stage(func):
                 ) for expected_output in self.expected_outputs
             }
 
-        return func(self, *args, **kwargs)
-
-    return wrapper
-
-
-def mark_with_decorator(func, decorator):
-    """
-    Mark this function to be decorated with ``decorator``.
-
-    :param decorator:
-    :param func:
-    :return:
-    """
-
-    @wraps(func)
-    def wrapper():
-        if not hasattr(func, "__decorators__"):
-            func.__decorators__ = []
-        func.__decorators__.append(decorator)
-        return decorator(func)
+        # Otherwise, just run the stage as normal
+        else:
+            return func(self, *args, **kwargs)
 
     return wrapper
 
 
 class StageResult:
-    def __init__(self, stage, outputs: dict[str, FileLoader]):
+    def __init__(self, stage, *args):
         self._expected_results = stage.expected_outputs.copy()
-        self._outputs: dict[str, FileLoader] = outputs.copy()
 
-        for expected_result in self._expected_results:
-            if expected_result not in self._outputs.keys():
-                raise StageError(stage.get_stage_name(), f"Expected result {expected_result} from "
-                                                         f"stage {stage.get_stage_name()}!")
+        if len(args) != len(self._expected_results):
+            raise StageError(stage.get_stage_name(), f"Unexpected number of outputs! "
+                                                     f"Found: {len(args)} outputs and "
+                                                     f"expected {len(self._expected_results)}")
 
-    def __iter__(self) -> FileLoader | Tuple[FileLoader, ...]:
+        if len(args) == 1 and isinstance(args[0], Dict):
+            # Handle the special case where we have one output, and it is a dictionary.
+            # This idiom is used by the ingest stage to avoid having to handle like 30 outputs
+            # and instead returns a single dictionary output which contains a bunch of actual outputs
+            # as key-value pairs.
+            self._outputs: dict[str, FileLoader] = args[0]
+
+        else:
+            # Associate each output with its expected output name
+            self._outputs: dict[str, FileLoader] = {output: args[i] for i, output in enumerate(self._expected_results)}
+
+    def __getitem__(self, item):
+        return self._outputs[item]
+
+    def __iter__(self) -> FileLoader | Generator[FileLoader, Any, Any]:
         # If our output contains just one value, return just that value (not a one-tuple)
         if len(self._expected_results) == 1:
             values: FileLoader = list(self._outputs.values())[0]
             return values
 
         # Otherwise, unpack the result dictionary into a correctly-ordered tuple
-        return tuple(self._outputs[result] for result in self._expected_results)
+        return iter((self._outputs[result] for result in self._expected_results))
 
 
 class StageMeta(ABCMeta):
@@ -229,14 +228,15 @@ class Stage(ABC, metaclass=StageMeta):
         """
         pass
 
-    def run(self, *args) -> FileLoader | Tuple[FileLoader, ...]:
-        # validate args
-        extract = self.extract(*args)
-        transform = self.transform(*extract)
-        load = self.load(*transform)
-        #validate load
+    @check_if_skip_stage
+    @abstractmethod
+    def run(self, *args) -> StageResult:
+        # Here, we are annotating the stage functions at runtime as a Prefect task, then calling them
+        extract = task(self.extract)(*args)
+        transform = task(self.transform)(*extract)
+        load = task(self.load)(*transform)
 
-        return StageResult(self, load).__iter__()
+        return StageResult(self, *load)
 
     @staticmethod
     @abstractmethod
@@ -249,15 +249,15 @@ class Stage(ABC, metaclass=StageMeta):
         raise NotImplementedError
 
     @abstractmethod
-    def extract(self, *args) -> Result | Iterable[Result] | Dict:
+    def extract(self, *args) -> Iterable[Result]:
         raise NotImplementedError
 
     @abstractmethod
-    def transform(self, *args) -> Result | Iterable[Result] | Dict:
+    def transform(self, *args) -> Iterable[Result]:
         raise NotImplementedError
 
     @abstractmethod
-    def load(self, *args) -> Dict:
+    def load(self, *args) -> Iterable[FileLoader]:
         raise NotImplementedError
 
     @property
