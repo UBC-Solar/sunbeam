@@ -1,7 +1,7 @@
 from typing import Tuple
 
 from data_tools.schema import FileLoader
-from data_pipeline.stage.stage import Stage, StageResult, ensure_dependencies_declared, check_if_skip_stage
+from data_pipeline.stage.stage import Stage, StageResult
 from data_pipeline.stage.stage_registry import stage_registry
 from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath
 from data_pipeline.context import Context
@@ -9,13 +9,16 @@ from data_tools.collections import TimeSeries
 
 
 class PowerStage(Stage):
-    @check_if_skip_stage
-    def run(self, total_pack_voltage_loader: FileLoader, pack_current_loader: FileLoader, motor_current_loader: FileLoader, motor_voltage_loader: FileLoader) -> FileLoader:
-        total_pack_voltage_result, pack_current_result, motor_current_result, motor_voltage_result = self.extract(total_pack_voltage_loader, pack_current_loader, motor_current_loader, motor_voltage_loader)
-        pack_power_result, motor_power_result = self.transform(pack_current_result, total_pack_voltage_result, motor_current_result, motor_voltage_result)
-        pack_power_loader, motor_power_loader = self.load(pack_power_result, motor_power_result)
-
-        return StageResult(self, {"pack_power": pack_power_loader, "motor_power": motor_power_loader}).__iter__()
+    def run(self, total_pack_voltage_loader: FileLoader, pack_current_loader: FileLoader, motor_current_loader: FileLoader, motor_voltage_loader: FileLoader) -> StageResult:
+        """
+        Run the power stage, converting voltage and current data into power.
+        :param FileLoader total_pack_voltage_loader: loader to TotalPackVoltage from Ingest
+        :param FileLoader pack_current_loader: loader to PackCurrent from Ingest
+        :param FileLoader motor_current_loader: loader to MotorCurrent from Ingest
+        :param FileLoader motor_voltage_loader: loader to MotorVoltage from Ingest
+        :returns: PackPower (TimeSeries), MotorPower (TimeSeries)
+        """
+        return super().run(total_pack_voltage_loader, pack_current_loader, motor_current_loader, motor_voltage_loader)
 
     @classmethod
     def get_stage_name(cls):
@@ -41,7 +44,6 @@ class PowerStage(Stage):
         self.declare_output("pack_power")
         self.declare_output("motor_power")
 
-    @ensure_dependencies_declared
     def extract(self, total_pack_voltage_loader: FileLoader, pack_current_loader: FileLoader, motor_current_loader: FileLoader, motor_voltage_loader: FileLoader) -> tuple[Result, Result, Result, Result]:
         total_pack_voltage_result: Result = total_pack_voltage_loader()
         pack_current_result: Result = pack_current_loader()
