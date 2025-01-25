@@ -26,6 +26,9 @@ class FSDataSource(DataSource):
 
                 return FileLoader(lambda x: self.get(x), file.canonical_path)
 
+            case _:
+                raise RuntimeError(f"FSDataSource does not support the storing of {file.file_type}!")
+
     def get(self, canonical_path: CanonicalPath, **kwargs) -> Result:
         try:
             with open(self.canonical_path_to_real_path(canonical_path), "rb") as f:
