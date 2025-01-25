@@ -21,7 +21,6 @@ from data_tools.query.influxdb_query import TimeSeriesTarget
 from data_pipeline.data_source import DataSourceFactory, DataSourceType
 from data_pipeline.context import Context
 from data_pipeline.stage.power_stage import PowerStage
-from data_pipeline.stage.energy_stage import EnergyStage
 from data_pipeline.stage.stage import StageResult, StageError, Stage
 from data_pipeline.stage.ingest_stage import IngestStage
 from data_pipeline.stage.stage_registry import StageRegistry, stage_registry
@@ -175,7 +174,7 @@ def collect_config(config_filepath):
 def pipeline(git_tag="pipeline"):
     pipeline_name = git_tag
 
-    local_pipeline(pipeline_name, ["energy"])
+    local_pipeline(pipeline_name, ["power"])
 
 
 def add_dependencies(dependency_graph: nx.Graph, stage_id: str):
@@ -223,9 +222,6 @@ def local_pipeline(pipeline_name: str, stages_to_run: List[str]):
             ingest_outputs[event_name]["BatteryCurrent"],
             ingest_outputs[event_name]["BatteryVoltage"],
         )
-
-        energy_stage: EnergyStage = EnergyStage(context, event_name)
-        pack_energy = energy_stage.run(pack_power)
 
 
 if __name__ == "__main__":
