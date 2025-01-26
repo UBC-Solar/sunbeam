@@ -122,7 +122,7 @@ class IngestStage(Stage):
     def transform(self, extracted_time_series_data: Dict[str, Dict[str, Result]]) -> tuple[Dict[str, Dict[str, Result]]]:
         return self._transform_method(extracted_time_series_data)
 
-    def load(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> Dict[str, Dict[str, FileLoader]]:
+    def load(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> tuple[Dict[str, Dict[str, FileLoader]]]:
         return self._load_method(processed_time_series_data)
 
     def _extract_influxdb(self, targets: List[TimeSeriesTarget], events: List[Event]) -> tuple[Dict[str, Dict[str, Result]]]:
@@ -202,7 +202,7 @@ class IngestStage(Stage):
 
         return (processed_time_series_data, )
 
-    def _load_influxdb(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> Dict[str, Dict[str, FileLoader]]:
+    def _load_influxdb(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> tuple[Dict[str, Dict[str, FileLoader]]]:
         result_dict: Dict[str, Dict[str, FileLoader]] = {}
 
         for event_name, event_items in processed_time_series_data.items():
@@ -224,7 +224,7 @@ class IngestStage(Stage):
 
                 self.logger.info(f"Successfully loaded {name} for {event_name}!")
 
-        return result_dict
+        return (result_dict, )
 
 
 stage_registry.register_stage(IngestStage.get_stage_name(), IngestStage)

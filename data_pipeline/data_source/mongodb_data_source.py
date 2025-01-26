@@ -74,6 +74,7 @@ class MongoDBDataSource(DataSource):
 
             if not result:
                 raise RuntimeError(f"Could not find file at {canonical_path.to_string()}!")
+
             serialized_data = result.get("data")
             data = dill.loads(serialized_data)
 

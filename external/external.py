@@ -64,7 +64,7 @@ def list_files():
 
     files = time_series_collection.find()
     for file in files:
-        res.append(f"{file['code_hash']}/{file['event']}/{file['field']}")
+        res.append(f"{file['origin']}/{file['source']}/{file['event']}/{file['path']}/{file['name']}")
 
     return res
 

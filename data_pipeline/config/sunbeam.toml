@@ -1,6 +1,6 @@
 [config]
 events_description_file = "config/events.toml"
-stage_data_source = "MongoDBDataSource"
+stage_data_source = "FSDataSource"
 stage_data_source_description_file = "config/FSDataSource.toml"
 ingest_description_file = "config/ingest.toml"
 ingest_data_source_description_file = "config/ingest_data_source.toml"
