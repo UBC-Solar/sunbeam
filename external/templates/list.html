@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hierarchy</title>
+</head>
+<body>
+    <h1>Items</h1>
+    <ul>
+        {% for item in items %}
+        <li>
+            <a href="{{ url_for('show_hierarchy', path=path + '/' + item if path else item) }}">{{ item }}</a>
+        </li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

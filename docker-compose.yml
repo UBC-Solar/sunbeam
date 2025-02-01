@@ -31,6 +31,10 @@ services:
 
   prefect-agent:
     image: sunbeam-prefect-agent:latest
+    volumes:
+      - type: bind
+        source: ./fs_data
+        target: /root/fs_data
     build:
       context: ./data_pipeline
       dockerfile: ./Dockerfile
@@ -49,7 +53,7 @@ services:
     # Note: the last command blocks (so insert any additonal commands before the last one!)
     command: > 
       sh -c "export $(cat .env | xargs) && 
-             poetry run prefect work-pool create --type process default-work-pool &&
+             poetry run prefect work-pool create --type process default-work-pool --overwrite &&
              poetry run prefect worker start --pool default-work-pool"
 
   postgres:

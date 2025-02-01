@@ -1,5 +1,5 @@
 import prefect.client.schemas.responses
-from flask import Flask
+from flask import Flask, render_template, jsonify, request
 import pymongo
 from typing import List
 import logging
@@ -147,6 +147,56 @@ def commission_pipeline(code_hash):
     metadata_collection.update_one(commissioned_pipelines_query, update)
 
     return f"Commissioned {code_hash}"
+
+
+@app.route('/files', defaults={'path': ''})
+@app.route('/files/<path:path>')
+def show_hierarchy(path):
+    path_parts = path.split('/') if path else []
+
+    # Query the database based on the path parts
+    if len(path_parts) == 0:
+        # Top-level directories
+        results = time_series_collection.distinct("origin")
+        return render_template("list.html", items=results, path=path)
+
+    elif len(path_parts) == 1:
+        # Subdirectories in a directory
+        results = time_series_collection.distinct("source", {"origin": path_parts[0]})
+        return render_template("list.html", items=results, path=path)
+
+    elif len(path_parts) == 2:
+        # Versions in a directory and subdirectory
+        results = time_series_collection.distinct("event", {
+            "origin": path_parts[0],
+            "source": path_parts[1]
+        })
+        return render_template("list.html", items=results, path=path)
+
+    elif len(path_parts) == 3:
+        # Versions in a directory and subdirectory
+        results = time_series_collection.distinct("path", {
+            "origin": path_parts[0],
+            "source": path_parts[1],
+            "event": path_parts[2],
+        })
+        return render_template("list.html", items=results, path=path)
+
+    elif len(path_parts) == 4:
+        # File names in a specific version
+        results = time_series_collection.find({
+            "origin": path_parts[0],
+            "source": path_parts[1],
+            "event": path_parts[2],
+            "path": path_parts[3],
+        }, {"_id": 0, "name": 1})
+        return render_template("list.html", items=[doc["name"] for doc in results], path=path)
+
+    elif len(path_parts) == 4:
+        # Special handling for file access
+        return f"File: {path_parts[3]}"
+
+    return "Invalid path", 404
 
 
 @app.route("/list_commissioned_pipelines")
