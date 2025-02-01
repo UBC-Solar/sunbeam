@@ -26,7 +26,7 @@ class PowerStage(Stage):
 
     @staticmethod
     def dependencies():
-        return ["ingest"]
+        return ["ingress"]
 
     @property
     def event_name(self):

@@ -7,37 +7,28 @@ from pydantic import BaseModel
 from typing import List, Dict, Union
 import logging
 import traceback
-from tqdm import tqdm
 from datetime import datetime
 import os
-from prefect import flow, task
-from pymongo import MongoClient
+from prefect import flow
 import networkx as nx
-import pprint
 from data_pipeline.logs import log_directory
 from data_tools.utils import configure_logger
 
 from data_tools.query.influxdb_query import TimeSeriesTarget
-from data_pipeline.data_source import DataSourceFactory, DataSourceType
+from data_pipeline.data_source import DataSourceFactory
 from data_pipeline.context import Context
 from data_pipeline.stage.power_stage import PowerStage
-from data_pipeline.stage.stage import StageResult, StageError, Stage
-from data_pipeline.stage.ingest_stage import IngestStage
-from data_pipeline.stage.stage_registry import StageRegistry, stage_registry
-
-type PathLike = Union[str, pathlib.Path]
+from data_pipeline.stage.stage import StageResult
+from data_pipeline.stage.ingress_stage import IngressStage
+from data_pipeline.stage.stage_registry import stage_registry
 
 
 CONFIG_PATH = os.getenv("SUNBEAM_PIPELINE_CONFIG_PATH", pathlib.Path(__file__).parent / "config" / "sunbeam.toml")
-REQUIRED_CONFIG = ["events_description_file", "ingest_description_file", "stage_data_source"]
+REQUIRED_CONFIG = ["events_description_file", "ingress_description_file", "stage_data_source"]
 ROOT = pathlib.Path(__file__).parent
 
 logger = logging.getLogger("sunbeam")
 configure_logger(logger, log_directory / "sunbeam.log")
-
-# Test logging
-logger.info("This is an INFO message")  # This should now appear
-logger.error("This is an ERROR message")  # This will also appear
 
 code_hash = None
 
@@ -58,12 +49,11 @@ class Datum(BaseModel):
     data: list
 
 
-@task
-def collect_targets(ingest_config: dict) -> List[TimeSeriesTarget]:
+def collect_targets(ingress_config: dict) -> List[TimeSeriesTarget]:
     targets = []
     seen_names = set()
 
-    for target in ingest_config["target"]:
+    for target in ingress_config["target"]:
         target_type = FileType(target["type"])
 
         match target_type:
@@ -89,36 +79,15 @@ def collect_targets(ingest_config: dict) -> List[TimeSeriesTarget]:
                     raise ValueError(f"Target names must be unique! {target['name']} "
                                      f"is already the name of another target.")
 
-            case FileType.Scalar:
-                raise NotImplementedError("Ingestion of `Scalar` type not implemented!")
+            case _:
+                raise NotImplementedError(f"Ingress of {target_type} type not implemented!")
 
-    assert len(targets) > 0, "Unable to identify any targets in 'ingest.toml'!"
+    assert len(targets) > 0, "Unable to identify any targets!"
 
     return targets
 
 
-class Config(BaseModel):
-    start: str
-    end: str
-
-
-def read_config() -> Config:
-    with open(pathlib.Path(__file__).parent / "ingest.toml") as config_file:
-        ingest_config = tomllib.load(config_file)["config"]
-
-    start = ingest_config["start"]
-    end = ingest_config["end"]
-
-    config = Config(
-        start=start,
-        end=end
-    )
-
-    return config
-
-
-@task
-def collect_events(events_description_filepath: PathLike) -> List[Event]:
+def collect_events(events_description_filepath: Union[str, pathlib.Path]) -> List[Event]:
     with open(ROOT / events_description_filepath) as events_description_file:
         events_descriptions = tomllib.load(events_description_file)["event"]
 
@@ -126,28 +95,6 @@ def collect_events(events_description_filepath: PathLike) -> List[Event]:
     return list(events)
 
 
-@task
-def load_data(data: List[Datum]):
-    client = MongoClient("mongodb://mongodb:27017/")
-
-    db = client.sunbeam_db
-    time_series_collection: pymongo.collection.Collection = db.time_series_data
-
-    for datum in data:
-        time_series_collection.insert_one(
-            {
-                "event": "FSGP",
-                "code_hash": code_hash,
-                "field": datum.meta.name,
-                "data": datum.data,
-                "meta": datum.meta.model_dump()
-            }
-        )
-
-    time_series_collection.create_index([("event", 1), ("code_hash", 1), ("field", 1)], unique=True)
-
-
-@task
 def collect_sunbeam_config():
     logger.info(f"Trying to find config at {CONFIG_PATH}...")
     with open(CONFIG_PATH) as config_file:
@@ -162,12 +109,21 @@ def collect_sunbeam_config():
     return config
 
 
-@task
-def collect_config(config_filepath):
+def collect_config_file(config_filepath):
     with open(ROOT / f"{config_filepath}") as config_file:
         config = tomllib.load(config_file)
 
     return config
+
+
+def collect_config():
+    sunbeam_config: dict = collect_sunbeam_config()
+    data_source_config: dict = collect_config_file(sunbeam_config["stage_data_source_description_file"])
+    ingress_config: dict = collect_config_file(sunbeam_config["ingress_description_file"])
+    targets: List[TimeSeriesTarget] = collect_targets(ingress_config)
+    events: List[Event] = collect_events(sunbeam_config["events_description_file"])
+
+    return sunbeam_config, data_source_config, ingress_config, targets, events
 
 
 @flow(log_prints=True)
@@ -199,28 +155,25 @@ def local_pipeline(pipeline_name: str, stages_to_run: List[str]):
 
     logger.info(f"Executing stages in order: {" -> ".join(stages_to_run)}")
 
-    sunbeam_config: dict = collect_sunbeam_config()
-    data_source_config: dict = collect_config(sunbeam_config["stage_data_source_description_file"])
-    ingest_config: dict = collect_config(sunbeam_config["ingest_description_file"])
-    targets: List[TimeSeriesTarget] = collect_targets(ingest_config)
-    events: List[Event] = collect_events(sunbeam_config["events_description_file"])
+    sunbeam_config, data_source_config, ingress_config, targets, events = collect_config()
 
     data_source: DataSource = DataSourceFactory.build(sunbeam_config["stage_data_source"], data_source_config["config"])
     context: Context = Context(pipeline_name, data_source, stages_to_run)
 
-    ingest_stage: IngestStage = IngestStage(context, ingest_config["config"])
-    ingest_outputs: StageResult = ingest_stage.run(targets, events)
+    ingress_stage: IngressStage = IngressStage(context, ingress_config["config"])
+    ingress_outputs: StageResult = ingress_stage.run(targets, events)
 
     # We will process each event separately.
     for event in events:
         event_name = event.name
+        event_ingress_outputs = ingress_outputs[event_name]
 
         power_stage: PowerStage = PowerStage(context, event_name)
         pack_power, motor_power = power_stage.run(
-            ingest_outputs[event_name]["TotalPackVoltage"],
-            ingest_outputs[event_name]["PackCurrent"],
-            ingest_outputs[event_name]["BatteryCurrent"],
-            ingest_outputs[event_name]["BatteryVoltage"],
+            event_ingress_outputs["TotalPackVoltage"],
+            event_ingress_outputs["PackCurrent"],
+            event_ingress_outputs["BatteryCurrent"],
+            event_ingress_outputs["BatteryVoltage"],
         )
 
 

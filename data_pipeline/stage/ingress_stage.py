@@ -10,7 +10,7 @@ from typing import List, Dict
 import traceback
 
 
-class IngestStage(Stage):
+class IngressStage(Stage):
     """
     Ingest raw time series data from InfluxDB and marshal it for use in the data pipeline, or load pre-existing data
     from a local filesystem.
@@ -29,7 +29,7 @@ class IngestStage(Stage):
 
     @classmethod
     def get_stage_name(cls):
-        return "ingest"
+        return "ingress"
 
     @staticmethod
     def dependencies():
@@ -40,14 +40,14 @@ class IngestStage(Stage):
 
         match config["data_source"]:
             case DataSourceType.FS:
-                self._ingest_data_source = FSDataSource(config)
+                self._ingress_data_source = FSDataSource(config)
 
                 self._extract_method = self._extract_fs
                 self._transform_method = self._transform_fs
                 self._load_method = self._load_fs
 
             case DataSourceType.InfluxDB:
-                self._ingest_data_source = InfluxDBDataSource(
+                self._ingress_data_source = InfluxDBDataSource(
                     parse_iso_datetime(config["start"]),
                     parse_iso_datetime(config["stop"])
                 )
@@ -70,7 +70,7 @@ class IngestStage(Stage):
 
             for target in targets:
                 try:
-                    queried_data: Result = self._ingest_data_source.get(CanonicalPath(
+                    queried_data: Result = self._ingress_data_source.get(CanonicalPath(
                         origin=self.context.title,
                         source=self.get_stage_name(),
                         path=[event.name],
@@ -139,7 +139,7 @@ class IngestStage(Stage):
 
             for target in targets:
                 try:
-                    queried_data = self._ingest_data_source.get(CanonicalPath(
+                    queried_data = self._ingress_data_source.get(CanonicalPath(
                         origin=target.bucket,
                         source=target.car,
                         path=[target.measurement, event.start_as_iso_str, event.stop_as_iso_str],
@@ -227,4 +227,4 @@ class IngestStage(Stage):
         return (result_dict, )
 
 
-stage_registry.register_stage(IngestStage.get_stage_name(), IngestStage)
+stage_registry.register_stage(IngressStage.get_stage_name(), IngressStage)
