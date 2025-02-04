@@ -99,7 +99,7 @@ def collect_events(events_description_filepath: Union[str, pathlib.Path]) -> Lis
 
 def collect_config_file(config_path: pathlib.Path):
     logger.info(f"Trying to find config at {config_path}...")
-    with open(config_path) as config_file:
+    with open(ROOT / config_path) as config_file:
         config = tomllib.load(config_file)
 
     logger.info(f"Acquired config from {config_path}:\n")
@@ -118,10 +118,10 @@ def collect_config():
     data_source_config: DataSourceConfig = DataSourceConfigFactory.build(stage_data_source_type, config_file["stage_data_source"])
     ingress_config: DataSourceConfig = DataSourceConfigFactory.build(ingress_data_source_type, config_file["ingress_data_source"])
 
-    targets_file: dict = collect_config_file(pathlib.Path(sunbeam_config.ingress_description_file).absolute())
+    targets_file: dict = collect_config_file(pathlib.Path(sunbeam_config.ingress_description_file))
     targets: List[TimeSeriesTarget] = collect_targets(targets_file)
 
-    events: List[Event] = collect_events(pathlib.Path(sunbeam_config.events_description_file).absolute())
+    events: List[Event] = collect_events(pathlib.Path(sunbeam_config.events_description_file))
 
     return sunbeam_config, data_source_config, ingress_config, targets, events
 
