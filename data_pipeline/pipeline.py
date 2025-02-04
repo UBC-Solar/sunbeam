@@ -118,10 +118,10 @@ def collect_config():
     data_source_config: DataSourceConfig = DataSourceConfigFactory.build(stage_data_source_type, config_file["stage_data_source"])
     ingress_config: DataSourceConfig = DataSourceConfigFactory.build(ingress_data_source_type, config_file["ingress_data_source"])
 
-    targets_file: dict = collect_config_file(pathlib.Path(sunbeam_config.ingress_description_file))
+    targets_file: dict = collect_config_file(pathlib.Path(sunbeam_config.ingress_description_file).absolute())
     targets: List[TimeSeriesTarget] = collect_targets(targets_file)
 
-    events: List[Event] = collect_events(pathlib.Path(sunbeam_config.events_description_file))
+    events: List[Event] = collect_events(pathlib.Path(sunbeam_config.events_description_file).absolute())
 
     return sunbeam_config, data_source_config, ingress_config, targets, events
 
