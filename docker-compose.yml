@@ -32,7 +32,7 @@ services:
   prefect-agent:
     image: sunbeam-prefect-agent:latest
     volumes:
-      - ./fs_data:/root/fs_data
+      - ./fs_data:/app/fs_data
     build:
       context: ./data_pipeline
       dockerfile: ./Dockerfile

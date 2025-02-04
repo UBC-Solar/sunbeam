@@ -10,13 +10,13 @@ COPY --from=root ./pyproject.toml .
 
 COPY --from=root ./poetry.lock .
 
-COPY --from=root ./config .
+COPY --from=root ./config ./config
 
-COPY --from=root ./logs .
+COPY --from=root ./logs ./logs
 
-COPY --from=root ./data_source .
+COPY --from=root ./data_source ./data_source
 
-COPY --from=root ./stage .
+COPY --from=root ./stage ./stage
 
 COPY . .
 

@@ -9,13 +9,16 @@ from .models import (
     DataSourceConfigFactory
 )
 
+
+config_directory = pathlib.Path(__file__).parent
+
+
 __all__ = [
     "DataSourceConfig",
     "FSDataSourceConfig",
     "MongoDBDataSourceConfig",
     "InfluxDBDataSourceConfig",
     "SunbeamConfig",
-    "DataSourceConfigFactory"
+    "DataSourceConfigFactory",
+    "config_directory"
 ]
-
-config_directory = pathlib.Path(__file__).parent
