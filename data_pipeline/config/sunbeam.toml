@@ -16,7 +16,7 @@ fs_root = "fs_data"
 data_source_type = "MongoDBDataSource"
 
 [ingress_data_source.MongoDBDataSource]
-ingress_origin = "main"
+ingress_origin = "influxdb"
 
 [ingress_data_source.FSDataSource]
 fs_root = "fs_data"
