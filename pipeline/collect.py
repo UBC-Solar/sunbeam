@@ -55,6 +55,9 @@ def collect_targets(ingress_config: dict) -> List[TimeSeriesTarget]:
 
 def collect_events(events_description_filename: Union[str, pathlib.Path]) -> List[Event]:
     with open(config_directory / events_description_filename) as events_description_file:
+        print(config_directory / events_description_filename)
+        file = tomllib.load(events_description_file)
+        print(file)
         events_descriptions = tomllib.load(events_description_file)["event"]
 
     events = [Event.from_dict(event) for event in events_descriptions]
