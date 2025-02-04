@@ -54,13 +54,18 @@ def collect_targets(ingress_config: dict) -> List[TimeSeriesTarget]:
 
 
 def collect_events(events_description_filename: Union[str, pathlib.Path]) -> List[Event]:
-    with open(config_directory / events_description_filename) as events_description_file:
-        print(config_directory / events_description_filename)
+    events_filepath = config_directory / events_description_filename
+
+    with open(events_filepath) as events_description_file:
+        print(events_filepath)
         file = tomllib.load(events_description_file)
         print(file)
-        events_descriptions = tomllib.load(events_description_file)["event"]
+        events_descriptions = file["event"]
 
     events = [Event.from_dict(event) for event in events_descriptions]
+
+    assert len(events) > 0, f"No events were collected in {events_filepath}! At least one event must be declared."
+
     return list(events)
 
 
