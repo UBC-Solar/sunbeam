@@ -4,9 +4,19 @@ from stage.stage_registry import stage_registry
 from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath
 from stage.context import Context
 from data_tools.collections import TimeSeries
+from prefect import task
 
 
 class PowerStage(Stage):
+    @classmethod
+    def get_stage_name(cls):
+        return "power"
+
+    @staticmethod
+    def dependencies():
+        return ["ingress"]
+
+    @task(name=get_stage_name())
     def run(self, total_pack_voltage_loader: FileLoader, pack_current_loader: FileLoader, motor_current_loader: FileLoader, motor_voltage_loader: FileLoader) -> StageResult:
         """
         Run the power stage, converting voltage and current data into power.
@@ -17,14 +27,6 @@ class PowerStage(Stage):
         :returns: PackPower (TimeSeries), MotorPower (TimeSeries)
         """
         return super().run(total_pack_voltage_loader, pack_current_loader, motor_current_loader, motor_voltage_loader)
-
-    @classmethod
-    def get_stage_name(cls):
-        return "power"
-
-    @staticmethod
-    def dependencies():
-        return ["ingress"]
 
     @property
     def event_name(self):
