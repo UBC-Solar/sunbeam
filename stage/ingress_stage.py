@@ -9,6 +9,7 @@ from data_tools.query.influxdb_query import TimeSeriesTarget
 from data_tools.collections.time_series import TimeSeries
 from typing import List, Dict
 import traceback
+from prefect import task
 
 
 class IngressStage(Stage):
@@ -26,7 +27,7 @@ class IngressStage(Stage):
         :param events: a list of n Event models specifying how the raw data should be temporally partitioned
         :return: a StageResult [n][m] which can be indexed first by event, then by target name.
         """
-        return super().run(targets, events)
+        return task(super().run, name=f"{self.get_stage_name()} Extract")(targets, events)
 
     @classmethod
     def get_stage_name(cls):
