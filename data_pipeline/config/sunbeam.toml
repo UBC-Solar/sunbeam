@@ -8,6 +8,10 @@ data_source_type = "MongoDBDataSource"
 [stage_data_source.FSDataSource]
 fs_root = "fs_data"
 
+[stage_data_source.MongoDBDataSource]
+
+[stage_data_source.InfluxDBDataSource]
+
 [ingress_data_source]
 data_source_type = "MongoDBDataSource"
 
