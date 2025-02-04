@@ -82,7 +82,7 @@ def decommission_pipeline(code_hash):
     if code_hash not in commissioned_pipelines:
         return f"Pipeline {code_hash} is not commissioned!"
 
-    time_series_collection.delete_many({"code_hash": code_hash})
+    time_series_collection.delete_many({"origin": code_hash})
 
     async def delete_deployment_by_name(deployment_name):
         async with get_client() as prefect_client:
@@ -100,7 +100,7 @@ def decommission_pipeline(code_hash):
 
     update = {
         "$pull": {
-            "origin": code_hash
+            "data": code_hash
         }
     }
 

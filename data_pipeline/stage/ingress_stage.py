@@ -57,16 +57,22 @@ class IngressStage(Stage):
 
                 self._extract_method = self._extract_influxdb
                 self._transform_method = self._transform_influxdb
-                self._load_method = self._load_influxdb
+                self._load_method = self._load_and_store
 
             case DataSourceType.MongoDB:
                 self._ingress_data_source = MongoDBDataSource()
 
                 self._ingress_origin = config.ingress_origin
 
+                assert self._ingress_origin != self.context.title, (f"You are trying to ingress from "
+                                                                    f"{self._ingress_origin} and output to "
+                                                                    f"{self.context.title} which is not permitted "
+                                                                    f"for MongoDBDataSource. They must be "
+                                                                    f"different locations!")
+
                 self._extract_method = self._extract_existing
                 self._transform_method = self._transform_existing
-                self._load_method = self._load_existing
+                self._load_method = self._load_and_store
 
             case _:
                 raise StageError(self.get_stage_name(), f"Did not recognize {config["fs"]} as a valid Ingress "
@@ -220,8 +226,7 @@ class IngressStage(Stage):
 
         return (processed_time_series_data,)
 
-    def _load_influxdb(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> tuple[
-        Dict[str, Dict[str, FileLoader]]]:
+    def _load_and_store(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> tuple[Dict[str, Dict[str, FileLoader]]]:
         result_dict: Dict[str, Dict[str, FileLoader]] = {}
 
         for event_name, event_items in processed_time_series_data.items():
