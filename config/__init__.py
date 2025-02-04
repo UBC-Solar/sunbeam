@@ -1,3 +1,5 @@
+import pathlib
+
 from .models import (
     DataSourceConfig,
     FSDataSourceConfig,
@@ -15,3 +17,5 @@ __all__ = [
     "SunbeamConfig",
     "DataSourceConfigFactory"
 ]
+
+config_directory = pathlib.Path(__file__).parent

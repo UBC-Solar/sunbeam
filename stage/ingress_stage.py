@@ -1,10 +1,10 @@
-from data_pipeline.config import DataSourceConfig
-from data_pipeline.stage.stage import Stage, StageResult, StageError
-from data_pipeline.data_source import InfluxDBDataSource, FSDataSource, DataSourceType, MongoDBDataSource
-from data_pipeline.stage.stage_registry import stage_registry
+from config import DataSourceConfig
+from stage.stage import Stage, StageResult, StageError
+from data_source import InfluxDBDataSource, FSDataSource, DataSourceType, MongoDBDataSource
+from stage.stage_registry import stage_registry
 from data_tools.schema import File, Result, FileLoader, FileType, Event, UnwrappedError, CanonicalPath
 from data_tools.utils import parse_iso_datetime
-from data_pipeline.context import Context
+from stage.context import Context
 from data_tools.query.influxdb_query import TimeSeriesTarget
 from data_tools.collections.time_series import TimeSeries
 from typing import List, Dict

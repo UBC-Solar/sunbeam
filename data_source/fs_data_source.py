@@ -4,13 +4,13 @@ from data_tools import File, FileType
 from data_tools.schema import DataSource, Result, FileLoader, CanonicalPath
 from pathlib import Path
 import dill
-from data_pipeline.config import FSDataSourceConfig
+from config import FSDataSourceConfig
 
 
 class FSDataSource(DataSource):
     def __init__(self, data_source_config: FSDataSourceConfig):
         super().__init__()
-        self._root = Path(data_source_config.fs_root).absolute()
+        self._root = (Path(__file__).parent.parent / data_source_config.fs_root).absolute()
 
     def canonical_path_to_real_path(self, canonical_path: CanonicalPath):
         return str(self._root / canonical_path.to_path()) + ".bin"

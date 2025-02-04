@@ -1,6 +1,9 @@
 [config]
-events_description_file = "config/events.toml"
-ingress_description_file = "config/ingress.toml"
+events_description_file = "events.toml"
+ingress_description_file = "ingress.toml"
+stages_to_run = [
+    "power"
+]
 
 [stage_data_source]
 data_source_type = "MongoDBDataSource"

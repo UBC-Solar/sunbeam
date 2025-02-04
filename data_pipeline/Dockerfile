@@ -10,6 +10,14 @@ COPY --from=root ./pyproject.toml .
 
 COPY --from=root ./poetry.lock .
 
+COPY --from=root ./config .
+
+COPY --from=root ./logs .
+
+COPY --from=root ./data_source .
+
+COPY --from=root ./stage .
+
 COPY . .
 
 ENV POETRY_VERSION 1.8.3

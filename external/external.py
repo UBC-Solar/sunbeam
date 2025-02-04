@@ -1,7 +1,7 @@
 import pickle
 
 import prefect.client.schemas.responses
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template
 import pymongo
 from typing import List
 import logging
@@ -13,7 +13,6 @@ import asyncio
 import tempfile
 from bokeh.plotting import figure, output_file, save
 from bokeh.models import ColumnDataSource
-from datetime import datetime, timedelta
 from data_tools.collections import TimeSeries
 
 
@@ -22,7 +21,6 @@ SOURCE_REPO = "https://github.com/UBC-Solar/sunbeam.git"
 
 logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
 logger = logging.getLogger()
-
 
 app = Flask(__name__)
 
@@ -76,13 +74,13 @@ def list_files():
     return res
 
 
-@app.route("/decommission_pipeline/<code_hash>")
-def decommission_pipeline(code_hash):
+@app.route("/decommission_pipeline/<git_target>")
+def decommission_pipeline(git_target):
     commissioned_pipelines = metadata_collection.find_one(commissioned_pipelines_query)['data']
-    if code_hash not in commissioned_pipelines:
-        return f"Pipeline {code_hash} is not commissioned!"
+    if git_target not in commissioned_pipelines:
+        return f"Pipeline {git_target} is not commissioned!"
 
-    time_series_collection.delete_many({"origin": code_hash})
+    time_series_collection.delete_many({"origin": git_target})
 
     async def delete_deployment_by_name(deployment_name):
         async with get_client() as prefect_client:
@@ -96,39 +94,39 @@ def decommission_pipeline(code_hash):
             except (AttributeError, AssertionError, prefect_exceptions.ObjectNotFound):
                 logger.error(f"Failed to delete deployment: {deployment_name}")
 
-    asyncio.run(delete_deployment_by_name(code_hash))
+    asyncio.run(delete_deployment_by_name(git_target))
 
     update = {
         "$pull": {
-            "data": code_hash
+            "data": git_target
         }
     }
 
     metadata_collection.update_one(commissioned_pipelines_query, update)
 
-    return f"Decommissioned {code_hash}!"
+    return f"Decommissioned {git_target}!"
 
 
-@app.route("/commission_pipeline/<code_hash>")
-def commission_pipeline(code_hash):
+@app.route("/commission_pipeline/<git_target>")
+def commission_pipeline(git_target):
     commissioned_pipelines = metadata_collection.find_one(commissioned_pipelines_query)['data']
-    if code_hash in commissioned_pipelines:
-        return f"Pipeline {code_hash} already commissioned!"
+    if git_target in commissioned_pipelines:
+        return f"Pipeline {git_target} already commissioned!"
 
     repo_block = GitHubRepository(
         repository_url=SOURCE_REPO,
-        reference=code_hash
+        reference=git_target
     )
     repo_block.save(name=f"source", overwrite=True)
 
     flow.from_source(
         source=repo_block,
-        entrypoint="data_pipeline/pipeline.py:pipeline"
+        entrypoint="data_pipeline/pipeline.py:run_sunbeam"
     ).deploy(
-        name=f"pipeline-{code_hash}",
+        name=f"pipeline-{git_target}",
         work_pool_name="default-work-pool",
         parameters={
-            "git_tag": code_hash
+            "git_tag": git_target
         }
     )
 
@@ -143,17 +141,17 @@ def commission_pipeline(code_hash):
             except AssertionError:
                 logger.error(f"Failed to run deployment {deployment_name}")
 
-    asyncio.run(run_deployment_by_name(code_hash))
+    asyncio.run(run_deployment_by_name(git_target))
 
     update = {
         "$push": {
-            "data": code_hash
+            "data": git_target
         }
     }
 
     metadata_collection.update_one(commissioned_pipelines_query, update)
 
-    return f"Commissioned {code_hash}"
+    return f"Commissioned {git_target}"
 
 
 @app.route('/files', defaults={'path': ''})
@@ -206,9 +204,9 @@ def show_hierarchy(path):
             source = ColumnDataSource(data=dict(dates=data.datetime_x_axis, values=data))
 
             # Create a temporary file
-            with tempfile.NamedTemporaryFile(delete=False) as tmpfile:
+            with tempfile.NamedTemporaryFile(delete=False) as temp_file:
                 # Specify the temporary file as the output for Bokeh
-                output_file(tmpfile.name)
+                output_file(temp_file.name)
 
                 # Create a figure with a datetime x-axis
                 p = figure(title=path_parts[3], x_axis_type='datetime', x_axis_label='Date',
@@ -221,7 +219,7 @@ def show_hierarchy(path):
                 save(p)
 
                 # Read the HTML content from the temporary file
-                with open(tmpfile.name, 'r') as f:
+                with open(temp_file.name, 'r') as f:
                     html_content = f.read()
 
                     return html_content

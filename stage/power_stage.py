@@ -1,8 +1,8 @@
 from data_tools.schema import FileLoader
-from data_pipeline.stage.stage import Stage, StageResult
-from data_pipeline.stage.stage_registry import stage_registry
+from stage.stage import Stage, StageResult
+from stage.stage_registry import stage_registry
 from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath
-from data_pipeline.context import Context
+from stage.context import Context
 from data_tools.collections import TimeSeries
 
 

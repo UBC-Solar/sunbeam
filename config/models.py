@@ -21,6 +21,7 @@ class InfluxDBDataSourceConfig(DataSourceConfig):
 class SunbeamConfig(BaseModel):
     events_description_file: str
     ingress_description_file: str
+    stages_to_run: list[str]
 
 
 class DataSourceConfigFactory:

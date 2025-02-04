@@ -1,6 +1,6 @@
 from enum import StrEnum
 from data_tools.schema import DataSource
-from data_pipeline.data_source import fs_data_source, influxdb_data_source, mongodb_data_source
+from data_source import fs_data_source, influxdb_data_source, mongodb_data_source
 
 
 class DataSourceType(StrEnum):

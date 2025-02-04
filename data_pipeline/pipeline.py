@@ -2,53 +2,22 @@ import pathlib
 
 from data_tools import Event, FileType, DataSource
 import toml as tomllib
-from pydantic import BaseModel
-from typing import List, Dict, Union
+from typing import List, Union
 import logging
 import traceback
-from datetime import datetime
-import os
 from prefect import flow
 import networkx as nx
-
-from data_pipeline.config import DataSourceConfigFactory
-from data_pipeline.logs import log_directory
+from logs import log_directory
 from data_tools.utils import configure_logger
-
 from data_tools.query.influxdb_query import TimeSeriesTarget
-from data_pipeline.data_source import DataSourceFactory
-from data_pipeline.context import Context
-from data_pipeline.stage.power_stage import PowerStage
-from data_pipeline.stage.stage import StageResult
-from data_pipeline.stage.ingress_stage import IngressStage
-from data_pipeline.stage.stage_registry import stage_registry
-from data_pipeline.config.models import FSDataSourceConfig, MongoDBDataSourceConfig, InfluxDBDataSourceConfig, SunbeamConfig, DataSourceConfig
+from data_source import DataSourceFactory
+from stage import Context, PowerStage, StageResult, IngressStage, stage_registry
+from config import config_directory, SunbeamConfig, DataSourceConfig, DataSourceConfigFactory
 
-
-CONFIG_PATH = os.getenv("SUNBEAM_PIPELINE_CONFIG_PATH", pathlib.Path(__file__).parent / "config" / "sunbeam.toml")
-REQUIRED_CONFIG = ["events_description_file", "ingress_description_file", "stage_data_source"]
 ROOT = pathlib.Path(__file__).parent
 
 logger = logging.getLogger("sunbeam")
 configure_logger(logger, log_directory / "sunbeam.log")
-
-code_hash = None
-
-
-class DatumMeta(BaseModel):
-    name: str
-    start_time: datetime
-    end_time: datetime
-    granularity: float
-    meta: Dict
-    units: str
-    car: str
-    bucket: str
-
-
-class Datum(BaseModel):
-    meta: DatumMeta
-    data: list
 
 
 def collect_targets(ingress_config: dict) -> List[TimeSeriesTarget]:
@@ -89,17 +58,19 @@ def collect_targets(ingress_config: dict) -> List[TimeSeriesTarget]:
     return targets
 
 
-def collect_events(events_description_filepath: Union[str, pathlib.Path]) -> List[Event]:
-    with open(ROOT / events_description_filepath) as events_description_file:
+def collect_events(events_description_filename: Union[str, pathlib.Path]) -> List[Event]:
+    with open(config_directory / events_description_filename) as events_description_file:
         events_descriptions = tomllib.load(events_description_file)["event"]
 
     events = [Event.from_dict(event) for event in events_descriptions]
     return list(events)
 
 
-def collect_config_file(config_path: pathlib.Path):
+def collect_config_file(config_file: Union[str, pathlib.Path]) -> dict:
+    config_path = config_directory / config_file
     logger.info(f"Trying to find config at {config_path}...")
-    with open(ROOT / config_path) as config_file:
+
+    with open(config_directory / config_path) as config_file:
         config = tomllib.load(config_file)
 
     logger.info(f"Acquired config from {config_path}:\n")
@@ -108,9 +79,9 @@ def collect_config_file(config_path: pathlib.Path):
     return config
 
 
-def collect_config():
-    config_file: dict = collect_config_file(CONFIG_PATH)
-    sunbeam_config = SunbeamConfig(**config_file["config"])
+def build_config() -> tuple[SunbeamConfig, DataSourceConfig, DataSourceConfig, List[TimeSeriesTarget], List[Event]]:
+    config_file: dict = collect_config_file("sunbeam.toml")
+    sunbeam_config: SunbeamConfig = SunbeamConfig(**config_file["config"])
 
     stage_data_source_type = config_file["stage_data_source"]["data_source_type"]
     ingress_data_source_type = config_file["ingress_data_source"]["data_source_type"]
@@ -118,19 +89,12 @@ def collect_config():
     data_source_config: DataSourceConfig = DataSourceConfigFactory.build(stage_data_source_type, config_file["stage_data_source"])
     ingress_config: DataSourceConfig = DataSourceConfigFactory.build(ingress_data_source_type, config_file["ingress_data_source"])
 
-    targets_file: dict = collect_config_file(pathlib.Path(sunbeam_config.ingress_description_file))
+    targets_file: dict = collect_config_file(sunbeam_config.ingress_description_file)
     targets: List[TimeSeriesTarget] = collect_targets(targets_file)
 
-    events: List[Event] = collect_events(pathlib.Path(sunbeam_config.events_description_file))
+    events: List[Event] = collect_events(sunbeam_config.events_description_file)
 
     return sunbeam_config, data_source_config, ingress_config, targets, events
-
-
-@flow(log_prints=True)
-def pipeline(git_tag="pipeline"):
-    pipeline_name = git_tag
-
-    local_pipeline(pipeline_name, ["power"])
 
 
 def add_dependencies(dependency_graph: nx.Graph, stage_id: str):
@@ -141,7 +105,7 @@ def add_dependencies(dependency_graph: nx.Graph, stage_id: str):
         add_dependencies(dependency_graph, dep_id)
 
 
-def local_pipeline(pipeline_name: str, stages_to_run: List[str]):
+def build_stage_graph(stages_to_run: List[str]) -> List[str]:
     # Build a dependency graph
     dependency_graph = nx.DiGraph()
 
@@ -150,15 +114,24 @@ def local_pipeline(pipeline_name: str, stages_to_run: List[str]):
         add_dependencies(dependency_graph, stage_id)
 
     # Check for cycles and determine execution order
-    stages_to_run = list(nx.topological_sort(dependency_graph))
-    stages_to_run.reverse()  # The topological sort will be in the inverse order, so we need to just reverse it
+    required_stages = list(nx.topological_sort(dependency_graph))
+    required_stages.reverse()  # The topological sort will be in the inverse order, so we need to just reverse it
 
-    logger.info(f"Executing stages in order: {" -> ".join(stages_to_run)}")
+    return required_stages
 
-    sunbeam_config, data_source_config, ingress_config, targets, events = collect_config()
+
+@flow(log_prints=True)
+def run_sunbeam(git_target="pipeline"):
+    sunbeam_config, data_source_config, ingress_config, targets, events = build_config()
+
+    stages_to_run = sunbeam_config.stages_to_run
+
+    required_stages = build_stage_graph(stages_to_run)
+
+    logger.info(f"Executing stages in order: {" -> ".join(required_stages)}")
 
     data_source: DataSource = DataSourceFactory.build(data_source_config.data_source_type, data_source_config)
-    context: Context = Context(pipeline_name, data_source, stages_to_run)
+    context: Context = Context(git_target, data_source, required_stages)
 
     ingress_stage: IngressStage = IngressStage(context, ingress_config)
     ingress_outputs: StageResult = ingress_stage.run(targets, events)
@@ -183,4 +156,4 @@ if __name__ == "__main__":
 
     load_dotenv()
 
-    pipeline()
+    run_sunbeam()

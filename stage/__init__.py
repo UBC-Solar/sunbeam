@@ -1,7 +1,8 @@
 from .ingress_stage import IngressStage
 from .power_stage import PowerStage
-from .stage_registry import StageRegistry
+from .stage_registry import StageRegistry, stage_registry
 from .stage import Stage, StageResult, StageError, StageMeta
+from .context import Context
 
 __all__ = [
     "IngressStage",
@@ -10,5 +11,7 @@ __all__ = [
     "Stage",
     "StageResult",
     "StageError",
-    "StageMeta"
+    "StageMeta",
+    "Context",
+    "stage_registry"
 ]
