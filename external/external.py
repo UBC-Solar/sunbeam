@@ -86,7 +86,7 @@ def decommission_pipeline(git_target):
         async with get_client() as prefect_client:
             try:
                 # The name syntax needs to be updated to the same as when deployments are created
-                deployment = await prefect_client.read_deployment_by_name(f"pipeline/pipeline-{deployment_name}")
+                deployment = await prefect_client.read_deployment_by_name(f"run-sunbeam/pipeline-{deployment_name}")
                 assert isinstance(deployment, prefect.client.schemas.responses.DeploymentResponse)
 
                 await prefect_client.delete_deployment(deployment.id)
@@ -121,19 +121,19 @@ def commission_pipeline(git_target):
 
     flow.from_source(
         source=repo_block,
-        entrypoint="data_pipeline/pipeline.py:run_sunbeam"
+        entrypoint="pipeline/run.py:run_sunbeam"
     ).deploy(
         name=f"pipeline-{git_target}",
         work_pool_name="default-work-pool",
         parameters={
-            "git_tag": git_target
+            "git_target": git_target
         }
     )
 
     async def run_deployment_by_name(deployment_name):
         async with get_client() as prefect_client:
             try:
-                deployment = await prefect_client.read_deployment_by_name(f"pipeline/pipeline-{deployment_name}")
+                deployment = await prefect_client.read_deployment_by_name(f"run-sunbeam/pipeline-{deployment_name}")
                 assert isinstance(deployment, prefect.client.schemas.responses.DeploymentResponse)
 
                 await prefect_client.create_flow_run_from_deployment(deployment.id)
