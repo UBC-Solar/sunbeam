@@ -16,7 +16,7 @@ class PowerStage(Stage):
     def dependencies():
         return ["ingress"]
 
-    @task(name=get_stage_name())
+    @task(name="Power")
     def run(self, total_pack_voltage_loader: FileLoader, pack_current_loader: FileLoader, motor_current_loader: FileLoader, motor_voltage_loader: FileLoader) -> StageResult:
         """
         Run the power stage, converting voltage and current data into power.

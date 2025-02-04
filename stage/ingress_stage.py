@@ -25,7 +25,7 @@ class IngressStage(Stage):
     def dependencies():
         return []
 
-    @task(name=get_stage_name())
+    @task(name="Ingress")
     def run(self, targets: List[TimeSeriesTarget], events: List[Event]) -> StageResult:
         """
         Ingest raw time series data from InfluxDB and marshal it for use in the data pipeline, or load pre-existing data
