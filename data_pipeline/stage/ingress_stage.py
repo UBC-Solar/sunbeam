@@ -51,8 +51,8 @@ class IngressStage(Stage):
 
             case DataSourceType.InfluxDB:
                 self._ingress_data_source = InfluxDBDataSource(
-                    parse_iso_datetime(config["start"]),
-                    parse_iso_datetime(config["stop"])
+                    parse_iso_datetime(config.start),
+                    parse_iso_datetime(config.start)
                 )
 
                 self._extract_method = self._extract_influxdb
@@ -62,7 +62,7 @@ class IngressStage(Stage):
             case DataSourceType.MongoDB:
                 self._ingress_data_source = MongoDBDataSource()
 
-                self._ingress_origin = config["ingress_origin"]
+                self._ingress_origin = config.ingress_origin
 
                 self._extract_method = self._extract_existing
                 self._transform_method = self._transform_existing
