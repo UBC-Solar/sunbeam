@@ -1,3 +1,5 @@
+import pickle
+
 import prefect.client.schemas.responses
 from flask import Flask, render_template, jsonify, request
 import pymongo
@@ -8,6 +10,11 @@ from prefect import exceptions as prefect_exceptions
 from prefect_github import GitHubRepository
 from prefect.client.orchestration import get_client
 import asyncio
+import tempfile
+from bokeh.plotting import figure, output_file, save
+from bokeh.models import ColumnDataSource
+from datetime import datetime, timedelta
+from data_tools.collections import TimeSeries
 
 
 SOURCE_REPO = "https://github.com/UBC-Solar/sunbeam.git"
@@ -62,9 +69,9 @@ def hello_world():
 def list_files():
     res: List[str] = []
 
-    files = time_series_collection.find()
+    files = time_series_collection.find({}, {"origin": 1, "event": 1, "source": 1, "name": 1})
     for file in files:
-        res.append(f"{file['origin']}/{file['source']}/{file['event']}/{file['path']}/{file['name']}")
+        res.append(f"{file['origin']}/{file['event']}/{file['source']}/{file['name']}")
 
     return res
 
@@ -154,47 +161,73 @@ def commission_pipeline(code_hash):
 def show_hierarchy(path):
     path_parts = path.split('/') if path else []
 
-    # Query the database based on the path parts
+    # User is querying the available commissioned pipelines
     if len(path_parts) == 0:
         # Top-level directories
         results = time_series_collection.distinct("origin")
         return render_template("list.html", items=results, path=path)
 
+    # User is querying the events that a pipeline processed
     elif len(path_parts) == 1:
-        # Subdirectories in a directory
-        results = time_series_collection.distinct("source", {"origin": path_parts[0]})
+        results = time_series_collection.distinct("event", {"origin": path_parts[0]})
         return render_template("list.html", items=results, path=path)
 
+    # User is querying the stages that were processed for an event and pipeline
     elif len(path_parts) == 2:
-        # Versions in a directory and subdirectory
-        results = time_series_collection.distinct("event", {
+        results = time_series_collection.distinct("source", {
             "origin": path_parts[0],
-            "source": path_parts[1]
+            "event": path_parts[1]
         })
         return render_template("list.html", items=results, path=path)
 
+    # User is querying the files produced by a stage for an event and pipeline
     elif len(path_parts) == 3:
-        # Versions in a directory and subdirectory
-        results = time_series_collection.distinct("path", {
+        results = time_series_collection.distinct("name", {
             "origin": path_parts[0],
-            "source": path_parts[1],
-            "event": path_parts[2],
+            "event": path_parts[1],
+            "source": path_parts[2],
         })
+        print(results)
         return render_template("list.html", items=results, path=path)
 
+    # User is querying a specific file
     elif len(path_parts) == 4:
-        # File names in a specific version
-        results = time_series_collection.find({
+        results = time_series_collection.find_one({
             "origin": path_parts[0],
-            "source": path_parts[1],
-            "event": path_parts[2],
-            "path": path_parts[3],
-        }, {"_id": 0, "name": 1})
-        return render_template("list.html", items=[doc["name"] for doc in results], path=path)
+            "event": path_parts[1],
+            "source": path_parts[2],
+            "name": path_parts[3],
+        }, {"_id": 1, "filetype": 1, "data": 1})
 
-    elif len(path_parts) == 4:
-        # Special handling for file access
-        return f"File: {path_parts[3]}"
+        if results["filetype"] == "TimeSeries":
+            data: TimeSeries = pickle.loads(results["data"])
+
+            # Create a ColumnDataSource
+            source = ColumnDataSource(data=dict(dates=data.datetime_x_axis, values=data))
+
+            # Create a temporary file
+            with tempfile.NamedTemporaryFile(delete=False) as tmpfile:
+                # Specify the temporary file as the output for Bokeh
+                output_file(tmpfile.name)
+
+                # Create a figure with a datetime x-axis
+                p = figure(title=path_parts[3], x_axis_type='datetime', x_axis_label='Date',
+                           y_axis_label=data.units)
+
+                # Add a line renderer
+                p.line('dates', 'values', source=source, legend_label="Values", line_width=2)
+
+                # Save the plot to the temporary file
+                save(p)
+
+                # Read the HTML content from the temporary file
+                with open(tmpfile.name, 'r') as f:
+                    html_content = f.read()
+
+                    return html_content
+
+        else:
+            return "Cannot display non-TimeSeries content!", 404
 
     return "Invalid path", 404
 
