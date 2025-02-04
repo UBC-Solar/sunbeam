@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod, ABCMeta
 import logging
-from logging import Logger
 
 from data_tools.schema import FileLoader, File, Result
 from data_tools.utils import configure_logger
@@ -9,7 +8,7 @@ from data_pipeline.logs import log_directory
 from functools import wraps
 from data_pipeline.context import Context
 from collections.abc import Iterable
-from typing import Any, Dict, Tuple, Generator
+from typing import Any, Dict, Generator
 from prefect import task
 
 

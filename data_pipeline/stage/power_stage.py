@@ -1,5 +1,3 @@
-from typing import Tuple
-
 from data_tools.schema import FileLoader
 from data_pipeline.stage.stage import Stage, StageResult
 from data_pipeline.stage.stage_registry import stage_registry
@@ -89,7 +87,7 @@ class PowerStage(Stage):
         pack_power_file = File(
             canonical_path=CanonicalPath(
                 origin=self.context.title,
-                path=self.event_name,
+                event=self.event_name,
                 source=PowerStage.get_stage_name(),
                 name="PackPower",
             ),
@@ -100,7 +98,7 @@ class PowerStage(Stage):
         motor_power_file = File(
             canonical_path=CanonicalPath(
                 origin=self.context.title,
-                path=self.event_name,
+                event=self.event_name,
                 source=PowerStage.get_stage_name(),
                 name="MotorPower",
             ),

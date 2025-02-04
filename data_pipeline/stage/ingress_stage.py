@@ -73,7 +73,7 @@ class IngressStage(Stage):
                     queried_data: Result = self._ingress_data_source.get(CanonicalPath(
                         origin=self.context.title,
                         source=self.get_stage_name(),
-                        path=[event.name],
+                        event=event.name,
                         name=target.field
                     )).unwrap()
 
@@ -84,10 +84,10 @@ class IngressStage(Stage):
                     self.logger.error(f"Failed to find cached time series data for {target.name} for {event.name}: "
                                       f"{traceback.format_exc()}")
 
-        return (extracted_time_series_data, )
+        return (extracted_time_series_data,)
 
     def _transform_fs(self, extracted_time_series_data: Dict[str, Dict[str, Result]]) -> tuple[Dict[str, Dict[str, Result]]]:
-        return (extracted_time_series_data, )
+        return (extracted_time_series_data,)
 
     def _load_fs(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> tuple[Dict[str, Dict[str, FileLoader]]]:
         result_dict: Dict[str, Dict[str, FileLoader]] = {}
@@ -101,7 +101,7 @@ class IngressStage(Stage):
                     canonical_path=CanonicalPath(
                         origin=self.context.title,
                         source=self.get_stage_name(),
-                        path=event_name,
+                        event=event_name,
                         name=name
                     ),
                     file_type=FileType.TimeSeries
@@ -114,7 +114,7 @@ class IngressStage(Stage):
 
                 self.logger.info(f"Successfully loaded {name} for {event_name}!")
 
-        return (result_dict, )
+        return (result_dict,)
 
     def extract(self, targets: List[TimeSeriesTarget], events: List[Event]) -> tuple[dict[str, dict[str, Result]]]:
         return self._extract_method(targets, events)
@@ -139,12 +139,16 @@ class IngressStage(Stage):
 
             for target in targets:
                 try:
-                    queried_data = self._ingress_data_source.get(CanonicalPath(
-                        origin=target.bucket,
-                        source=target.car,
-                        path=[target.measurement, event.start_as_iso_str, event.stop_as_iso_str],
-                        name=target.field
-                    )).unwrap()
+                    queried_data = self._ingress_data_source.get(
+                        CanonicalPath(
+                            origin=target.bucket,
+                            source=target.car,
+                            event=target.measurement,
+                            name=target.field
+                            ),
+                        start=event.start_as_iso_str,
+                        stop=event.stop_as_iso_str
+                    ).unwrap()
 
                     extracted_time_series_data[event.name][target.name] = Result.Ok({
                         "data": queried_data,
@@ -159,7 +163,7 @@ class IngressStage(Stage):
                     self.logger.error(f"Failed to extract time series data for {target.name} for {event.name}: "
                                       f"{traceback.format_exc()}")
 
-        return (extracted_time_series_data, )
+        return (extracted_time_series_data,)
 
     def _transform_influxdb(self, extracted_time_series_data: Dict[str, Dict[str, Result]]) -> tuple[Dict[str, Dict[str, Result]]]:
         """
@@ -200,7 +204,7 @@ class IngressStage(Stage):
                 else:
                     processed_time_series_data[event_name][name] = result
 
-        return (processed_time_series_data, )
+        return (processed_time_series_data,)
 
     def _load_influxdb(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> tuple[Dict[str, Dict[str, FileLoader]]]:
         result_dict: Dict[str, Dict[str, FileLoader]] = {}
@@ -214,7 +218,7 @@ class IngressStage(Stage):
                     canonical_path=CanonicalPath(
                         origin=self.context.title,
                         source=self.get_stage_name(),
-                        path=event_name,
+                        event=event_name,
                         name=name
                     ),
                     file_type=FileType.TimeSeries
@@ -224,7 +228,7 @@ class IngressStage(Stage):
 
                 self.logger.info(f"Successfully loaded {name} for {event_name}!")
 
-        return (result_dict, )
+        return (result_dict,)
 
 
 stage_registry.register_stage(IngressStage.get_stage_name(), IngressStage)

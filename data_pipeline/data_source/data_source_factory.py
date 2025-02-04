@@ -20,4 +20,4 @@ class DataSourceFactory:
                 return influxdb_data_source.InfluxDBDataSource(*args, **kwargs)
 
             case DataSourceType.MongoDB:
-                return mongodb_data_source.MongoDBDataSource()
+                return mongodb_data_source.MongoDBDataSource(*args, **kwargs)

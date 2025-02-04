@@ -9,7 +9,7 @@ logger = logging.getLogger()
 
 
 class MongoDBDataSource(DataSource):
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         super().__init__()
 
         def init_db():
@@ -35,8 +35,7 @@ class MongoDBDataSource(DataSource):
             init_db()
 
         self._time_series_collection.create_index([("origin", 1), ("source", 1),
-                                                   ("event", 1), ("name", 1),
-                                                   ("path", 1)], unique=True)
+                                                   ("event", 1), ("name", 1)], unique=True)
 
         logger.info("Connection to MongoDB is initialized!")
 
@@ -50,25 +49,26 @@ class MongoDBDataSource(DataSource):
                         {
                             "origin": file.canonical_path.origin,
                             "source": file.canonical_path.source,
-                            "event": file.canonical_path.path[0],
-                            "path": file.canonical_path.path[1:],
+                            "event": file.canonical_path.event,
                             "name": file.canonical_path.name,
-                            "data": serialized_object
+                            "data": serialized_object,
+                            "metadata": file.metadata if file.metadata is not None else {},
+                            "description": file.description if file.description is not None else "",
+                            "filetype": str(file.file_type)
                         }
                     )
 
                 return FileLoader(lambda x: self.get(x), file.canonical_path)
 
             case _:
-                raise RuntimeError(f"FSDataSource does not support the storing of {file.file_type}!")
+                raise RuntimeError(f"MongoDBDataSource does not support the storing of {file.file_type}!")
 
     def get(self, canonical_path: CanonicalPath, **kwargs) -> Result:
         try:
             result = self._time_series_collection.find_one({
                 "origin": canonical_path.origin,
                 "source": canonical_path.source,
-                "event": canonical_path.path[0],
-                "path": canonical_path.path[1:],
+                "event": canonical_path.event,
                 "name": canonical_path.name,
             })
 
