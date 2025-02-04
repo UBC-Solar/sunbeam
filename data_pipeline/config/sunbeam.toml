@@ -3,7 +3,7 @@ events_description_file = "config/events.toml"
 ingress_description_file = "config/ingress.toml"
 
 [stage_data_source]
-data_source_type = "FSDataSource"
+data_source_type = "MongoDBDataSource"
 
 [stage_data_source.FSDataSource]
 fs_root = "fs_data"

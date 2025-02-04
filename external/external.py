@@ -100,7 +100,7 @@ def decommission_pipeline(code_hash):
 
     update = {
         "$pull": {
-            "data": code_hash
+            "origin": code_hash
         }
     }
 
