@@ -26,6 +26,7 @@ def run_sunbeam(git_target="pipeline"):
     context: Context = Context(git_target, data_source, required_stages)
 
     ingress_stage: IngressStage = IngressStage(context, ingress_config)
+    print(events)
     ingress_outputs: StageResult = ingress_stage.run(targets, events)
 
     # We will process each event separately.
