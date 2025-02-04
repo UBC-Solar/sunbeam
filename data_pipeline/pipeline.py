@@ -1,7 +1,6 @@
 import pathlib
 
-import pymongo.collection
-from data_tools import Event, FileType, DataSource, FileLoader
+from data_tools import Event, FileType, DataSource
 import toml as tomllib
 from pydantic import BaseModel
 from typing import List, Dict, Union
@@ -11,6 +10,8 @@ from datetime import datetime
 import os
 from prefect import flow
 import networkx as nx
+
+from data_pipeline.config import DataSourceConfigFactory
 from data_pipeline.logs import log_directory
 from data_tools.utils import configure_logger
 
@@ -21,6 +22,7 @@ from data_pipeline.stage.power_stage import PowerStage
 from data_pipeline.stage.stage import StageResult
 from data_pipeline.stage.ingress_stage import IngressStage
 from data_pipeline.stage.stage_registry import stage_registry
+from data_pipeline.config.models import FSDataSourceConfig, MongoDBDataSourceConfig, InfluxDBDataSourceConfig, SunbeamConfig, DataSourceConfig
 
 
 CONFIG_PATH = os.getenv("SUNBEAM_PIPELINE_CONFIG_PATH", pathlib.Path(__file__).parent / "config" / "sunbeam.toml")
@@ -95,33 +97,31 @@ def collect_events(events_description_filepath: Union[str, pathlib.Path]) -> Lis
     return list(events)
 
 
-def collect_sunbeam_config():
-    logger.info(f"Trying to find config at {CONFIG_PATH}...")
-    with open(CONFIG_PATH) as config_file:
-        config = tomllib.load(config_file)["config"]
-
-    logger.info(f"Acquired config from {CONFIG_PATH}:\n")
-    logger.info(tomllib.dumps(config) + "\n")
-
-    for required_config in REQUIRED_CONFIG:
-        assert required_config in config, f"Missing Required Config: {required_config}\n"
-
-    return config
-
-
-def collect_config_file(config_filepath):
-    with open(ROOT / f"{config_filepath}") as config_file:
+def collect_config_file(config_path: pathlib.Path):
+    logger.info(f"Trying to find config at {config_path}...")
+    with open(config_path) as config_file:
         config = tomllib.load(config_file)
+
+    logger.info(f"Acquired config from {config_path}:\n")
+    logger.info(tomllib.dumps(config) + "\n")
 
     return config
 
 
 def collect_config():
-    sunbeam_config: dict = collect_sunbeam_config()
-    data_source_config: dict = collect_config_file(sunbeam_config["stage_data_source_description_file"])
-    ingress_config: dict = collect_config_file(sunbeam_config["ingress_description_file"])
-    targets: List[TimeSeriesTarget] = collect_targets(ingress_config)
-    events: List[Event] = collect_events(sunbeam_config["events_description_file"])
+    config_file: dict = collect_config_file(CONFIG_PATH)
+    sunbeam_config = SunbeamConfig(**config_file["config"])
+
+    stage_data_source_type = config_file["stage_data_source"]["data_source_type"]
+    ingress_data_source_type = config_file["ingress_data_source"]["data_source_type"]
+
+    data_source_config: DataSourceConfig = DataSourceConfigFactory.build(stage_data_source_type, config_file["stage_data_source"])
+    ingress_config: DataSourceConfig = DataSourceConfigFactory.build(ingress_data_source_type, config_file["ingress_data_source"])
+
+    targets_file: dict = collect_config_file(pathlib.Path(sunbeam_config.ingress_description_file))
+    targets: List[TimeSeriesTarget] = collect_targets(targets_file)
+
+    events: List[Event] = collect_events(pathlib.Path(sunbeam_config.events_description_file))
 
     return sunbeam_config, data_source_config, ingress_config, targets, events
 
@@ -157,10 +157,10 @@ def local_pipeline(pipeline_name: str, stages_to_run: List[str]):
 
     sunbeam_config, data_source_config, ingress_config, targets, events = collect_config()
 
-    data_source: DataSource = DataSourceFactory.build(sunbeam_config["stage_data_source"], data_source_config["config"])
+    data_source: DataSource = DataSourceFactory.build(data_source_config.data_source_type, data_source_config)
     context: Context = Context(pipeline_name, data_source, stages_to_run)
 
-    ingress_stage: IngressStage = IngressStage(context, ingress_config["config"])
+    ingress_stage: IngressStage = IngressStage(context, ingress_config)
     ingress_outputs: StageResult = ingress_stage.run(targets, events)
 
     # We will process each event separately.

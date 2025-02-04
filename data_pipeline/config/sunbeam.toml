@@ -1,6 +1,22 @@
 [config]
 events_description_file = "config/events.toml"
-stage_data_source = "MongoDBDataSource"
-stage_data_source_description_file = "config/FSDataSource.toml"
 ingress_description_file = "config/ingress.toml"
-ingress_data_source_description_file = "config/ingress_data_source.toml"
+
+[stage_data_source]
+data_source_type = "FSDataSource"
+
+[stage_data_source.FSDataSource]
+fs_root = "fs_data"
+
+[ingress_data_source]
+data_source_type = "MongoDBDataSource"
+
+[ingress_data_source.MongoDBDataSource]
+ingress_origin = "main"
+
+[ingress_data_source.FSDataSource]
+fs_root = "fs_data"
+
+[ingress_data_source.InfluxDBDataSource]
+start = "2024-07-01T01:00:00Z"
+stop = "2024-08-30T01:00:00Z"

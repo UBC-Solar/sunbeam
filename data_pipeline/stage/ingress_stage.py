@@ -1,5 +1,6 @@
+from data_pipeline.config import DataSourceConfig
 from data_pipeline.stage.stage import Stage, StageResult, StageError
-from data_pipeline.data_source import InfluxDBDataSource, FSDataSource, DataSourceType
+from data_pipeline.data_source import InfluxDBDataSource, FSDataSource, DataSourceType, MongoDBDataSource
 from data_pipeline.stage.stage_registry import stage_registry
 from data_tools.schema import File, Result, FileLoader, FileType, Event, UnwrappedError, CanonicalPath
 from data_tools.utils import parse_iso_datetime
@@ -35,16 +36,18 @@ class IngressStage(Stage):
     def dependencies():
         return []
 
-    def __init__(self, context: Context, config: dict):
+    def __init__(self, context: Context, config: DataSourceConfig):
         super().__init__(context)
 
-        match config["data_source"]:
+        match config.data_source_type:
             case DataSourceType.FS:
                 self._ingress_data_source = FSDataSource(config)
 
-                self._extract_method = self._extract_fs
-                self._transform_method = self._transform_fs
-                self._load_method = self._load_fs
+                self._ingress_origin = self.context.title
+
+                self._extract_method = self._extract_existing
+                self._transform_method = self._transform_existing
+                self._load_method = self._load_existing
 
             case DataSourceType.InfluxDB:
                 self._ingress_data_source = InfluxDBDataSource(
@@ -56,13 +59,22 @@ class IngressStage(Stage):
                 self._transform_method = self._transform_influxdb
                 self._load_method = self._load_influxdb
 
+            case DataSourceType.MongoDB:
+                self._ingress_data_source = MongoDBDataSource()
+
+                self._ingress_origin = config["ingress_origin"]
+
+                self._extract_method = self._extract_existing
+                self._transform_method = self._transform_existing
+                self._load_method = self._load_existing
+
             case _:
-                raise StageError(self.get_stage_name(), f"Did not recognize {config["fs"]} as a valid Ingest "
+                raise StageError(self.get_stage_name(), f"Did not recognize {config["fs"]} as a valid Ingress "
                                                         f"stage data source!")
 
         self.declare_output("marshaled_ingest_data")
 
-    def _extract_fs(self, targets: List[TimeSeriesTarget], events: List[Event]) -> tuple[Dict[str, Dict[str, Result]]]:
+    def _extract_existing(self, targets: List[TimeSeriesTarget], events: List[Event]) -> tuple[Dict[str, Dict[str, Result]]]:
         extracted_time_series_data = {}
 
         for event in events:
@@ -71,7 +83,7 @@ class IngressStage(Stage):
             for target in targets:
                 try:
                     queried_data: Result = self._ingress_data_source.get(CanonicalPath(
-                        origin=self.context.title,
+                        origin=self._ingress_origin,
                         source=self.get_stage_name(),
                         event=event.name,
                         name=target.field
@@ -86,10 +98,10 @@ class IngressStage(Stage):
 
         return (extracted_time_series_data,)
 
-    def _transform_fs(self, extracted_time_series_data: Dict[str, Dict[str, Result]]) -> tuple[Dict[str, Dict[str, Result]]]:
+    def _transform_existing(self, extracted_time_series_data: Dict[str, Dict[str, Result]]) -> tuple[Dict[str, Dict[str, Result]]]:
         return (extracted_time_series_data,)
 
-    def _load_fs(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> tuple[Dict[str, Dict[str, FileLoader]]]:
+    def _load_existing(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> tuple[Dict[str, Dict[str, FileLoader]]]:
         result_dict: Dict[str, Dict[str, FileLoader]] = {}
 
         for event_name, event_items in processed_time_series_data.items():
@@ -125,7 +137,8 @@ class IngressStage(Stage):
     def load(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> tuple[Dict[str, Dict[str, FileLoader]]]:
         return self._load_method(processed_time_series_data)
 
-    def _extract_influxdb(self, targets: List[TimeSeriesTarget], events: List[Event]) -> tuple[Dict[str, Dict[str, Result]]]:
+    def _extract_influxdb(self, targets: List[TimeSeriesTarget], events: List[Event]) -> tuple[
+        Dict[str, Dict[str, Result]]]:
         """
         Extract raw data and marshall it for use in the data pipeline.
 
@@ -145,7 +158,7 @@ class IngressStage(Stage):
                             source=target.car,
                             event=target.measurement,
                             name=target.field
-                            ),
+                        ),
                         start=event.start_as_iso_str,
                         stop=event.stop_as_iso_str
                     ).unwrap()
@@ -165,7 +178,8 @@ class IngressStage(Stage):
 
         return (extracted_time_series_data,)
 
-    def _transform_influxdb(self, extracted_time_series_data: Dict[str, Dict[str, Result]]) -> tuple[Dict[str, Dict[str, Result]]]:
+    def _transform_influxdb(self, extracted_time_series_data: Dict[str, Dict[str, Result]]) -> tuple[
+        Dict[str, Dict[str, Result]]]:
         """
         Process raw time series data into
         """
@@ -206,7 +220,8 @@ class IngressStage(Stage):
 
         return (processed_time_series_data,)
 
-    def _load_influxdb(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> tuple[Dict[str, Dict[str, FileLoader]]]:
+    def _load_influxdb(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> tuple[
+        Dict[str, Dict[str, FileLoader]]]:
         result_dict: Dict[str, Dict[str, FileLoader]] = {}
 
         for event_name, event_items in processed_time_series_data.items():
