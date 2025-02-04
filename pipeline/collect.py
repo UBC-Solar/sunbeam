@@ -57,16 +57,14 @@ def collect_events(events_description_filename: Union[str, pathlib.Path]) -> Lis
     events_filepath = config_directory / events_description_filename
 
     with open(events_filepath) as events_description_file:
-        print(events_filepath)
         file = tomllib.load(events_description_file)
-        print(file)
         events_descriptions = file["event"]
 
-    events = [Event.from_dict(event) for event in events_descriptions]
+    events = list([Event.from_dict(event) for event in events_descriptions])
 
     assert len(events) > 0, f"No events were collected in {events_filepath}! At least one event must be declared."
 
-    return list(events)
+    return events
 
 
 def collect_config_file(config_file: Union[str, pathlib.Path]) -> dict:

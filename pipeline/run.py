@@ -26,8 +26,8 @@ def run_sunbeam(git_target="pipeline"):
     context: Context = Context(git_target, data_source, required_stages)
 
     ingress_stage: IngressStage = IngressStage(context, ingress_config)
-    print(events)
-    ingress_outputs: StageResult = ingress_stage.run(targets, events)
+
+    ingress_outputs: StageResult = IngressStage.run(ingress_stage, targets, events)
 
     # We will process each event separately.
     for event in events:
@@ -35,7 +35,8 @@ def run_sunbeam(git_target="pipeline"):
         event_ingress_outputs = ingress_outputs[event_name]
 
         power_stage: PowerStage = PowerStage(context, event_name)
-        pack_power, motor_power = power_stage.run(
+        pack_power, motor_power = PowerStage.run(
+            power_stage,
             event_ingress_outputs["TotalPackVoltage"],
             event_ingress_outputs["PackCurrent"],
             event_ingress_outputs["BatteryCurrent"],
@@ -45,7 +46,6 @@ def run_sunbeam(git_target="pipeline"):
 
 if __name__ == "__main__":
     from dotenv import load_dotenv
-    import os
 
     load_dotenv()
 

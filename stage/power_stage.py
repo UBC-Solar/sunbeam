@@ -16,17 +16,20 @@ class PowerStage(Stage):
     def dependencies():
         return ["ingress"]
 
+    @staticmethod
     @task(name="Power")
     def run(self, total_pack_voltage_loader: FileLoader, pack_current_loader: FileLoader, motor_current_loader: FileLoader, motor_voltage_loader: FileLoader) -> StageResult:
         """
         Run the power stage, converting voltage and current data into power.
+
+        :param self: an instance of PowerStage to be run
         :param FileLoader total_pack_voltage_loader: loader to TotalPackVoltage from Ingest
         :param FileLoader pack_current_loader: loader to PackCurrent from Ingest
         :param FileLoader motor_current_loader: loader to MotorCurrent from Ingest
         :param FileLoader motor_voltage_loader: loader to MotorVoltage from Ingest
         :returns: PackPower (TimeSeries), MotorPower (TimeSeries)
         """
-        return super().run(total_pack_voltage_loader, pack_current_loader, motor_current_loader, motor_voltage_loader)
+        return super().run(self, total_pack_voltage_loader, pack_current_loader, motor_current_loader, motor_voltage_loader)
 
     @property
     def event_name(self):

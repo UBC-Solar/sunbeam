@@ -25,17 +25,19 @@ class IngressStage(Stage):
     def dependencies():
         return []
 
+    @staticmethod
     @task(name="Ingress")
     def run(self, targets: List[TimeSeriesTarget], events: List[Event]) -> StageResult:
         """
         Ingest raw time series data from InfluxDB and marshal it for use in the data pipeline, or load pre-existing data
         from a local filesystem.
 
+        :param self: an instance of IngressStage to be run
         :param targets: a list of m TimeSeriesTarget models which will be queried
         :param events: a list of n Event models specifying how the raw data should be temporally partitioned
         :return: a StageResult [n][m] which can be indexed first by event, then by target name.
         """
-        return super().run(targets, events)
+        return super().run(self, targets, events)
 
     def __init__(self, context: Context, config: DataSourceConfig):
         super().__init__(context)

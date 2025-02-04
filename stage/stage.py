@@ -227,7 +227,8 @@ class Stage(ABC, metaclass=StageMeta):
         """
         pass
 
-    @check_if_skip_stage
+    @staticmethod
+    # @check_if_skip_stage  # Make this just a part of run
     @abstractmethod
     def run(self, *args) -> StageResult:
         # Here, we are annotating the stage functions at runtime as a Prefect task, then calling them
