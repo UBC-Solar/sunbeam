@@ -231,9 +231,9 @@ class Stage(ABC, metaclass=StageMeta):
     @abstractmethod
     def run(self, *args) -> StageResult:
         # Here, we are annotating the stage functions at runtime as a Prefect task, then calling them
-        extract = task(self.extract, f"{self.get_stage_name()} Extract")(*args)
-        transform = task(self.transform, f"{self.get_stage_name()} Transform")(*extract)
-        load = task(self.load, f"{self.get_stage_name()} Load")(*transform)
+        extract = task(self.extract, name=f"{self.get_stage_name()} Extract")(*args)
+        transform = task(self.transform, name=f"{self.get_stage_name()} Transform")(*extract)
+        load = task(self.load, name=f"{self.get_stage_name()} Load")(*transform)
 
         return StageResult(self, *load)
 

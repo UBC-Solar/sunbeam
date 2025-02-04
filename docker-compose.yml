@@ -34,7 +34,7 @@ services:
     volumes:
       - ./fs_data:/app/fs_data
     build:
-      context: ./data_pipeline
+      context: ./pipeline
       dockerfile: ./Dockerfile
       additional_contexts:
         - root=.
@@ -47,7 +47,7 @@ services:
     environment:
       - PREFECT_API_URL=http://172.17.0.1:4200/api
       - PREFECT_API_DATABASE_CONNECTION_URL="postgresql+asyncpg://prefect:yourpassword@postgres:5432/prefect"
-    env_file: "./data_pipeline/.env"
+    env_file: "./pipeline/.env"
     # Note: the last command blocks (so insert any additonal commands before the last one!)
     command: > 
       sh -c "export $(cat .env | xargs) && 
