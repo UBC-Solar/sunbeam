@@ -50,7 +50,7 @@ class IngressStage(Stage):
 
                 self._extract_method = self._extract_existing
                 self._transform_method = self._transform_existing
-                self._load_method = self._load_existing
+                self._load_method = self._load_and_store
 
             case DataSourceType.InfluxDB:
                 self._ingress_data_source = InfluxDBDataSource(
