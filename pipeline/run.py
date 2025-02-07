@@ -44,7 +44,7 @@ def run_sunbeam(git_target="pipeline"):
         )
 
         energy_stage: EnergyStage = EnergyStage(context, event_name)
-        pack_energy, = EnergyStage.run(pack_power)
+        pack_energy, = EnergyStage.run(energy_stage, pack_power)
 
 
 if __name__ == "__main__":
