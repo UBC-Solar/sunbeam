@@ -4,7 +4,6 @@ from data_source import InfluxDBDataSource, FSDataSource, DataSourceType, MongoD
 from stage.stage_registry import stage_registry
 from data_tools.schema import File, Result, FileLoader, FileType, Event, UnwrappedError, CanonicalPath
 from data_tools.utils import parse_iso_datetime
-from stage.context import Context
 from data_tools.query.influxdb_query import TimeSeriesTarget
 from data_tools.collections.time_series import TimeSeries
 from typing import List, Dict
@@ -247,11 +246,13 @@ class IngressStage(Stage):
                     self.logger.info(f"Successfully loaded {name} for {event_name}!")
 
                 else:
-                    result_dict[event_name][name] = self.context.data_source.store(File(
-                        data=None,
-                        canonical_path=canonical_path,
-                        file_type=FileType.TimeSeries
-                    ))
+                    result_dict[event_name][name] = self.context.data_source.store(
+                        File(
+                            data=None,
+                            canonical_path=canonical_path,
+                            file_type=FileType.TimeSeries
+                        )
+                    )
 
                     self.logger.info(f"Failed to load {name} for {event_name}!")
 

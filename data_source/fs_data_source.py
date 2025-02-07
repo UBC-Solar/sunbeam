@@ -16,19 +16,14 @@ class FSDataSource(DataSource):
         return str(self._root / canonical_path.to_path()) + ".bin"
 
     def store(self, file: File) -> FileLoader:
-        match file.file_type:
-            case FileType.TimeSeries:
-                if file.data is not None:
-                    path = self.canonical_path_to_real_path(file.canonical_path)
-                    os.makedirs(Path(path).parent, exist_ok=True)
+        if file.data is not None:
+            path = self.canonical_path_to_real_path(file.canonical_path)
+            os.makedirs(Path(path).parent, exist_ok=True)
 
-                    with open(self.canonical_path_to_real_path(file.canonical_path), "wb") as f:
-                        dill.dump(file.data, f)
+            with open(self.canonical_path_to_real_path(file.canonical_path), "wb") as f:
+                dill.dump(file, f)
 
-                return FileLoader(lambda x: self.get(x), file.canonical_path)
-
-            case _:
-                raise RuntimeError(f"FSDataSource does not support the storing of {file.file_type}!")
+        return FileLoader(lambda x: self.get(x), file.canonical_path)
 
     def get(self, canonical_path: CanonicalPath, **kwargs) -> Result:
         try:

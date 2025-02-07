@@ -46,7 +46,7 @@ class EnergyStage(Stage):
     def extract(self, pack_power: FileLoader) -> tuple[Result]:
         pack_power: Result = pack_power()
 
-        return pack_power,
+        return (pack_power, )
 
     def transform(self, pack_power_result) -> tuple[Result]:
         try:
@@ -63,7 +63,7 @@ class EnergyStage(Stage):
             self.logger.error(f"Failed to unwrap result! \n {e}")
             pack_energy_result = Result.Err(RuntimeError("Failed to process motor power!"))
 
-        return pack_energy_result,
+        return (pack_energy_result, )
 
     def load(self, pack_energy) -> tuple[FileLoader]:
         pack_energy_file = File(
@@ -80,7 +80,7 @@ class EnergyStage(Stage):
         pack_energy_loader = self.context.data_source.store(pack_energy_file)
         self.logger.info(f"Successfully loaded PackEnergy!")
 
-        return pack_energy_loader,
+        return (pack_energy_loader, )
 
 
 stage_registry.register_stage(EnergyStage.get_stage_name(), EnergyStage)
