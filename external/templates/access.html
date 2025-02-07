@@ -10,7 +10,7 @@
     <ul>
         {% for file_type in file_types %}
             <li>
-                <a href="{{ url_for('serve_file', path=path, file_type=file_type) }}">
+                <a href="{{ url_for('show_hierarchy', path=path, file_type=file_type) }}">
                     Download as {{ file_type }}
                 </a>
             </li>
