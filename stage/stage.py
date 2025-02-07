@@ -165,7 +165,7 @@ class StageResult:
 
     def __iter__(self) -> FileLoader | Generator[FileLoader, Any, Any]:
         # If our output contains just one value, return just that value (not a one-tuple)
-        if len(self._expected_results) == 1:
+        if len(self._expected_results) == 1 and isinstance(self._expected_results[0], Dict):
             values: FileLoader = list(self._outputs.values())[0]
             return values
 
