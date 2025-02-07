@@ -1,7 +1,7 @@
 import pickle
 
 import prefect.client.schemas.responses
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 import pymongo
 from typing import List
 import logging
@@ -14,6 +14,7 @@ import tempfile
 from bokeh.plotting import figure, output_file, save
 from bokeh.models import ColumnDataSource
 from data_tools.collections import TimeSeries
+from data_tools.schema import FileType
 
 
 SOURCE_REPO = "https://github.com/UBC-Solar/sunbeam.git"
@@ -197,37 +198,57 @@ def show_hierarchy(path):
             "name": path_parts[3],
         }, {"_id": 1, "filetype": 1, "data": 1})
 
-        if results["filetype"] == "TimeSeries":
-            data: TimeSeries = pickle.loads(results["data"])
-
-            # Create a ColumnDataSource
-            source = ColumnDataSource(data=dict(dates=data.datetime_x_axis, values=data))
-
-            # Create a temporary file
-            with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-                # Specify the temporary file as the output for Bokeh
-                output_file(temp_file.name)
-
-                # Create a figure with a datetime x-axis
-                p = figure(title=path_parts[3], x_axis_type='datetime', x_axis_label='Date',
-                           y_axis_label=data.units)
-
-                # Add a line renderer
-                p.line('dates', 'values', source=source, legend_label="Values", line_width=2)
-
-                # Save the plot to the temporary file
-                save(p)
-
-                # Read the HTML content from the temporary file
-                with open(temp_file.name, 'r') as f:
-                    html_content = f.read()
-
-                    return html_content
+        if "file_type" not in request.args.keys():
+            return render_template('access.html', file_types=["bin", "plot"])
 
         else:
-            return "Cannot display non-TimeSeries content!", 404
+            data: TimeSeries = pickle.loads(results["data"])
 
-    return "Invalid path", 404
+            match request.args.get("file_type"):
+                case "bin":
+                    return str(data[:10])
+
+                case "plot":
+                    return _create_bokeh_plot(data, path_parts[3])
+
+                case _:
+                    return "Invalid File Type!", 404
+
+    return "Invalid Path!", 404
+
+
+def _create_bokeh_plot(data: TimeSeries, title: str) -> str:
+    """
+    Create an interactive Bokeh plot as raw HTML from ``data``.
+
+    :param TimeSeries data: the time-series data to be plotted
+    :param str title: the title of the plot
+    :return: HTML as a string of the interactive Bokeh plot
+    """
+
+    # Bokeh does not support just dumping the HTML as a string. So, we will force
+    # it to by telling it to write to a fake (temporary) file, which we can read
+    # to extract the HTML of the plot as a string.
+    with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+        # Specify the temporary file as the output for Bokeh
+        output_file(temp_file.name)
+
+        source = ColumnDataSource(data=dict(dates=data.datetime_x_axis, values=data))
+
+        # Create a figure with a datetime x-axis
+        p = figure(title=title, x_axis_type='datetime', x_axis_label='Date',
+                   y_axis_label=data.units)
+
+        # Add a line renderer
+        p.line('dates', 'values', source=source, legend_label="Values", line_width=2)
+
+        save(p)
+
+        # Read the HTML content from the temporary file
+        with open(temp_file.name, 'r') as f:
+            html_content = f.read()
+
+            return html_content
 
 
 @app.route("/list_commissioned_pipelines")
