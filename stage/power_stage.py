@@ -72,8 +72,8 @@ class PowerStage(Stage):
             motor_power = Result.Err(RuntimeError("Failed to process motor power!"))
 
         try:
-            total_pack_voltage: TimeSeries = total_pack_voltage_result.unwrap()
-            pack_current: TimeSeries = pack_current_result.unwrap()
+            total_pack_voltage: TimeSeries = total_pack_voltage_result.unwrap().data
+            pack_current: TimeSeries = pack_current_result.unwrap().data
 
             total_pack_voltage, pack_current = TimeSeries.align(total_pack_voltage, pack_current)
             pack_power = total_pack_voltage.promote(total_pack_voltage * pack_current)
