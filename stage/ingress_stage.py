@@ -232,20 +232,24 @@ class IngressStage(Stage):
             result_dict[event_name] = {}
 
             for name, result in event_items.items():
+                canonical_path = CanonicalPath(
+                    origin=self.context.title,
+                    source=self.get_stage_name(),
+                    event=event_name,
+                    name=name
+                )
+
                 if result:
-                    result_dict[event_name][name] = self.context.data_source.store(result.unwrap())
+                    existing_file = result.unwrap()
+                    existing_file.canonical_path = canonical_path
+                    result_dict[event_name][name] = self.context.data_source.store(existing_file)
 
                     self.logger.info(f"Successfully loaded {name} for {event_name}!")
 
                 else:
                     result_dict[event_name][name] = self.context.data_source.store(File(
                         data=None,
-                        canonical_path=CanonicalPath(
-                            origin=self.context.title,
-                            source=self.get_stage_name(),
-                            event=event_name,
-                            name=name
-                        ),
+                        canonical_path=canonical_path,
                         file_type=FileType.TimeSeries
                     ))
 
