@@ -191,10 +191,10 @@ class Stage(ABC, metaclass=StageMeta):
 
         return super().__new__(cls)
 
-    def __init__(self, context: Context, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         self._finalized = False
 
-        self._context = context
+        self._context = Context.get_instance()
         self._logger = logging.getLogger(self.__class__.get_stage_name())
         self._expected_outputs = []
 

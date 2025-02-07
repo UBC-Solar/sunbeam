@@ -23,9 +23,9 @@ def run_sunbeam(git_target="pipeline"):
     logger.info(f"Executing stages in order: {" -> ".join(required_stages)}")
 
     data_source: DataSource = DataSourceFactory.build(data_source_config.data_source_type, data_source_config)
-    context: Context = Context(git_target, data_source, required_stages)
+    context: Context = Context(git_target, data_source, required_stages)  # Set the global context
 
-    ingress_stage: IngressStage = IngressStage(context, ingress_config)
+    ingress_stage: IngressStage = IngressStage(ingress_config)
 
     ingress_outputs: StageResult = IngressStage.run(ingress_stage, targets, events)
 
@@ -34,7 +34,7 @@ def run_sunbeam(git_target="pipeline"):
         event_name = event.name
         event_ingress_outputs = ingress_outputs[event_name]
 
-        power_stage: PowerStage = PowerStage(context, event_name)
+        power_stage: PowerStage = PowerStage(event_name)
         pack_power, motor_power = PowerStage.run(
             power_stage,
             ingress_outputs[event_name]["TotalPackVoltage"],
@@ -43,7 +43,7 @@ def run_sunbeam(git_target="pipeline"):
             ingress_outputs[event_name]["BatteryVoltage"],
         )
 
-        energy_stage: EnergyStage = EnergyStage(context, event_name)
+        energy_stage: EnergyStage = EnergyStage(event_name)
         pack_energy, = EnergyStage.run(energy_stage, pack_power)
 
 

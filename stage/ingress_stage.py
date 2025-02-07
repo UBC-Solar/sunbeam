@@ -39,8 +39,8 @@ class IngressStage(Stage):
         """
         return super().run(self, targets, events)
 
-    def __init__(self, context: Context, config: DataSourceConfig):
-        super().__init__(context)
+    def __init__(self, config: DataSourceConfig):
+        super().__init__()
 
         match config.data_source_type:
             case DataSourceType.FS:

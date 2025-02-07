@@ -35,12 +35,11 @@ class PowerStage(Stage):
     def event_name(self):
         return self._event_name
 
-    def __init__(self, context: Context, event_name: str):
+    def __init__(self, event_name: str):
         """
-        :param Context context:
         :param str event_name: which event is currently being processed
         """
-        super().__init__(context)
+        super().__init__()
 
         self._event_name = event_name
 

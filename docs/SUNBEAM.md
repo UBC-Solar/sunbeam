@@ -66,18 +66,17 @@ Here, we declare that we need the `ingress` stage before running `power` , notic
 
 Now, we can define how to create an instance of our `PowerStage` (remember, all things are objects in Sunbeam!)
 ```python
-    def __init__(self, context: Context, event_name: str):  
+    def __init__(self, event_name: str):  
         """  
-        :param Context context: the current pipeline context    
         :param str event_name: which event is currently being processed    
         """    
-        super().__init__(context)  
+        super().__init__()  
       
         self._event_name = event_name  
       
         self.declare_output("pack_power")  
 ```
-We do a few things here. Firstly, we need the `Context` which is then called into our `super().__init__` call which is needed to initialize the `Stage` base class. Next, we save the name of the event that we are currently processing, such as "FSGP Day 1", so that we know how to properly save our outputs to the right spot. Lastly, we declare what outputs we are intending to produce. 
+We do a few things here. Firstly, we initialize the ``Stage`` base class. Next, we save the name of the event that we are currently processing, such as "FSGP Day 1", so that we know how to properly save our outputs to the right spot. Lastly, we declare what outputs we are intending to produce. 
 
 > When I said that stages are stateless, I meant it! To force this statelessness, trying to set an attribute after `__init__` will raise an error.
 
@@ -181,7 +180,7 @@ How do stages get called in Sunbeam? Let's see how we'd run our stage.
 ```python
 ... # other stuff
 
-power_stage: PowerStage = PowerStage(context, event_name)  
+power_stage: PowerStage = PowerStage(event_name)  
 pack_power, = PowerStage.run(  
     power_stage,  
     total_pack_voltage,  
