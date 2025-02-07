@@ -75,10 +75,17 @@ class MongoDBDataSource(DataSource):
             if not result:
                 raise RuntimeError(f"Could not find file at {canonical_path.to_string()}!")
 
-            serialized_data = result.get("data")
-            data = dill.loads(serialized_data)
+            serialized_data = result.get("data")  # The data is stored as serialized bytes!
 
-            return Result.Ok(data)
+            return Result.Ok(
+                File(
+                    canonical_path=canonical_path,
+                    file_type=result.get("filetype"),
+                    metadata=result.get("metadata"),
+                    description=result.get("description"),
+                    data=dill.loads(serialized_data),
+                )
+            )
 
         except Exception as e:
             return Result.Err(e)

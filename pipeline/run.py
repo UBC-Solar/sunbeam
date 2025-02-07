@@ -4,7 +4,7 @@ from prefect import flow
 from logs import log_directory
 from data_tools.utils import configure_logger
 from data_source import DataSourceFactory
-from stage import Context, PowerStage, StageResult, IngressStage
+from stage import Context, PowerStage, StageResult, IngressStage, EnergyStage
 from pipeline.configure import build_config, build_stage_graph
 
 
@@ -42,6 +42,9 @@ def run_sunbeam(git_target="pipeline"):
             ingress_outputs[event_name]["BatteryCurrent"],
             ingress_outputs[event_name]["BatteryVoltage"],
         )
+
+        energy_stage: EnergyStage = EnergyStage(context, event_name)
+        pack_energy, = EnergyStage.run(pack_power)
 
 
 if __name__ == "__main__":

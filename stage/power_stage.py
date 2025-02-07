@@ -57,8 +57,8 @@ class PowerStage(Stage):
 
     def transform(self, total_pack_voltage_result, pack_current_result, motor_current_result, motor_voltage_result) -> tuple[Result, Result]:
         try:
-            motor_current: TimeSeries = motor_current_result.unwrap()
-            motor_voltage: TimeSeries = motor_voltage_result.unwrap()
+            motor_current: TimeSeries = motor_current_result.unwrap().data
+            motor_voltage: TimeSeries = motor_voltage_result.unwrap().data
 
             motor_current, motor_voltage = TimeSeries.align(motor_current, motor_voltage)
             motor_power = motor_current.promote(motor_current * motor_voltage)
