@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Download {{ file_name }}</title>
+    <title>Access {{ file_name }}</title>
 </head>
 <body>
     <h1>Download {{ file_name }}</h1>
     <ul>
         {% for file_type in file_types %}
             <li>
-                <a href="{{ url_for('show_hierarchy', path=path, file_type=file_type) }}">
-                    Download as {{ file_type }}
+                <a href="{{ request.path }}?file_type={{ file_type }}">
+                    Access as {{ file_type }}
                 </a>
             </li>
         {% endfor %}

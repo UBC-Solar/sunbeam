@@ -199,7 +199,7 @@ def show_hierarchy(path):
         }, {"_id": 1, "filetype": 1, "data": 1})
 
         if "file_type" not in request.args.keys():
-            return render_template('access.html', file_types=["bin", "plot"], path=path)
+            return render_template('access.html', file_types=["bin", "plot"])
 
         else:
             data: TimeSeries = pickle.loads(results["data"])
