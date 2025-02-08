@@ -15,7 +15,7 @@ import tempfile
 from bokeh.plotting import figure, output_file, save
 from bokeh.models import ColumnDataSource
 from data_tools.collections import TimeSeries
-from data_tools.schema import FileType
+from data_tools.schema import File
 
 
 SOURCE_REPO = "https://github.com/UBC-Solar/sunbeam.git"
@@ -203,18 +203,18 @@ def show_hierarchy(path):
             return render_template('access.html', file_types=["bin", "plot"], file_name=path_parts[3])
 
         else:
-            serialized_data = results["data"]
             file_name = path_parts[3]
 
             match file_type := request.args.get("file_type"):
                 case "bin":
-                    file_stream = io.BytesIO(serialized_data)
+                    file = File(**results)
+                    file_stream = io.BytesIO(pickle.dumps(file))
                     file_stream.seek(0)
 
                     return send_file(file_stream, as_attachment=True, download_name=f"{file_name}.{file_type}")
 
                 case "plot":
-                    data: TimeSeries = pickle.loads(serialized_data)
+                    data: TimeSeries = pickle.loads(results["data"])
 
                     return _create_bokeh_plot(data, path_parts[3])
 
