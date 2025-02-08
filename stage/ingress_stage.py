@@ -216,7 +216,19 @@ class IngressStage(Stage):
                             "description": target["description"]
                         }
 
-                        processed_time_series_data[event_name][name] = Result.Ok(time_series)
+                        file = File(
+                            canonical_path=CanonicalPath(
+                                origin=self.context.title,
+                                source=self.get_stage_name(),
+                                event=event_name,
+                                name=name
+                            ),
+                            description=target["description"],
+                            filetype=FileType.TimeSeries,
+                            data=time_series
+                        )
+
+                        processed_time_series_data[event_name][name] = Result.Ok(file)
 
                         self.logger.info(f"Successfully processed time series data {name}.")
 
