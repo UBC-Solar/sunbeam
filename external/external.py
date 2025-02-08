@@ -1,5 +1,6 @@
 import io
 import pickle
+from argparse import FileType
 
 import prefect.client.schemas.responses
 from flask import Flask, render_template, request, send_file
@@ -15,7 +16,7 @@ import tempfile
 from bokeh.plotting import figure, output_file, save
 from bokeh.models import ColumnDataSource
 from data_tools.collections import TimeSeries
-from data_tools.schema import File
+from data_tools.schema import File, CanonicalPath
 
 
 SOURCE_REPO = "https://github.com/UBC-Solar/sunbeam.git"
@@ -207,7 +208,19 @@ def show_hierarchy(path):
 
             match file_type := request.args.get("file_type"):
                 case "bin":
-                    file = File(**results)
+                    file = File(
+                        canonical_path=CanonicalPath(
+                            origin=path_parts[0],
+                            event=path_parts[1],
+                            source=path_parts[2],
+                            name=path_parts[3],
+                        ),
+                        data=pickle.loads(results["data"]),
+                        metadata=results["metadata"],
+                        filetype=FileType(results["filetype"]),
+                        description=results["description"]
+                    )
+
                     file_stream = io.BytesIO(pickle.dumps(file))
                     file_stream.seek(0)
 
