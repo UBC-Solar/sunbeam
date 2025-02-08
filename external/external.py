@@ -198,7 +198,7 @@ def show_hierarchy(path):
             "event": path_parts[1],
             "source": path_parts[2],
             "name": path_parts[3],
-        }, {"_id": 1, "filetype": 1, "data": 1})
+        })
 
         if "file_type" not in request.args.keys():
             return render_template('access.html', file_types=["bin", "plot"], file_name=path_parts[3])
