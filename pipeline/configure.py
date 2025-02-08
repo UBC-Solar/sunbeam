@@ -21,7 +21,7 @@ def build_config() -> tuple[SunbeamConfig, DataSourceConfig, DataSourceConfig, L
     targets: List[TimeSeriesTarget] = collect_targets(targets_file)
 
     events: List[Event] = collect_events(sunbeam_config.events_description_file)
-    print(events)
+
     return sunbeam_config, data_source_config, ingress_config, targets, events
 
 

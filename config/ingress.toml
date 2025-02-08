@@ -39,6 +39,16 @@ frequency = 5.0
 units = "m/s"
 
 [[target]]
+name = "BatteryCurrentDirection"
+field = "BatteryCurrentDirection"
+type = "TimeSeries"
+measurement = "MC"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 5.0
+units = "A.U."
+
+[[target]]
 name = "AcceleratorPosition"
 field = "AcceleratorPosition"
 type = "TimeSeries"
@@ -67,3 +77,63 @@ car = "Brightside"
 bucket = "CAN_log"
 frequency = 5.0
 units = "A"
+
+[[target]]
+name = "CurrentSensor1"
+field = "CurrentSensor1"
+type = "TimeSeries"
+measurement = "AMB"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 4.0
+units = "A"
+
+[[target]]
+name = "CurrentSensor2"
+field = "CurrentSensor2"
+type = "TimeSeries"
+measurement = "AMB"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 4.0
+units = "A"
+
+[[target]]
+name = "VoltSensor1"
+field = "VoltSensor1"
+type = "TimeSeries"
+measurement = "AMB"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 4.0
+units = "V"
+
+[[target]]
+name = "VoltSensor2"
+field = "VoltSensor2"
+type = "TimeSeries"
+measurement = "AMB"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 4.0
+units = "V"
+
+[[target]]
+name = "RegenEnabled"
+field = "RegenEnabled"
+type = "TimeSeries"
+measurement = "AMB"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 4.0
+units = "V"
+
+[[target]]
+name = "VoltageofLeast"
+field = "VoltageofLeast"
+type = "TimeSeries"
+measurement = "BMS"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 10.0
+units = "V"
