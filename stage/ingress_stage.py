@@ -224,7 +224,7 @@ class IngressStage(Stage):
                                 name=name
                             ),
                             description=target["description"],
-                            filetype=FileType.TimeSeries,
+                            file_type=FileType.TimeSeries,
                             data=time_series
                         )
 
