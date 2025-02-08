@@ -128,7 +128,7 @@ car = "Brightside"
 bucket = "CAN_log"
 frequency = 4.0
 units = "V"
-description = "Voltage of array string 12
+description = "Voltage of array string 12"
 
 [[target]]
 name = "RegenEnabled"
