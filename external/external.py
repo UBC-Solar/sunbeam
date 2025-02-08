@@ -1,7 +1,8 @@
+import io
 import pickle
 
 import prefect.client.schemas.responses
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, send_file
 import pymongo
 from typing import List
 import logging
@@ -202,13 +203,19 @@ def show_hierarchy(path):
             return render_template('access.html', file_types=["bin", "plot"], file_name=path_parts[3])
 
         else:
-            data: TimeSeries = pickle.loads(results["data"])
+            serialized_data = results["data"]
+            file_name = path_parts[3]
 
-            match request.args.get("file_type"):
+            match file_type := request.args.get("file_type"):
                 case "bin":
-                    return str(data[:10])
+                    file_stream = io.BytesIO(serialized_data)
+                    file_stream.seek(0)
+
+                    return send_file(file_stream, as_attachment=True, download_name=f"{file_name}.{file_type}")
 
                 case "plot":
+                    data: TimeSeries = pickle.loads(serialized_data)
+
                     return _create_bokeh_plot(data, path_parts[3])
 
                 case _:
