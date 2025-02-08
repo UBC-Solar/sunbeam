@@ -1,6 +1,4 @@
 import io
-import pickle
-from argparse import FileType
 
 import prefect.client.schemas.responses
 from flask import Flask, render_template, request, send_file
@@ -17,6 +15,7 @@ from bokeh.plotting import figure, output_file, save
 from bokeh.models import ColumnDataSource
 from data_tools.collections import TimeSeries
 from data_tools.schema import File, CanonicalPath
+import dill
 
 
 SOURCE_REPO = "https://github.com/UBC-Solar/sunbeam.git"
@@ -215,19 +214,19 @@ def show_hierarchy(path):
                             source=path_parts[2],
                             name=path_parts[3],
                         ),
-                        data=pickle.loads(results["data"]),
+                        data=dill.loads(results["data"]),
                         metadata=results["metadata"],
                         file_type=results["filetype"],
                         description=results["description"]
                     )
 
-                    file_stream = io.BytesIO(results["data"])
+                    file_stream = io.BytesIO(dill.dumps(file, protocol=dill.HIGHEST_PROTOCOL))
                     file_stream.seek(0)
 
                     return send_file(file_stream, as_attachment=True, download_name=f"{file_name}.{file_type}")
 
                 case "plot":
-                    data: TimeSeries = pickle.loads(results["data"])
+                    data: TimeSeries = dill.loads(results["data"])
 
                     return _create_bokeh_plot(data, path_parts[3])
 
