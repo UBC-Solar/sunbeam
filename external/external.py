@@ -221,7 +221,7 @@ def show_hierarchy(path):
                         description=results["description"]
                     )
 
-                    file_stream = io.BytesIO(pickle.dumps(file))
+                    file_stream = io.BytesIO(pickle.dumps(file, protocol=pickle.HIGHEST_PROTOCOL))
                     file_stream.seek(0)
 
                     return send_file(file_stream, as_attachment=True, download_name=f"{file_name}.{file_type}")
