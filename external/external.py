@@ -259,10 +259,10 @@ def _create_bokeh_plot(data: TimeSeries, title: str) -> str:
                    y_axis_label=data.units)
 
         p.xaxis.formatter = DatetimeTickFormatter(
-            hours="%Y-%m-%d %Hh",
-            days="%Y-%m-%d %Hh",
-            months="%Y-%m-%d %Hh",
-            years="%Y-%m-%d %Hh"
+            hours="%d %Hh",
+            days="%d %Hh",
+            months="%d %Hh",
+            years="%d %Hh"
         )
 
         # Add a line renderer
