@@ -12,7 +12,7 @@ from prefect.client.orchestration import get_client
 import asyncio
 import tempfile
 from bokeh.plotting import figure, output_file, save
-from bokeh.models import ColumnDataSource
+from bokeh.models import ColumnDataSource, DatetimeTickFormatter
 from data_tools.collections import TimeSeries
 from data_tools.schema import File, CanonicalPath
 import dill
@@ -257,6 +257,13 @@ def _create_bokeh_plot(data: TimeSeries, title: str) -> str:
         # Create a figure with a datetime x-axis
         p = figure(title=title, x_axis_type='datetime', x_axis_label='Date',
                    y_axis_label=data.units)
+
+        p.xaxis.formatter = DatetimeTickFormatter(
+            hours="%Y-%m-%d %Hh",
+            days="%Y-%m-%d %Hh",
+            months="%Y-%m-%d %Hh",
+            years="%Y-%m-%d %Hh"
+        )
 
         # Add a line renderer
         p.line('dates', 'values', source=source, legend_label="Values", line_width=2)
