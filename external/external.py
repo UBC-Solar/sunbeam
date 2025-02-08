@@ -217,7 +217,7 @@ def show_hierarchy(path):
                         ),
                         data=pickle.loads(results["data"]),
                         metadata=results["metadata"],
-                        filetype=FileType(results["filetype"]),
+                        file_type=FileType(results["filetype"]),
                         description=results["description"]
                     )
 
