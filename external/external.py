@@ -165,12 +165,12 @@ def show_hierarchy(path):
     if len(path_parts) == 0:
         # Top-level directories
         results = time_series_collection.distinct("origin")
-        return render_template("list.html", items=results, path=path)
+        return render_template("list.html", items=results, path=path, title="Pipelines")
 
     # User is querying the events that a pipeline processed
     elif len(path_parts) == 1:
         results = time_series_collection.distinct("event", {"origin": path_parts[0]})
-        return render_template("list.html", items=results, path=path)
+        return render_template("list.html", items=results, path=path, title=f"Events of {path_parts[0]}")
 
     # User is querying the stages that were processed for an event and pipeline
     elif len(path_parts) == 2:
@@ -178,7 +178,7 @@ def show_hierarchy(path):
             "origin": path_parts[0],
             "event": path_parts[1]
         })
-        return render_template("list.html", items=results, path=path)
+        return render_template("list.html", items=results, path=path, title=f"Stages of {path_parts[0]}/{path_parts[1]}")
 
     # User is querying the files produced by a stage for an event and pipeline
     elif len(path_parts) == 3:
@@ -188,7 +188,7 @@ def show_hierarchy(path):
             "source": path_parts[2],
         })
         print(results)
-        return render_template("list.html", items=results, path=path)
+        return render_template("list.html", items=results, path=path, title=f"Files of {path_parts[0]}/{path_parts[1]}/{path_parts[2]}")
 
     # User is querying a specific file
     elif len(path_parts) == 4:
