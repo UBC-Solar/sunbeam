@@ -170,7 +170,8 @@ class IngressStage(Stage):
                     extracted_time_series_data[event.name][target.name] = Result.Ok({
                         "data": queried_data,
                         "units": target.units,
-                        "period": 1 / target.frequency
+                        "period": 1 / target.frequency,
+                        "description": target.description
                     })
 
                     self.logger.info(f"Successfully extracted time series data for {target.name} for {event.name}!")
@@ -204,12 +205,18 @@ class IngressStage(Stage):
                         units = target["units"]
                         period = target["period"]
 
-                        processed_time_series_data[event_name][name] = Result.Ok(TimeSeries.from_query_dataframe(
+                        time_series = TimeSeries.from_query_dataframe(
                             query_df=data,
                             granularity=period,
                             field=name,
                             units=units
-                        ))
+                        )
+
+                        time_series.meta = {
+                            "description": target["description"]
+                        }
+
+                        processed_time_series_data[event_name][name] = Result.Ok(time_series)
 
                         self.logger.info(f"Successfully processed time series data {name}.")
 

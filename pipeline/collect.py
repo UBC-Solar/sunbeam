@@ -26,17 +26,7 @@ def collect_targets(ingress_config: dict) -> List[TimeSeriesTarget]:
             case FileType.TimeSeries:
                 if not target["name"] in seen_names:
                     try:
-                        targets.append(
-                            TimeSeriesTarget(
-                                name=target["name"],
-                                field=target["field"],
-                                measurement=target["measurement"],
-                                frequency=target["frequency"],
-                                units=target["units"],
-                                car=target["car"],
-                                bucket=target["bucket"],
-                            )
-                        )
+                        targets.append(TimeSeriesTarget(**target))
 
                     except KeyError:
                         logger.error(f"Missing key in target! \n {traceback.format_exc()}")
