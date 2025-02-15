@@ -1,6 +1,6 @@
 from config import DataSourceConfig
 from stage.stage import Stage, StageResult, StageError
-from data_source import InfluxDBDataSource, FSDataSource, DataSourceType, MongoDBDataSource
+from data_source import InfluxDBDataSource, FSDataSource, DataSourceType, MongoDBDataSource, SunbeamDataSource
 from stage.stage_registry import stage_registry
 from data_tools.schema import File, Result, FileLoader, FileType, Event, UnwrappedError, CanonicalPath
 from data_tools.utils import parse_iso_datetime
@@ -46,6 +46,14 @@ class IngressStage(Stage):
                 self._ingress_data_source = FSDataSource(config)
 
                 self._ingress_origin = self.context.title
+
+                self._extract_method = self._extract_existing
+                self._transform_method = self._transform_existing
+                self._load_method = self._load_and_store
+
+            case DataSourceType.Sunbeam:
+                self._ingress_data_source = SunbeamDataSource(config)
+                self._ingress_origin = config.ingress_origin
 
                 self._extract_method = self._extract_existing
                 self._transform_method = self._transform_existing
