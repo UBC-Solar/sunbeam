@@ -35,7 +35,14 @@ class PowerStage(Stage):
         :param FileLoader motor_current_direction_loader: loader to MotorCurrentDirection from Ingest
         :returns: PackPower (TimeSeries), MotorPower (TimeSeries)
         """
-        return super().run(self, total_pack_voltage_loader, pack_current_loader, motor_current_loader, motor_voltage_loader)
+        return super().run(
+            self,
+            total_pack_voltage_loader,
+            pack_current_loader,
+            motor_voltage_loader,
+            motor_current_loader,
+            motor_current_direction_loader
+        )
 
     @property
     def event_name(self):
