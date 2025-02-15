@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Decommission Pipeline</title>
+</head>
+<body>
+    <h1>Decommission Pipeline</h1>
+    <form action="{{ request.path }}" method="post">
+        <label for="git_target">Pipeline Git Target:</label>
+        <input type="text" id="git_target" name="git_target" required>
+        <button type="submit">Decommission</button>
+    </form>
+</body>
+</html>

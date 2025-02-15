@@ -56,69 +56,87 @@ def list_files():
     return res
 
 
-@app.route("/decommission_pipeline/<git_target>")
-def decommission_pipeline(git_target):
+@app.route("/pipeline/decommission_pipeline", methods=['POST', 'GET'])
+def decommission_pipeline():
+    if request.method == 'POST':
+        git_target = request.form.get('git_target')
 
-    commissioned_pipelines = get_deployments()
-    if git_target not in commissioned_pipelines:
-        return f"Pipeline {git_target} is not commissioned!"
+        commissioned_pipelines = get_deployments()
+        if git_target not in commissioned_pipelines:
+            return f"Pipeline {git_target} is not commissioned!"
 
-    time_series_collection.delete_many({"origin": git_target})
+        time_series_collection.delete_many({"origin": git_target})
 
-    async def delete_deployment_by_name(deployment_name):
-        async with get_client() as prefect_client:
-            try:
-                # The name syntax needs to be updated to the same as when deployments are created
-                deployment = await prefect_client.read_deployment_by_name(f"run-sunbeam/pipeline-{deployment_name}")
-                assert isinstance(deployment, prefect.client.schemas.responses.DeploymentResponse)
+        async def delete_deployment_by_name(deployment_name):
+            async with get_client() as prefect_client:
+                try:
+                    # The name syntax needs to be updated to the same as when deployments are created
+                    deployment = await prefect_client.read_deployment_by_name(f"run-sunbeam/pipeline-{deployment_name}")
+                    assert isinstance(deployment, prefect.client.schemas.responses.DeploymentResponse)
 
-                await prefect_client.delete_deployment(deployment.id)
+                    print(f"Decomissioning {deployment_name}")
 
-            except (AttributeError, AssertionError, prefect_exceptions.ObjectNotFound):
-                logger.error(f"Failed to delete deployment: {deployment_name}")
+                    await prefect_client.delete_deployment(deployment.id)
 
-    asyncio.run(delete_deployment_by_name(git_target))
+                except (AttributeError, AssertionError, prefect_exceptions.ObjectNotFound):
+                    logger.error(f"Failed to delete deployment: {deployment_name}")
 
-    return f"Decommissioned {git_target}!"
+        asyncio.run(delete_deployment_by_name(git_target))
+
+        return f"Decommissioned {git_target}!"
+
+    else:
+        return render_template("decommission.html")
 
 
-@app.route("/commission_pipeline/<git_target>")
-def commission_pipeline(git_target):
-    commissioned_pipelines = get_deployments()
-    if git_target in commissioned_pipelines:
-        return f"Pipeline {git_target} already commissioned!"
+@app.route("/pipeline", methods=['GET'])
+def pipeline():
+    return render_template("pipelines.html")
 
-    repo_block = GitHubRepository(
-        repository_url=SOURCE_REPO,
-        reference=git_target
-    )
-    repo_block.save(name=f"source", overwrite=True)
 
-    flow.from_source(
-        source=repo_block,
-        entrypoint="pipeline/run.py:run_sunbeam"
-    ).deploy(
-        name=f"pipeline-{git_target}",
-        work_pool_name="default-work-pool",
-        parameters={
-            "git_target": git_target
-        }
-    )
+@app.route("/pipeline/commission_pipeline", methods=['GET', 'POST'])
+def commission_pipeline():
+    if request.method == 'POST':
+        git_target = request.form.get('git_target')
 
-    async def run_deployment_by_name(deployment_name):
-        async with get_client() as prefect_client:
-            try:
-                deployment = await prefect_client.read_deployment_by_name(f"run-sunbeam/pipeline-{deployment_name}")
-                assert isinstance(deployment, prefect.client.schemas.responses.DeploymentResponse)
+        commissioned_pipelines = get_deployments()
+        if git_target in commissioned_pipelines:
+            return f"Pipeline {git_target} already commissioned!"
 
-                await prefect_client.create_flow_run_from_deployment(deployment.id)
+        repo_block = GitHubRepository(
+            repository_url=SOURCE_REPO,
+            reference=git_target
+        )
+        repo_block.save(name=f"source", overwrite=True)
 
-            except AssertionError:
-                logger.error(f"Failed to run deployment {deployment_name}")
+        flow.from_source(
+            source=repo_block,
+            entrypoint="pipeline/run.py:run_sunbeam"
+        ).deploy(
+            name=f"pipeline-{git_target}",
+            work_pool_name="default-work-pool",
+            parameters={
+                "git_target": git_target
+            }
+        )
 
-    asyncio.run(run_deployment_by_name(git_target))
+        async def run_deployment_by_name(deployment_name):
+            async with get_client() as prefect_client:
+                try:
+                    deployment = await prefect_client.read_deployment_by_name(f"run-sunbeam/pipeline-{deployment_name}")
+                    assert isinstance(deployment, prefect.client.schemas.responses.DeploymentResponse)
 
-    return f"Commissioned {git_target}"
+                    await prefect_client.create_flow_run_from_deployment(deployment.id)
+
+                except AssertionError:
+                    logger.error(f"Failed to run deployment {deployment_name}")
+
+        asyncio.run(run_deployment_by_name(git_target))
+
+        return f"Commissioned {git_target}"
+
+    else:
+        return render_template('commission.html')
 
 
 @app.route('/files', defaults={'path': ''})
