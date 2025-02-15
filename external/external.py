@@ -58,7 +58,7 @@ def _recommission_pipeline():
         return f"Recommissioned {git_target}!"
 
     else:
-        return render_template('commission.html')
+        return render_template('recommission.html')
 
 
 @app.route('/files', defaults={'path': ''})
