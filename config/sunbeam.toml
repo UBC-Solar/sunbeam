@@ -6,20 +6,23 @@ stages_to_run = [
 ]
 
 [stage_data_source]
-data_source_type = "MongoDBDataSource"
+data_source_type = "FSDataSource"
 
 [stage_data_source.FSDataSource]
 fs_root = "fs_data"
+
 
 [stage_data_source.MongoDBDataSource]
 
 [stage_data_source.InfluxDBDataSource]
 
 [ingress_data_source]
-data_source_type = "MongoDBDataSource"
+data_source_type = "SunbeamDataSource"
 
 [ingress_data_source.MongoDBDataSource]
 ingress_origin = "influxdb_cache"
+
+[ingress_data_source.SunbeamDataSource]
 
 [ingress_data_source.FSDataSource]
 fs_root = "fs_data"
