@@ -15,6 +15,7 @@ class MongoDBDataSourceConfig(DataSourceConfig):
 
 class SunbeamSourceConfig(DataSourceConfig):
     api_url: str = Field(default="api.sunbeam.ubcsolar.com")
+    ingress_origin: str = Field(default="influxdb_cache")
 
 
 class InfluxDBDataSourceConfig(DataSourceConfig):

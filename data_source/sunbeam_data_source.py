@@ -8,13 +8,21 @@ class SunbeamDataSource(DataSource):
         super().__init__()
 
         self._sunbeam_client = SunbeamClient(api_url=config.api_url)
+        self._origin = config.ingress_origin
 
     def store(self, **kwargs) -> FileLoader:
         raise NotImplementedError("`store` method is not allowed for SunbeamDataSource!")
 
     def get(self, canonical_path: CanonicalPath, start: str = None, stop: str = None) -> Result:
         try:
-            return Result.Ok(self._sunbeam_client.get_file(path=canonical_path))
+            _, event, source, name = canonical_path.unwrap()
+            return Result.Ok(self._sunbeam_client.get_file(
+                origin=self._origin,
+                event=event,
+                source=source,
+                name=name
+               ).unwrap()
+            )
 
         except Exception as e:
             return Result.Err(e)
