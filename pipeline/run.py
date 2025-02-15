@@ -1,15 +1,12 @@
 from data_tools import DataSource
-import logging
 from prefect import flow
-from logs import log_directory
-from data_tools.utils import configure_logger
+from logs import SunbeamLogger
 from data_source import DataSourceFactory
 from stage import Context, PowerStage, StageResult, IngressStage, EnergyStage
 from pipeline.configure import build_config, build_stage_graph
 
 
-logger = logging.getLogger("sunbeam")
-configure_logger(logger, log_directory / "sunbeam.log")
+logger = SunbeamLogger("sunbeam")
 
 
 @flow(log_prints=True)

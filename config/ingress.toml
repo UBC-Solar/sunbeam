@@ -128,18 +128,7 @@ car = "Brightside"
 bucket = "CAN_log"
 frequency = 4.0
 units = "V"
-description = "Voltage of array string 12"
-
-[[target]]
-name = "RegenEnabled"
-field = "RegenEnabled"
-type = "TimeSeries"
-measurement = "AMB"
-car = "Brightside"
-bucket = "CAN_log"
-frequency = 4.0
-units = "V"
-description = "Regeneration Status where 0 is drive and 1 is regen"
+description = "Voltage of array string 2"
 
 [[target]]
 name = "VoltageofLeast"

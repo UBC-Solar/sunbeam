@@ -3,16 +3,13 @@ import pathlib
 from data_tools import Event, FileType
 import toml as tomllib
 from typing import List, Union
-import logging
 import traceback
-from logs import log_directory
-from data_tools.utils import configure_logger
+from logs import SunbeamLogger
 from data_tools.query.influxdb_query import TimeSeriesTarget
 from config import config_directory
 
 
-logger = logging.getLogger("sunbeam")
-configure_logger(logger, log_directory / "sunbeam.log")
+logger = SunbeamLogger("sunbeam")
 
 
 def collect_targets(ingress_config: dict) -> List[TimeSeriesTarget]:

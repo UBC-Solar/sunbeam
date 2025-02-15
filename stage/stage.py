@@ -2,14 +2,13 @@ from abc import ABC, abstractmethod, ABCMeta
 import logging
 
 from data_tools.schema import FileLoader, File, Result
-from data_tools.utils import configure_logger
 from stage.stage_registry import stage_registry
 from stage.context import Context
-from logs import log_directory
 from functools import wraps
 from collections.abc import Iterable
 from typing import Any, Dict, Generator
 from prefect import task
+from logs import SunbeamLogger
 
 
 class StageError(RuntimeError):
@@ -200,10 +199,8 @@ class Stage(ABC, metaclass=StageMeta):
         self._finalized = False
 
         self._context = Context.get_instance()
-        self._logger = logging.getLogger(self.__class__.get_stage_name())
+        self._logger = SunbeamLogger(self.__class__.get_stage_name())
         self._expected_outputs = []
-
-        configure_logger(self._logger, log_directory / "sunbeam.log")
 
     def __setattr__(self, key, value):
         if hasattr(self, "_finalized"):
