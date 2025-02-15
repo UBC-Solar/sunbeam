@@ -1,8 +1,5 @@
 from data_tools import DataSource
 from prefect import flow
-import os
-import sys
-sys.path.append(os.getcwd())
 from logs import SunbeamLogger
 from data_source import DataSourceFactory
 from stage import Context, PowerStage, StageResult, IngressStage, EnergyStage
