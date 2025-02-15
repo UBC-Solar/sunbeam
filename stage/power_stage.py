@@ -18,15 +18,21 @@ class PowerStage(Stage):
 
     @staticmethod
     @task(name="Power")
-    def run(self, total_pack_voltage_loader: FileLoader, pack_current_loader: FileLoader, motor_current_loader: FileLoader, motor_voltage_loader: FileLoader) -> StageResult:
+    def run(self,
+            total_pack_voltage_loader: FileLoader,
+            pack_current_loader: FileLoader,
+            motor_voltage_loader: FileLoader,
+            motor_current_loader: FileLoader,
+            motor_current_direction_loader: FileLoader) -> StageResult:
         """
         Run the power stage, converting voltage and current data into power.
 
         :param self: an instance of PowerStage to be run
         :param FileLoader total_pack_voltage_loader: loader to TotalPackVoltage from Ingest
         :param FileLoader pack_current_loader: loader to PackCurrent from Ingest
-        :param FileLoader motor_current_loader: loader to MotorCurrent from Ingest
         :param FileLoader motor_voltage_loader: loader to MotorVoltage from Ingest
+        :param FileLoader motor_current_loader: loader to MotorCurrent from Ingest
+        :param FileLoader motor_current_direction_loader: loader to MotorCurrentDirection from Ingest
         :returns: PackPower (TimeSeries), MotorPower (TimeSeries)
         """
         return super().run(self, total_pack_voltage_loader, pack_current_loader, motor_current_loader, motor_voltage_loader)
@@ -46,21 +52,41 @@ class PowerStage(Stage):
         self.declare_output("pack_power")
         self.declare_output("motor_power")
 
-    def extract(self, total_pack_voltage_loader: FileLoader, pack_current_loader: FileLoader, motor_current_loader: FileLoader, motor_voltage_loader: FileLoader) -> tuple[Result, Result, Result, Result]:
+    def extract(self,
+            total_pack_voltage_loader: FileLoader,
+            pack_current_loader: FileLoader,
+            motor_voltage_loader: FileLoader,
+            motor_current_loader: FileLoader,
+            motor_current_direction_loader: FileLoader) -> tuple[Result, Result, Result, Result, Result]:
         total_pack_voltage_result: Result = total_pack_voltage_loader()
         pack_current_result: Result = pack_current_loader()
-        motor_current_result: Result = motor_current_loader()
         motor_voltage_result: Result = motor_voltage_loader()
+        motor_current_result: Result = motor_current_loader()
+        motor_current_direction_result: Result = motor_current_direction_loader()
 
-        return total_pack_voltage_result, pack_current_result, motor_current_result, motor_voltage_result
+        return (total_pack_voltage_result, pack_current_result,
+                motor_voltage_result, motor_current_result, motor_current_direction_result)
 
-    def transform(self, total_pack_voltage_result, pack_current_result, motor_current_result, motor_voltage_result) -> tuple[Result, Result]:
+    def transform(self,
+                  total_pack_voltage_result,
+                  pack_current_result,
+                  motor_voltage_result,
+                  motor_current_result,
+                  motor_current_direction_result) -> tuple[Result, Result]:
         try:
-            motor_current: TimeSeries = motor_current_result.unwrap().data
             motor_voltage: TimeSeries = motor_voltage_result.unwrap().data
+            motor_current: TimeSeries = motor_current_result.unwrap().data
+            motor_current_direction: TimeSeries = motor_current_direction_result.unwrap().data
 
-            motor_current, motor_voltage = TimeSeries.align(motor_current, motor_voltage)
-            motor_power = motor_current.promote(motor_current * motor_voltage)
+            # motor_current_direction is 1 if negative (regen) and 0 if positive (driving)
+            # the linear function -2x + 1 maps 1 to -1 and 0 to 1,
+            # resulting in a number that represents the sign/direction of the current
+            motor_current_sign = motor_current_direction * -2 + 1
+
+            motor_current, motor_voltage, motor_current_sign = TimeSeries.align(
+                motor_current, motor_voltage, motor_current_sign
+            )
+            motor_power = motor_current.promote(motor_current * motor_voltage * motor_current_sign)
             motor_power.units = "W"
             motor_power.name = "Motor Power"
 
