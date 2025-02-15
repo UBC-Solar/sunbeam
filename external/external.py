@@ -16,9 +16,13 @@ from bokeh.models import ColumnDataSource, DatetimeTickFormatter
 from data_tools.collections import TimeSeries
 from data_tools.schema import File, CanonicalPath
 import dill
+import re
 
 
 SOURCE_REPO = "https://github.com/UBC-Solar/sunbeam.git"
+
+
+PIPELINE_NAME_PATTERN = r"pipeline-(.+)"
 
 
 logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
@@ -27,37 +31,13 @@ logger = logging.getLogger()
 app = Flask(__name__)
 
 
-def init_db():
-    metadata_collection.insert_one({
-        "type": "status"
-    })
-
-    metadata_collection.insert_one({
-        "type": "commissioned_pipelines",
-        "data": []
-    })
-
-
 client = pymongo.MongoClient("mongodb://mongodb:27017/")
 
 db = client.sunbeam_db
 
-metadata_collection = db.metadata
 time_series_collection = db.time_series_data
-db_status = metadata_collection.find_one({"type": "status"})
-
-
-if db_status is None:
-    logger.info("MongoDB is not initialized. Initializing...")
-    init_db()
-
 
 logger.info("MongoDB is initialized!")
-
-
-commissioned_pipelines_query = {
-    "type": "commissioned_pipelines"
-}
 
 
 @app.route("/")
@@ -78,7 +58,8 @@ def list_files():
 
 @app.route("/decommission_pipeline/<git_target>")
 def decommission_pipeline(git_target):
-    commissioned_pipelines = metadata_collection.find_one(commissioned_pipelines_query)['data']
+
+    commissioned_pipelines = get_deployments()
     if git_target not in commissioned_pipelines:
         return f"Pipeline {git_target} is not commissioned!"
 
@@ -98,20 +79,12 @@ def decommission_pipeline(git_target):
 
     asyncio.run(delete_deployment_by_name(git_target))
 
-    update = {
-        "$pull": {
-            "data": git_target
-        }
-    }
-
-    metadata_collection.update_one(commissioned_pipelines_query, update)
-
     return f"Decommissioned {git_target}!"
 
 
 @app.route("/commission_pipeline/<git_target>")
 def commission_pipeline(git_target):
-    commissioned_pipelines = metadata_collection.find_one(commissioned_pipelines_query)['data']
+    commissioned_pipelines = get_deployments()
     if git_target in commissioned_pipelines:
         return f"Pipeline {git_target} already commissioned!"
 
@@ -144,14 +117,6 @@ def commission_pipeline(git_target):
                 logger.error(f"Failed to run deployment {deployment_name}")
 
     asyncio.run(run_deployment_by_name(git_target))
-
-    update = {
-        "$push": {
-            "data": git_target
-        }
-    }
-
-    metadata_collection.update_one(commissioned_pipelines_query, update)
 
     return f"Commissioned {git_target}"
 
@@ -277,10 +242,28 @@ def _create_bokeh_plot(data: TimeSeries, title: str) -> str:
             return html_content
 
 
+def get_deployments():
+    async def read_deployments():
+        async with get_client() as prefect_client:
+            deployments = await prefect_client.read_deployments()
+
+            assert isinstance(deployments, list)
+
+            deployment_names = []
+            for deployment in deployments:
+                pipeline_name_match = re.search(PIPELINE_NAME_PATTERN, deployment.name)
+
+                if pipeline_name_match:
+                    deployment_names.append(pipeline_name_match.group(1))
+
+            return deployment_names
+
+    return asyncio.run(read_deployments())
+
+
 @app.route("/list_commissioned_pipelines")
 def list_commissioned_pipelines():
-    commissioned_pipelines = metadata_collection.find_one(commissioned_pipelines_query)
-    return commissioned_pipelines['data']
+    return get_deployments()
 
 
 if __name__ == "__main__":
