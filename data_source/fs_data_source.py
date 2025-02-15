@@ -21,7 +21,7 @@ class FSDataSource(DataSource):
             os.makedirs(Path(path).parent, exist_ok=True)
 
             with open(self.canonical_path_to_real_path(file.canonical_path), "wb") as f:
-                dill.dump(file, f)
+                dill.dump(file, f, protocol=dill.HIGHEST_PROTOCOL)
 
         return FileLoader(lambda x: self.get(x), file.canonical_path)
 
