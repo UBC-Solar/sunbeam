@@ -36,8 +36,9 @@ def run_sunbeam(git_target="pipeline"):
             power_stage,
             ingress_outputs[event_name]["TotalPackVoltage"],
             ingress_outputs[event_name]["PackCurrent"],
-            ingress_outputs[event_name]["BatteryCurrent"],
             ingress_outputs[event_name]["BatteryVoltage"],
+            ingress_outputs[event_name]["BatteryCurrent"],
+            ingress_outputs[event_name]["BatteryCurrentDirection"],
         )
 
         energy_stage: EnergyStage = EnergyStage(event_name)

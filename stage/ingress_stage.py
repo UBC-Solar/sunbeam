@@ -60,10 +60,7 @@ class IngressStage(Stage):
                 self._load_method = self._load_and_store
 
             case DataSourceType.InfluxDB:
-                self._ingress_data_source = InfluxDBDataSource(
-                    parse_iso_datetime(config.start),
-                    parse_iso_datetime(config.start)
-                )
+                self._ingress_data_source = InfluxDBDataSource(config)
 
                 self._extract_method = self._extract_influxdb
                 self._transform_method = self._transform_influxdb
