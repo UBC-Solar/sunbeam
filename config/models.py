@@ -13,6 +13,10 @@ class MongoDBDataSourceConfig(DataSourceConfig):
     ingress_origin: str = Field(default=str)
 
 
+class SunbeamSourceConfig(DataSourceConfig):
+    api_url: str = Field(default="api.sunbeam.ubcsolar.com")
+
+
 class InfluxDBDataSourceConfig(DataSourceConfig):
     start: str
     stop: str
@@ -39,6 +43,9 @@ class DataSourceConfigFactory:
 
             case "InfluxDBDataSource":
                 return InfluxDBDataSourceConfig(**unified_config)
+
+            case "SunbeamDataSource":
+                return SunbeamSourceConfig(**unified_config)
 
             case _:
                 raise AssertionError(f"Unrecognized DataSourceType in sunbeam.toml: {data_source_type}!")

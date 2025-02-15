@@ -6,7 +6,8 @@ from .models import (
     MongoDBDataSourceConfig,
     InfluxDBDataSourceConfig,
     SunbeamConfig,
-    DataSourceConfigFactory
+    DataSourceConfigFactory,
+    SunbeamSourceConfig
 )
 
 
@@ -20,5 +21,6 @@ __all__ = [
     "InfluxDBDataSourceConfig",
     "SunbeamConfig",
     "DataSourceConfigFactory",
-    "config_directory"
+    "config_directory",
+    "SunbeamSourceConfig"
 ]
