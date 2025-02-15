@@ -4,5 +4,6 @@ data/
 .vscode/
 .env
 db/
+.bin
 
 **/*.log
