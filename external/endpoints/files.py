@@ -49,6 +49,23 @@ def _show_pipeline_stage_files(collection, pipeline: str, event: str, stage: str
     })
 
 
+def _get_pipeline_stage_files(collection, pipeline: str, event: str, stage: str) -> list[dict]:
+    query = {
+        "$and": [
+            {"origin": {"$eq": pipeline}},
+            {"event": {"$eq": event}},
+            {"stage": {"$eq": stage}}
+        ]
+    }
+
+    return collection.find(query, {
+        "name": 1,
+        "metadata": 1,
+        "description": 1,
+        "file_type": 1
+    })
+
+
 def _query_file(collection, pipeline: str, event: str, stage: str, name: str):
     return collection.find_one({
         "origin": pipeline,
@@ -113,12 +130,16 @@ def get_file(collection, path, request_args):
             )
 
         case 3:     # User is querying the files produced by a stage for an event and pipeline
-            return render_template(
-                "list.html",
-                items=_show_pipeline_stage_files(collection, path_parts[0], path_parts[1], path_parts[2]),
-                path=path,
-                title=f"Stages of {path_parts[0]}/{path_parts[1]}"
-            )
+            if request.args.get("viewtype") == "raw":
+                return _get_pipeline_stage_files(collection, path_parts[0], path_parts[1], path_parts[2])
+
+            else:
+                return render_template(
+                    "list.html",
+                    items=_show_pipeline_stage_files(collection, path_parts[0], path_parts[1], path_parts[2]),
+                    path=path,
+                    title=f"Stages of {path_parts[0]}/{path_parts[1]}"
+                )
 
         case 4:
             file = _query_file(collection, path_parts[0], path_parts[1], path_parts[2], path_parts[3])
