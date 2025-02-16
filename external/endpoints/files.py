@@ -1,4 +1,5 @@
 import io
+from importlib.metadata import metadata
 
 from flask import render_template, request, send_file
 from typing import List
@@ -127,7 +128,10 @@ def get_file(collection, path, request_args):
                 return render_template(
                     'access.html',
                     file_types=["bin", "plot"],
-                    file_name=path_parts[3]
+                    file_name=path_parts[3],
+                    metadata=file.get("metadata", {}),
+                    description=file.get("description", ""),
+                    file_type=file.get("file_type"),
                 )
 
             # User is trying to download file data in a certain form
