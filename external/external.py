@@ -1,5 +1,5 @@
-from flask import Flask, render_template, request
-from endpoints import commission_pipeline, decommission_pipeline, list_commissioned_pipelines, list_files, get_file
+from flask import Flask, render_template, request, Response, jsonify
+import endpoints
 import pymongo
 
 
@@ -17,7 +17,7 @@ def _index():
 
 @app.route("/list_files")
 def _list_files():
-    return list_files(time_series_collection)
+    return endpoints.list_files(time_series_collection)
 
 
 @app.route("/pipelines/decommission_pipeline", methods=['POST', 'GET'])
@@ -25,7 +25,7 @@ def _decommission_pipeline():
     if request.method == 'POST':
         git_target = request.form.get('git_target')
 
-        return decommission_pipeline(time_series_collection, git_target)
+        return endpoints.decommission_pipeline(time_series_collection, git_target)
 
     else:
         return render_template("decommission.html")
@@ -41,7 +41,7 @@ def _commission_pipeline():
     if request.method == 'POST':
         git_target = request.form.get('git_target')
 
-        return commission_pipeline(git_target)
+        return endpoints.commission_pipeline(git_target)
 
     else:
         return render_template('commission.html')
@@ -52,8 +52,8 @@ def _recommission_pipeline():
     if request.method == 'POST':
         git_target = request.form.get('git_target')
 
-        decommission_pipeline(time_series_collection, git_target)
-        commission_pipeline(git_target)
+        endpoints.decommission_pipeline(time_series_collection, git_target)
+        endpoints.commission_pipeline(git_target)
 
         return f"Recommissioned {git_target}!"
 
@@ -64,12 +64,58 @@ def _recommission_pipeline():
 @app.route('/files', defaults={'path': ''})
 @app.route('/files/<path:path>')
 def _get_file(path):
-    return get_file(time_series_collection, path, request.args)
+    return endpoints.get_file(time_series_collection, path, request.args)
 
 
 @app.route("/list_commissioned_pipelines")
 def _list_commissioned_pipelines():
-    return list_commissioned_pipelines()
+    return endpoints.list_commissioned_pipelines()
+
+
+@app.route('/cache/get')
+def _get_value():
+    key = request.args.get('key')
+    if key is None:
+        return "Must set the `key` parameter to query cache!", 400
+
+    value = endpoints.get_cache_by_key(key)
+    return Response(value, content_type='application/octet-stream') if value else (f"No item with key {key} exists!", 406)
+
+
+@app.route('/cache/set')
+def _set_value():
+    key = request.args.get('key')
+    if key is None:
+        return "Must set the `key` parameter to set cache!", 400
+
+    value = request.args.get('value')
+    if value is None:
+        return "Must set the `value` parameter to set cache!", 400
+
+    return endpoints.set_cache_by_key(key, value), 201
+
+
+@app.route('/cache/exists')
+def _check_exists():
+    key = request.args.get('key')
+    if key is None:
+        return "Must set the `key` parameter to query cache!", 400
+
+    return endpoints.check_cache_by_key(key), 200
+
+
+@app.route('/cache/delete')
+def _delete_key():
+    key = request.args.get('key')
+    if key is None:
+        return "Must set the `key` parameter to delete from cache!", 400
+
+    return endpoints.delete_cache_by_key(key), 200
+
+
+@app.route('/cache/keys')
+def _cache_keys():
+    return endpoints.get_cache_keys(), 200
 
 
 if __name__ == "__main__":
