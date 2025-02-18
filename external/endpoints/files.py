@@ -62,7 +62,8 @@ def _get_pipeline_stage_files(collection, pipeline: str, event: str, stage: str)
         "name": 1,
         "metadata": 1,
         "description": 1,
-        "file_type": 1
+        "file_type": 1,
+        "_id": 0
     }))
 
 
