@@ -121,7 +121,8 @@ def _cache_keys():
 @app.route('/files/distinct', methods=['POST', 'GET'])
 def _distinct():
     if request.method == 'POST':
-        if (distinct_key := request.args.get('key')) is None:
+        key = request.args.get('key')
+        if key is None:
             return "Must set the `key` parameter to distinct!", 400
 
         distinct_filter = {}
