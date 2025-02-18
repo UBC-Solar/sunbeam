@@ -54,16 +54,16 @@ def _get_pipeline_stage_files(collection, pipeline: str, event: str, stage: str)
         "$and": [
             {"origin": {"$eq": pipeline}},
             {"event": {"$eq": event}},
-            {"stage": {"$eq": stage}}
+            {"source": {"$eq": stage}}
         ]
     }
 
-    return collection.find(query, {
+    return list(collection.find(query, {
         "name": 1,
         "metadata": 1,
         "description": 1,
         "file_type": 1
-    })
+    }))
 
 
 def _query_file(collection, pipeline: str, event: str, stage: str, name: str):
