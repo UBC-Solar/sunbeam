@@ -139,6 +139,10 @@ def _distinct():
         if event:
             distinct_filter['event'] = event
 
+        name = request.form.get('name')
+        if name:
+            distinct_filter['name'] = name
+
         return time_series_collection.distinct(key, distinct_filter), 200
 
     else:
