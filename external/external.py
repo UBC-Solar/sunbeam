@@ -118,5 +118,31 @@ def _cache_keys():
     return endpoints.get_cache_keys(), 200
 
 
+@app.route('/files/distinct')
+def _distinct():
+    if request.method == 'POST':
+        if (distinct_key := request.args.get('key')) is None:
+            return "Must set the `key` parameter to distinct!", 400
+
+        distinct_filter = {}
+
+        origin = request.form.get('origin')
+        if origin:
+            distinct_filter['origin'] = origin
+
+        source = request.form.get('source')
+        if source:
+            distinct_filter['source'] = source
+
+        event = request.form.get('event')
+        if event:
+            distinct_filter['event'] = event
+
+        return time_series_collection.distinct(distinct_key, distinct_filter), 200
+
+    else:
+        return render_template("distinct.html")
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=8080)
