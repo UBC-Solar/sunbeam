@@ -139,7 +139,7 @@ def _distinct():
         if event:
             distinct_filter['event'] = event
 
-        return time_series_collection.distinct(distinct_key, distinct_filter), 200
+        return time_series_collection.distinct(key, distinct_filter), 200
 
     else:
         return render_template("distinct.html")
