@@ -118,7 +118,7 @@ def _cache_keys():
     return endpoints.get_cache_keys(), 200
 
 
-@app.route('/files/distinct')
+@app.route('/files/distinct', methods=['POST', 'GET'])
 def _distinct():
     if request.method == 'POST':
         if (distinct_key := request.args.get('key')) is None:
