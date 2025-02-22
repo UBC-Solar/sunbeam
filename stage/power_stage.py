@@ -33,7 +33,7 @@ class PowerStage(Stage):
         :param FileLoader motor_voltage_loader: loader to MotorVoltage from Ingest
         :param FileLoader motor_current_loader: loader to MotorCurrent from Ingest
         :param FileLoader motor_current_direction_loader: loader to MotorCurrentDirection from Ingest
-        :returns: PackPower (TimeSeries), MotorPower (TimeSeries)
+        :returns: PackPower (FileLoader pointing to TimeSeries), MotorPower (FileLoader pointing to TimeSeries)
         """
         return super().run(
             self,
