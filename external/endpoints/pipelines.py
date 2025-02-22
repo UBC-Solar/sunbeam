@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
 logger = logging.getLogger()
 
 
-def decommission_pipeline(git_target, collection):
+def decommission_pipeline(collection, git_target):
     commissioned_pipelines = get_deployments()
     if git_target not in commissioned_pipelines:
         return f"Pipeline {git_target} is not commissioned!", 400

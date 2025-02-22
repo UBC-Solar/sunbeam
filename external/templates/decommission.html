@@ -12,5 +12,7 @@
         <input type="text" id="git_target" name="git_target" required>
         <button type="submit">Decommission</button>
     </form>
+    <a href="{{ request.path.rsplit('/', 1)[0] if '/' in request.path.rsplit('/', 1)[0] else '/' }}">Back</a>
+
 </body>
 </html>

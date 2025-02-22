@@ -11,7 +11,6 @@ data_source_type = "MongoDBDataSource"
 [stage_data_source.FSDataSource]
 fs_root = "fs_data"
 
-
 [stage_data_source.MongoDBDataSource]
 
 [stage_data_source.InfluxDBDataSource]
@@ -23,6 +22,7 @@ data_source_type = "MongoDBDataSource"
 ingress_origin = "influxdb_cache"
 
 [ingress_data_source.SunbeamDataSource]
+api_url = "api.sunbeam.ubcsolar.com"
 
 [ingress_data_source.FSDataSource]
 fs_root = "fs_data"
