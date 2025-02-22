@@ -1,6 +1,4 @@
 import io
-from importlib.metadata import metadata
-
 from flask import render_template, request, send_file
 from typing import List
 import logging
