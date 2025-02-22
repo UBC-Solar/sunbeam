@@ -150,11 +150,6 @@ class StageResult:
             # as key-value pairs.
             self._outputs: dict[str, FileLoader] = args[0]
 
-        # elif len(args) == 1 and isinstance(args[0], FileLoader):
-        #     # Handle the special case where we have one output, and its a FileLoader.
-        #     file_loader: FileLoader = args[0]
-        #     FileLoader.__init__(self, file_loader._loader, file_loader._canonical_path)
-
         else:
             # Associate each output with its expected output name
             self._outputs: dict[str, FileLoader] = {output: args[i] for i, output in enumerate(self._expected_results)}
@@ -230,7 +225,6 @@ class Stage(ABC, metaclass=StageMeta):
         pass
 
     @staticmethod
-    # @check_if_skip_stage  # Make this just a part of run
     @abstractmethod
     def run(self, *args) -> StageResult:
         # Here, we are annotating the stage functions at runtime as a Prefect task, then calling them
