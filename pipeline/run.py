@@ -4,7 +4,7 @@ from logs import SunbeamLogger
 from data_source import DataSourceFactory
 from stage import Context, PowerStage, StageResult, IngressStage, EnergyStage
 from pipeline.configure import build_config, build_stage_graph
-
+from stage.soc_stage import SOCStage
 
 logger = SunbeamLogger("sunbeam")
 
@@ -43,6 +43,10 @@ def run_sunbeam(git_target="pipeline"):
 
         energy_stage: EnergyStage = EnergyStage(event_name)
         pack_energy, = EnergyStage.run(energy_stage, pack_power)
+
+        soc_stage, = SOCStage(event_name)
+        voltage_of_least = event_ingress_outputs[event_name]["VoltageofLeast"]
+        energy_vol_extrapolated, = SOCStage.run(soc_stage, voltage_of_least)
 
 
 if __name__ == "__main__":
