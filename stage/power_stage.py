@@ -1,8 +1,7 @@
 from data_tools.schema import FileLoader
-from stage.stage import Stage, StageResult
+from stage.stage import Stage
 from stage.stage_registry import stage_registry
 from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath
-from stage.context import Context
 from data_tools.collections import TimeSeries
 from prefect import task
 
@@ -23,7 +22,7 @@ class PowerStage(Stage):
             pack_current_loader: FileLoader,
             motor_voltage_loader: FileLoader,
             motor_current_loader: FileLoader,
-            motor_current_direction_loader: FileLoader) -> StageResult:
+            motor_current_direction_loader: FileLoader) -> tuple[FileLoader, ...]:
         """
         Run the power stage, converting voltage and current data into power.
 

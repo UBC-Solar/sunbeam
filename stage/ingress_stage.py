@@ -1,9 +1,8 @@
 from config import DataSourceConfig
-from stage.stage import Stage, StageResult, StageError
+from stage.stage import Stage, StageError
 from data_source import InfluxDBDataSource, FSDataSource, DataSourceType, MongoDBDataSource, SunbeamDataSource
 from stage.stage_registry import stage_registry
 from data_tools.schema import File, Result, FileLoader, FileType, Event, UnwrappedError, CanonicalPath
-from data_tools.utils import parse_iso_datetime
 from data_tools.query.influxdb_query import TimeSeriesTarget
 from data_tools.collections.time_series import TimeSeries
 from typing import List, Dict
@@ -26,7 +25,7 @@ class IngressStage(Stage):
 
     @staticmethod
     @task(name="Ingress")
-    def run(self, targets: List[TimeSeriesTarget], events: List[Event]) -> StageResult:
+    def run(self, targets: List[TimeSeriesTarget], events: List[Event]) -> Dict[str, Dict[str, FileLoader]]:
         """
         Ingest raw time series data from InfluxDB and marshal it for use in the data pipeline, or load pre-existing data
         from a local filesystem.
@@ -34,7 +33,7 @@ class IngressStage(Stage):
         :param self: an instance of IngressStage to be run
         :param targets: a list of m TimeSeriesTarget models which will be queried
         :param events: a list of n Event models specifying how the raw data should be temporally partitioned
-        :return: a StageResult [n][m] which can be indexed first by event, then by target name.
+        :return: a dictionary which can be indexed first by event, then by target name.
         """
         return super().run(self, targets, events)
 
@@ -248,7 +247,7 @@ class IngressStage(Stage):
 
         return (processed_time_series_data,)
 
-    def _load_and_store(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> tuple[Dict[str, Dict[str, FileLoader]]]:
+    def _load_and_store(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> Dict[str, Dict[str, FileLoader]]:
         result_dict: Dict[str, Dict[str, FileLoader]] = {}
 
         for event_name, event_items in processed_time_series_data.items():
@@ -280,7 +279,7 @@ class IngressStage(Stage):
 
                     self.logger.info(f"Failed to load {name} for {event_name}!")
 
-        return (result_dict, )
+        return result_dict
 
 
 stage_registry.register_stage(IngressStage.get_stage_name(), IngressStage)

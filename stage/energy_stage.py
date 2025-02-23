@@ -1,8 +1,7 @@
 from data_tools.schema import FileLoader
-from stage.stage import Stage, StageResult
+from stage.stage import Stage
 from stage.stage_registry import stage_registry
 from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath
-from stage.context import Context
 from data_tools.collections import TimeSeries
 from prefect import task
 import numpy as np
@@ -19,7 +18,7 @@ class EnergyStage(Stage):
 
     @staticmethod
     @task(name="Energy")
-    def run(self, pack_power_loader: FileLoader) -> StageResult:
+    def run(self, pack_power_loader: FileLoader) -> tuple[FileLoader, ...]:
         """
         Run the power stage, converting voltage and current data into power.
 
