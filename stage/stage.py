@@ -63,22 +63,6 @@ class Stage(ABC, metaclass=StageMeta):
     def __finalize__(self):
         self._finalized = True
 
-    def declare_output(self, output_name: str):
-        self._expected_outputs.append(output_name)
-
-    @property
-    def expected_outputs(self):
-        return self._expected_outputs
-
-    def validate_stage_outputs(self):
-        """
-        Validate that all the declared items of a stage have been produced.
-        No effect if the stage items are valid, and raises a RuntimeError otherwise.
-
-        :raises RuntimeError: if an item of the stage has not been produced
-        """
-        pass
-
     @staticmethod
     # @check_if_skip_stage  # Make this just a part of run
     @abstractmethod

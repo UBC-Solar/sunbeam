@@ -84,8 +84,6 @@ class IngressStage(Stage):
                 raise StageError(self.get_stage_name(), f"Did not recognize {config["fs"]} as a valid Ingress "
                                                         f"stage data source!")
 
-        self.declare_output("marshaled_ingest_data")
-
     def _extract_existing(self, targets: List[TimeSeriesTarget], events: List[Event]) -> tuple[Dict[str, Dict[str, Result]]]:
         extracted_time_series_data = {}
 

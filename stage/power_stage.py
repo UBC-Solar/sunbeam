@@ -55,9 +55,6 @@ class PowerStage(Stage):
 
         self._event_name = event_name
 
-        self.declare_output("pack_power")
-        self.declare_output("motor_power")
-
     def extract(self,
             total_pack_voltage_loader: FileLoader,
             pack_current_loader: FileLoader,
