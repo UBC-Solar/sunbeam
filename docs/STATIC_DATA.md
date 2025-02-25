@@ -28,4 +28,4 @@ which is accessible through the `stage_data` property of a `Stage`.
 
 Files of type `json`, `npy` (Numpy File, not `npz` NumPy Archive!), `pickle/pkl` (Python Pickle File), `toml`, and `csv` are supported and will be automatically parsed into their respective contents.
 
-A keyword argument `data_pattern` may, but is not mandated, be provided to the call of a stage's superclass `__init__()` call to provide a predicate that will exclude certain directories from being loaded. 
+A keyword argument `data_pattern` may, but is not mandated, be provided to the call of a stage's superclass `__init__()` call to provide a predicate that will exclude certain directories from being loaded. For example, maybe a stage only wants to load data specifically for the event it is processing. So, you may want to set `data_pattern = lambda dir_name: dir_name == event.name` to exclude all directories that don't match the event name. 
