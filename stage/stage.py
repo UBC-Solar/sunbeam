@@ -138,7 +138,6 @@ class Stage(ABC, metaclass=StageMeta):
         self._finalized = True
 
     @staticmethod
-    # @check_if_skip_stage  # Make this just a part of run
     @abstractmethod
     def run(self, *args) -> tuple[FileLoader, ...]:
         # Here, we are annotating the stage functions at runtime as a Prefect task, then calling them
