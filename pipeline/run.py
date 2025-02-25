@@ -24,7 +24,7 @@ def run_sunbeam(git_target="pipeline"):
 
     ingress_stage: IngressStage = IngressStage(ingress_config)
 
-    ingress_outputs = IngressStage.run(ingress_stage, targets, events)
+    ingress_outputs: dict = IngressStage.run(ingress_stage, targets, events)
 
     # We will process each event separately.
     for event in events:
