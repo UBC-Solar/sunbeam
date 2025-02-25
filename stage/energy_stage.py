@@ -40,8 +40,6 @@ class EnergyStage(Stage):
 
         self._event_name = event_name
 
-        self.declare_output("pack_energy")
-
     def extract(self, pack_power: FileLoader) -> tuple[Result]:
         pack_power: Result = pack_power()
 
