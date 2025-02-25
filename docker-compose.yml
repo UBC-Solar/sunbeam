@@ -99,6 +99,18 @@ services:
     command: >
       sh -c "poetry run python external.py" 
 
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - prefect-network
+    volumes:
+      - type: bind
+        source: ./db/redis-data
+        target: /data
+    command: ["redis-server", "--appendonly", "yes"]
+
 
 networks:
   prefect-network:
