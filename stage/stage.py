@@ -12,6 +12,7 @@ import numpy as np
 import logging
 import json
 import dill
+import csv
 import os
 
 
@@ -95,21 +96,27 @@ class Stage(ABC, metaclass=StageMeta):
             else:
                 file_name, file_extension = os.path.splitext(os.path.split(path)[1])
 
-                if file_extension.lower() == ".json":
-                    with open(path, "r") as f:
-                        dest[file_name] = json.load(f)
+                match file_extension.lower():
+                    case ".json":
+                        with open(path, "r") as f:
+                            dest[file_name] = json.load(f)
 
-                if file_extension.lower() == ".toml":
-                    with open(path, "r") as f:
-                        dest[file_name] = tomllib.load(f)
+                    case ".toml":
+                        with open(path, "r") as f:
+                            dest[file_name] = tomllib.load(f)
 
-                if file_extension.lower() == ".pkl" or file_extension.lower() == ".pickle":
-                    with open(path, "rb") as f:
-                        dest[file_name] = dill.load(f)
+                    case ".pkl" | ".pickle":
+                        with open(path, "rb") as f:
+                            dest[file_name] = dill.load(f)
 
-                if file_extension.lower() == ".npy":
-                    with open(path, "rb") as f:
-                        dest[file_name] = np.load(f)
+                    case ".npy":
+                        with open(path, "rb") as f:
+                            dest[file_name] = np.load(f)
+
+                    case ".csv":
+                        with open(path, "r") as f:
+                            reader = csv.reader(f)
+                            dest[file_name] = list(reader)
 
         if os.path.isdir(stage_data_path):
             stage_data_items = os.listdir(stage_data_path)
