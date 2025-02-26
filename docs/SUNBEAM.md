@@ -72,11 +72,9 @@ Now, we can define how to create an instance of our `PowerStage` (remember, all 
         """    
         super().__init__()  
       
-        self._event_name = event_name  
-      
-        self.declare_output("pack_power")  
+        self._event_name = event_name
 ```
-We do a few things here. Firstly, we initialize the ``Stage`` base class. Next, we save the name of the event that we are currently processing, such as "FSGP Day 1", so that we know how to properly save our outputs to the right spot. Lastly, we declare what outputs we are intending to produce. 
+We first initialize the ``Stage`` base class. Then we save the name of the event that we are currently processing, such as "FSGP Day 1", so that we know how to properly save our outputs to the right spot.
 
 > When I said that stages are stateless, I meant it! To force this statelessness, trying to set an attribute after `__init__` will raise an error.
 
