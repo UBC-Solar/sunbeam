@@ -58,8 +58,6 @@ class SOCStage(Stage):
 
         self._event_name = event_name
 
-        self.declare_output("energy_vol_extrapolated")
-
     def extract(self, voltage_of_least_loader: FileLoader) -> tuple[Result]:
         voltage_of_least_result: Result = voltage_of_least_loader()
 
