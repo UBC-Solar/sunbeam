@@ -97,7 +97,7 @@ class EnergyStage(Stage):
                 energy_vol_extrapolated_ts: TimeSeries = energy_vol_extrapolated.unwrap()
                 initial_energy = energy_vol_extrapolated_ts[0]
                 energy_from_integrated_power_ts = energy_vol_extrapolated_ts.promote(
-                    np.ones(energy_vol_extrapolated_ts.size) * initial_energy - integrated_pack_power_ts)
+                    np.ones(integrated_pack_power_ts.size) * initial_energy - integrated_pack_power_ts)
                 energy_from_integrated_power_ts.name = "EnergyFromIntegratedPower"
                 energy_from_integrated_power_ts.units = "Wh"
                 energy_from_integrated_power = Result.Ok(energy_from_integrated_power_ts)
