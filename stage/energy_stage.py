@@ -95,7 +95,7 @@ class EnergyStage(Stage):
             integrated_pack_power_ts = integrated_pack_power.unwrap().data
             try:
                 energy_vol_extrapolated_ts = energy_vol_extrapolated.unwrap().data
-                initial_energy = energy_vol_extrapolated_ts[0.]  # float index indexes time axis
+                initial_energy = energy_vol_extrapolated_ts[0]
                 energy_from_integrated_power_ts = energy_vol_extrapolated_ts.promote(
                     np.ones(energy_vol_extrapolated_ts.size) * initial_energy - integrated_pack_power_ts)
                 energy_from_integrated_power_ts.name = "EnergyFromIntegratedPower"
