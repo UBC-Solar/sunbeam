@@ -2,7 +2,7 @@ from data_tools import DataSource
 from prefect import flow
 from logs import SunbeamLogger
 from data_source import DataSourceFactory
-from stage import Context, PowerStage, StageResult, IngressStage, EnergyStage
+from stage import Context, PowerStage, IngressStage, EnergyStage
 from pipeline.configure import build_config, build_stage_graph
 from stage.soc_stage import SOCStage
 
@@ -24,12 +24,11 @@ def run_sunbeam(git_target="pipeline"):
 
     ingress_stage: IngressStage = IngressStage(ingress_config)
 
-    ingress_outputs: StageResult = IngressStage.run(ingress_stage, targets, events)
+    ingress_outputs: dict = IngressStage.run(ingress_stage, targets, events)
 
     # We will process each event separately.
     for event in events:
         event_name = event.name
-        event_ingress_outputs = ingress_outputs[event_name]
 
         power_stage: PowerStage = PowerStage(event_name)
         pack_power, motor_power = PowerStage.run(
