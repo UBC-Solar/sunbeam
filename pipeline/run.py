@@ -44,7 +44,7 @@ def run_sunbeam(git_target="pipeline"):
         pack_energy, = EnergyStage.run(energy_stage, pack_power)
 
         soc_stage, = SOCStage(event_name)
-        voltage_of_least = event_ingress_outputs[event_name]["VoltageofLeast"]
+        voltage_of_least = ingress_outputs[event_name]["VoltageofLeast"]
         energy_vol_extrapolated, = SOCStage.run(soc_stage, voltage_of_least)
 
 
