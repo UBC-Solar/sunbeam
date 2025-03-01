@@ -38,7 +38,7 @@ class SOCStage(Stage):
 
         1. EnergyVOLExtrapolated
             Battery energy estimated using VoltageofLeast & SANYO NCR18650GA datasheet 2A discharge curve.
-            See https://github.com/UBC-Solar/data_analysis/tree/main/soc_analysis/datasheet_voltage_soc for details.
+            See https://github.com/UBC-Solar/data_analysis/blob/main/soc_analysis/datasheet_voltage_soc/charge_voltage_energy.ipynb for details.
 
         :param SOCStage self: an instance of SOCStage to be run
         :param FileLoader voltage_of_least_loader: loader to VoltageofLeast from Ingest
@@ -70,9 +70,8 @@ class SOCStage(Stage):
             cell_wh_from_voltage: Callable = CubicSpline(voltage_wh_lookup[0], voltage_wh_lookup[1])
             cell_wh= cell_wh_from_voltage(voltage_of_least)
             extrapolated_pack_wh: TimeSeries = voltage_of_least.promote(cell_wh * cells_in_module * modules_in_pack)
-            extrapolated_pack_wh.meta["measurement"] = "SOCStage"
-            extrapolated_pack_wh.meta["field"] = "EnergyVOLExtrapolated"
-            extrapolated_pack_wh.meta["units"] = "Wh"
+            extrapolated_pack_wh.name = "EnergyVOLExtrapolated"
+            extrapolated_pack_wh.units = "Wh"
 
             energy_vol_extrapolated = Result.Ok(extrapolated_pack_wh)
 
@@ -91,7 +90,9 @@ class SOCStage(Stage):
                 name="EnergyVOLExtrapolated",
             ),
             file_type=FileType.TimeSeries,
-            data=energy_vol_extrapolated.unwrap() if energy_vol_extrapolated else None
+            data=energy_vol_extrapolated.unwrap() if energy_vol_extrapolated else None,
+            description = "Battery energy estimated using VoltageofLeast & SANYO NCR18650GA datasheet 2A discharge curve."
+                          "\nSee https://github.com/UBC-Solar/data_analysis/blob/main/soc_analysis/datasheet_voltage_soc/charge_voltage_energy.ipynb for details."
         )
 
         energy_vol_extrapolated_loader = self.context.data_source.store(energy_vol_extrapolated_file)
