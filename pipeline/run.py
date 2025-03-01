@@ -43,6 +43,7 @@ def run_sunbeam(git_target="pipeline"):
         integrated_pack_power, energy_vol_extrapolated, energy_from_integrated_power = EnergyStage.run(
             energy_stage,
             ingress_outputs[event_name]["VoltageofLeast"],
+            pack_power
         )
 
 if __name__ == "__main__":
