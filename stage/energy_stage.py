@@ -73,10 +73,10 @@ class EnergyStage(Stage):
             integrated_pack_power_ts = pack_power.promote(np.cumsum(pack_power) * pack_power.period / seconds_per_hour)
             integrated_pack_power_ts.name = "IntegratedPackPower"
             integrated_pack_power_ts.units = "Wh"
-            integrated_pack_power = Result.Ok(integrated_pack_power_ts)
+            integrated_pack_power: Result[TimeSeries] = Result.Ok(integrated_pack_power_ts)
         except UnwrappedError as e:
             self.logger.error(f"Failed to unwrap pack power result! \n {e}")
-            integrated_pack_power = Result.Err(RuntimeError("Failed to process IntegratedPackPower!"))
+            integrated_pack_power: Result[TimeSeries] = Result.Err(RuntimeError("Failed to process IntegratedPackPower!"))
 
         try:
             voltage_of_least: TimeSeries = voltage_of_least_result.unwrap().data
@@ -86,15 +86,15 @@ class EnergyStage(Stage):
                 vol_cell_wh * cells_in_module * modules_in_pack)
             energy_vol_extrapolated_ts.name = "EnergyVOLExtrapolated"
             energy_vol_extrapolated_ts.units = "Wh"
-            energy_vol_extrapolated = Result.Ok(energy_vol_extrapolated_ts)
+            energy_vol_extrapolated: Result[TimeSeries] = Result.Ok(energy_vol_extrapolated_ts)
         except UnwrappedError as e:
             self.logger.error(f"Failed to unwrap voltage result! \n {e}")
-            energy_vol_extrapolated = Result.Err(RuntimeError("Failed to process EnergyVOLExtrapolated!"))
+            energy_vol_extrapolated: Result[TimeSeries] = Result.Err(RuntimeError("Failed to process EnergyVOLExtrapolated!"))
 
         try:
-            integrated_pack_power_ts = integrated_pack_power.unwrap().data
+            integrated_pack_power_ts: TimeSeries = integrated_pack_power.unwrap()
             try:
-                energy_vol_extrapolated_ts = energy_vol_extrapolated.unwrap().data
+                energy_vol_extrapolated_ts: TimeSeries = energy_vol_extrapolated.unwrap()
                 initial_energy = energy_vol_extrapolated_ts[0]
                 energy_from_integrated_power_ts = energy_vol_extrapolated_ts.promote(
                     np.ones(energy_vol_extrapolated_ts.size) * initial_energy - integrated_pack_power_ts)
