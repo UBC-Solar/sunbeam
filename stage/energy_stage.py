@@ -23,7 +23,7 @@ modules_in_pack = 32  # series
 class EnergyStage(Stage):
     @classmethod
     def get_stage_name(cls):
-        return "Energy"
+        return "energy"
 
     @staticmethod
     def dependencies():
