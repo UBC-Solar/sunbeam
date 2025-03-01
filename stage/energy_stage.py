@@ -5,6 +5,7 @@ from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalP
 from data_tools.collections import TimeSeries
 from prefect import task
 from scipy.interpolate import CubicSpline
+import numpy as np
 from typing import Callable
 
 
@@ -27,11 +28,11 @@ class EnergyStage(Stage):
 
     @staticmethod
     def dependencies():
-        return ["ingress"]
+        return ["ingress", "power"]
 
     @staticmethod
     @task(name="Energy")
-    def run(self, voltage_of_least_loader: FileLoader) -> tuple[FileLoader, ...]:
+    def run(self, voltage_of_least_loader: FileLoader, pack_power_loader: FileLoader) -> tuple[FileLoader, ...]:
         """
         Run the Energy stage, producing battery energy estimates using various techniques.
 
@@ -41,9 +42,10 @@ class EnergyStage(Stage):
 
         :param EnergyStage self: an instance of EnergyStage to be run
         :param FileLoader voltage_of_least_loader: loader to VoltageofLeast from Ingest
+        :param FileLoader pack_power_loader: loader to Pack Power from PowerStage
         :returns: EnergyVOLExtrapolated (FileLoader pointing to TimeSeries)
         """
-        return super().run(self,voltage_of_least_loader)
+        return super().run(self,voltage_of_least_loader, pack_power_loader)
 
     @property
     def event_name(self):
@@ -57,30 +59,71 @@ class EnergyStage(Stage):
 
         self._event_name = event_name
 
-    def extract(self, voltage_of_least_loader: FileLoader) -> tuple[Result]:
+    def extract(self, voltage_of_least_loader: FileLoader, pack_power_loader: FileLoader) -> tuple[Result, Result]:
         voltage_of_least_result: Result = voltage_of_least_loader()
+        pack_power_result: Result = pack_power_loader()
 
-        return (voltage_of_least_result,)
+        return voltage_of_least_result, pack_power_result
 
-    def transform(self, voltage_of_least_result) -> tuple[Result]:
+    def transform(self, voltage_of_least_result, pack_power_result) -> tuple[Result, Result, Result]:
+
+        try:
+            pack_power: TimeSeries = pack_power_result.unwrap().data
+            seconds_per_hour = 3600
+            integrated_pack_power_ts = pack_power.promote(np.cumsum(pack_power) * pack_power.period / seconds_per_hour)
+            integrated_pack_power_ts.name = "IntegratedPackPower"
+            integrated_pack_power_ts.units = "Wh"
+            integrated_pack_power = Result.Ok(integrated_pack_power_ts)
+        except UnwrappedError as e:
+            self.logger.error(f"Failed to unwrap pack power result! \n {e}")
+            integrated_pack_power = Result.Err(RuntimeError("Failed to process IntegratedPackPower!"))
+
         try:
             voltage_of_least: TimeSeries = voltage_of_least_result.unwrap().data
-
-            cell_wh_from_voltage: Callable = CubicSpline(voltage_wh_lookup[0], voltage_wh_lookup[1])
-            cell_wh= cell_wh_from_voltage(voltage_of_least)
-            extrapolated_pack_wh: TimeSeries = voltage_of_least.promote(cell_wh * cells_in_module * modules_in_pack)
-            extrapolated_pack_wh.name = "EnergyVOLExtrapolated"
-            extrapolated_pack_wh.units = "Wh"
-
-            energy_vol_extrapolated = Result.Ok(extrapolated_pack_wh)
-
+            vol_cell_wh_from_voltage: Callable = CubicSpline(voltage_wh_lookup[0], voltage_wh_lookup[1])
+            vol_cell_wh = vol_cell_wh_from_voltage(voltage_of_least)
+            energy_vol_extrapolated_ts: TimeSeries = voltage_of_least.promote(
+                vol_cell_wh * cells_in_module * modules_in_pack)
+            energy_vol_extrapolated_ts.name = "EnergyVOLExtrapolated"
+            energy_vol_extrapolated_ts.units = "Wh"
+            energy_vol_extrapolated = Result.Ok(energy_vol_extrapolated_ts)
         except UnwrappedError as e:
-            self.logger.error(f"Failed to unwrap result! \n {e}")
+            self.logger.error(f"Failed to unwrap voltage result! \n {e}")
             energy_vol_extrapolated = Result.Err(RuntimeError("Failed to process EnergyVOLExtrapolated!"))
 
-        return (energy_vol_extrapolated,)
+        try:
+            integrated_pack_power_ts = integrated_pack_power.unwrap().data
+            try:
+                energy_vol_extrapolated_ts = energy_vol_extrapolated.unwrap().data
+                initial_energy = energy_vol_extrapolated_ts[0.]  # float index indexes time axis
+                energy_from_integrated_power_ts = energy_vol_extrapolated_ts.promote(
+                    np.ones(energy_vol_extrapolated_ts.size) * initial_energy - integrated_pack_power_ts)
+                energy_from_integrated_power_ts.name = "EnergyFromIntegratedPower"
+                energy_from_integrated_power_ts.units = "Wh"
+                energy_from_integrated_power = Result.Ok(energy_from_integrated_power_ts)
+            except UnwrappedError as e:
+                self.logger.error(f"Failed to unwrap EnergyVOLExtrapolated result! \n {e}")
+                energy_from_integrated_power = Result.Err(RuntimeError("Failed to process EnergyFromIntegratedPower!"))
+        except UnwrappedError as e:
+            self.logger.error(f"Failed to unwrap IntegratedPackPower result! \n {e}")
+            energy_from_integrated_power = Result.Err(RuntimeError("Failed to process EnergyFromIntegratedPower!"))
 
-    def load(self, energy_vol_extrapolated) -> tuple[FileLoader]:
+        return integrated_pack_power, energy_vol_extrapolated, energy_from_integrated_power
+
+
+    def load(self, integrated_pack_power, energy_vol_extrapolated, energy_from_integrated_power) -> tuple[FileLoader, FileLoader, FileLoader]:
+        integrated_pack_power_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=EnergyStage.get_stage_name(),
+                name="IntegratedPackPower",
+            ),
+            file_type=FileType.TimeSeries,
+            data=integrated_pack_power.unwrap() if integrated_pack_power else None,
+            description = "The integral of pack power in watt-hours. Starts at zero for each event."
+        )
+
         energy_vol_extrapolated_file = File(
             canonical_path=CanonicalPath(
                 origin=self.context.title,
@@ -90,15 +133,38 @@ class EnergyStage(Stage):
             ),
             file_type=FileType.TimeSeries,
             data=energy_vol_extrapolated.unwrap() if energy_vol_extrapolated else None,
-            description = "Battery energy estimated using VoltageofLeast & SANYO NCR18650GA datasheet 2A discharge curve."
-                          "\nSee https://github.com/UBC-Solar/data_analysis/blob/main/soc_analysis/datasheet_voltage_soc/charge_voltage_energy.ipynb for details."
+            description="Battery energy estimated using VoltageofLeast & SANYO NCR18650GA datasheet 2A discharge curve. "
+                        "See https://github.com/UBC-Solar/data_analysis/blob/main/soc_analysis/datasheet_voltage_soc/charge_voltage_energy.ipynb for details."
         )
+
+        energy_from_integrated_power_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=EnergyStage.get_stage_name(),
+                name="EnergyFromIntegratedPower",
+            ),
+            file_type=FileType.TimeSeries,
+            data=energy_from_integrated_power.unwrap() if energy_from_integrated_power else None,
+            description="Estimated energy in the battery in watt-hours. The starting value is given by the starting"
+                        "value of EnergyVOLExtrapolated, then IntegratedPackPower is subtracted from this. "
+                        "This technique of determining battery energy is equivalent to 'coulomb counting'. "
+                        "Values may be smoother than EnergyVOLExtrapolated and more accurate in the short term, "
+                        "but can diverge from the truth over time as systematic error is integrated."
+                        "This value is also problematic if telemetry is missing values, as this will "
+                        "appear as if no power was used during this time."
+        )
+
+        integrated_pack_power_loader = self.context.data_source.store(integrated_pack_power_file)
+        self.logger.info(f"Successfully loaded IntegratedPackPower!")
 
         energy_vol_extrapolated_loader = self.context.data_source.store(energy_vol_extrapolated_file)
         self.logger.info(f"Successfully loaded EnergyVOLExtrapolated!")
 
+        energy_from_integrated_power_loader = self.context.data_source.store(energy_from_integrated_power_file)
+        self.logger.info(f"Successfully loaded EnergyFromIntegratedPower!")
 
-        return (energy_vol_extrapolated_loader,)
+        return integrated_pack_power_loader, energy_vol_extrapolated_loader, energy_from_integrated_power_loader
 
 
 stage_registry.register_stage(EnergyStage.get_stage_name(), EnergyStage)
