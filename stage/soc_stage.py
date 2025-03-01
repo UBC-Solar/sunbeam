@@ -1,5 +1,5 @@
 from data_tools.schema import FileLoader
-from stage.stage import Stage, StageResult
+from stage.stage import Stage
 from stage.stage_registry import stage_registry
 from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath
 from stage.context import Context
@@ -32,7 +32,7 @@ class SOCStage(Stage):
 
     @staticmethod
     @task(name="SoC")
-    def run(self, voltage_of_least_loader: FileLoader) -> StageResult:
+    def run(self, voltage_of_least_loader: FileLoader) -> tuple[FileLoader, ...]:
         """
         Run the SoC stage, producing State of Charge estimates using various techniques.
 
