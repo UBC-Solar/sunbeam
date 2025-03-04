@@ -43,7 +43,7 @@ class EnergyStage(Stage):
         :param EnergyStage self: an instance of EnergyStage to be run
         :param FileLoader voltage_of_least_loader: loader to VoltageofLeast from Ingest
         :param FileLoader pack_power_loader: loader to Pack Power from PowerStage
-        :returns: EnergyVOLExtrapolated (FileLoader pointing to TimeSeries)
+        :returns: EnergyVOLExtrapolated, IntegratedPackPower, EnergyFromIntegratedPower (all as FileLoaders pointing to TimeSeries)
         """
         return super().run(self,voltage_of_least_loader, pack_power_loader)
 
