@@ -62,7 +62,7 @@ class EfficiencyStage(Stage):
             instantaneous_efficiency_result = Result.Err(RuntimeError("Failed to process instantaneous efficiency!"))
 
         try:
-            instantaneous_efficiency_ts: TimeSeries = instantaneous_efficiency_result.unwrap().data
+            instantaneous_efficiency_ts: TimeSeries = instantaneous_efficiency_result.unwrap()
             integrated_efficiency_ts: TimeSeries = instantaneous_efficiency_ts.promote(
                 np.cumsum(instantaneous_efficiency_ts)
             )
