@@ -2,7 +2,7 @@
 events_description_file = "events.toml"
 ingress_description_file = "ingress.toml"
 stages_to_run = [
-    "energy"
+    "energy", "efficiency"
 ]
 
 [stage_data_source]

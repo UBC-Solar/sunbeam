@@ -26,14 +26,7 @@ class EfficiencyStage(Stage):
         :param FileLoader motor_power_loader: loader to Motor Power from PowerStage
         :returns: InstantaneousEfficiency (FileLoader pointing to TimeSeries)
         """
-        return super().run(
-            self,
-            total_pack_voltage_loader,
-            pack_current_loader,
-            motor_voltage_loader,
-            motor_current_loader,
-            motor_current_direction_loader
-        )
+        return super().run(self, vehicle_velocity_loader, motor_power_loader)
 
     @property
     def event_name(self):
@@ -47,97 +40,44 @@ class EfficiencyStage(Stage):
 
         self._event_name = event_name
 
-    def extract(self,
-            total_pack_voltage_loader: FileLoader,
-            pack_current_loader: FileLoader,
-            motor_voltage_loader: FileLoader,
-            motor_current_loader: FileLoader,
-            motor_current_direction_loader: FileLoader) -> tuple[Result, Result, Result, Result, Result]:
-        total_pack_voltage_result: Result = total_pack_voltage_loader()
-        pack_current_result: Result = pack_current_loader()
-        motor_voltage_result: Result = motor_voltage_loader()
-        motor_current_result: Result = motor_current_loader()
-        motor_current_direction_result: Result = motor_current_direction_loader()
+    def extract(self, vehicle_velocity_loader: FileLoader, motor_power_loader: FileLoader) -> tuple[Result, Result]:
+        vehicle_velocity_result: Result = vehicle_velocity_loader()
+        motor_power_result: Result = motor_power_loader()
 
-        return (total_pack_voltage_result, pack_current_result,
-                motor_voltage_result, motor_current_result, motor_current_direction_result)
+        return vehicle_velocity_result, motor_power_result
 
-    def transform(self,
-                  total_pack_voltage_result,
-                  pack_current_result,
-                  motor_voltage_result,
-                  motor_current_result,
-                  motor_current_direction_result) -> tuple[Result, Result]:
+    def transform(self, vehicle_velocity_result, motor_power_result) -> tuple[Result]:
         try:
-            motor_voltage: TimeSeries = motor_voltage_result.unwrap().data
-            motor_current: TimeSeries = motor_current_result.unwrap().data
-            motor_current_direction: TimeSeries = motor_current_direction_result.unwrap().data
-
-            # motor_current_direction is 1 if negative (regen) and 0 if positive (driving)
-            # the linear function -2x + 1 maps 1 to -1 and 0 to 1,
-            # resulting in a number that represents the sign/direction of the current
-            motor_current_sign = motor_current_direction * -2 + 1
-
-            motor_current, motor_voltage, motor_current_sign = TimeSeries.align(
-                motor_current, motor_voltage, motor_current_sign
-            )
-            motor_power = motor_current.promote(motor_current * motor_voltage * motor_current_sign)
-            motor_power.units = "W"
-            motor_power.name = "Motor Power"
-
-            motor_power = Result.Ok(motor_power)
-
+            vehicle_velocity_ts: TimeSeries = vehicle_velocity_result.unwrap().data
+            motor_power_ts: TimeSeries = motor_power_result.unwrap().data
+            vehicle_velocity_aligned, motor_power_aligned = TimeSeries.align(
+                vehicle_velocity_ts, motor_power_ts)
+            instantaneous_efficiency = vehicle_velocity_aligned.promote(vehicle_velocity_aligned / motor_power_aligned)
+            instantaneous_efficiency.units = "J/m"
+            instantaneous_efficiency.name = "Instantaneous Efficiency"
+            instantaneous_efficiency_result = Result.Ok(instantaneous_efficiency)
         except UnwrappedError as e:
             self.logger.error(f"Failed to unwrap result! \n {e}")
-            motor_power = Result.Err(RuntimeError("Failed to process motor power!"))
+            instantaneous_efficiency_result = Result.Err(RuntimeError("Failed to process instantaneous efficiency!"))
 
-        try:
-            total_pack_voltage: TimeSeries = total_pack_voltage_result.unwrap().data
-            pack_current: TimeSeries = pack_current_result.unwrap().data
+        return (instantaneous_efficiency_result,)
 
-            total_pack_voltage, pack_current = TimeSeries.align(total_pack_voltage, pack_current)
-            pack_power = total_pack_voltage.promote(total_pack_voltage * pack_current)
-            pack_power.units = "W"
-            pack_power.name = "Pack Power"
-
-            pack_power = Result.Ok(pack_power)
-
-        except UnwrappedError as e:
-            self.logger.error(f"Failed to unwrap result! \n {e}")
-            pack_power = Result.Err(RuntimeError("Failed to process pack power!"))
-
-        return pack_power, motor_power
-
-    def load(self, pack_power, motor_power) -> tuple[FileLoader, FileLoader]:
-        pack_power_file = File(
+    def load(self, instantaneous_efficiency_result) -> tuple[FileLoader]:
+        instantaneous_efficiency_file = File(
             canonical_path=CanonicalPath(
                 origin=self.context.title,
                 event=self.event_name,
-                source=PowerStage.get_stage_name(),
-                name="PackPower",
+                source=self.get_stage_name(),
+                name="InstantaneousEfficiency",
             ),
             file_type=FileType.TimeSeries,
-            data=pack_power.unwrap() if pack_power else None
+            data=instantaneous_efficiency_result.unwrap() if instantaneous_efficiency_result else None
         )
 
-        motor_power_file = File(
-            canonical_path=CanonicalPath(
-                origin=self.context.title,
-                event=self.event_name,
-                source=PowerStage.get_stage_name(),
-                name="MotorPower",
-            ),
-            file_type=FileType.TimeSeries,
-            data=motor_power.unwrap() if motor_power else None
-        )
+        instantaneous_efficiency_loader = self.context.data_source.store(instantaneous_efficiency_file)
+        self.logger.info(f"Successfully loaded InstantaneousEfficiency!")
 
-        pack_power_loader = self.context.data_source.store(pack_power_file)
-        self.logger.info(f"Successfully loaded PackPower!")
-
-        motor_power_loader = self.context.data_source.store(motor_power_file)
-        self.logger.info(f"Successfully loaded MotorPower!")
-
-        return pack_power_loader, motor_power_loader
+        return (instantaneous_efficiency_loader,)
 
 
-stage_registry.register_stage(PowerStage.get_stage_name(), PowerStage)
+stage_registry.register_stage(EfficiencyStage.get_stage_name(), EfficiencyStage)
