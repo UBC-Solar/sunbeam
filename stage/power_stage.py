@@ -26,12 +26,15 @@ class PowerStage(Stage):
         """
         Run the power stage, converting voltage and current data into power.
 
+        Note: Some influx keys are labeled 'Battery*' but these are indeed motor measurements, as they originate
+        from the MCB
+
         :param self: an instance of PowerStage to be run
-        :param FileLoader total_pack_voltage_loader: loader to TotalPackVoltage from Ingest
-        :param FileLoader pack_current_loader: loader to PackCurrent from Ingest
-        :param FileLoader motor_voltage_loader: loader to MotorVoltage from Ingest
-        :param FileLoader motor_current_loader: loader to MotorCurrent from Ingest
-        :param FileLoader motor_current_direction_loader: loader to MotorCurrentDirection from Ingest
+        :param FileLoader total_pack_voltage_loader: loader to TotalPackVoltage from Ingress
+        :param FileLoader pack_current_loader: loader to PackCurrent from Ingress
+        :param FileLoader motor_voltage_loader: loader to BatteryVoltage from Ingress
+        :param FileLoader motor_current_loader: loader to BatteryCurrent from Ingress
+        :param FileLoader motor_current_direction_loader: loader to BatteryCurrentDirection from Ingress
         :returns: PackPower (FileLoader pointing to TimeSeries), MotorPower (FileLoader pointing to TimeSeries)
         """
         return super().run(

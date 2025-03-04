@@ -23,7 +23,7 @@ class EnergyStage(Stage):
         Run the power stage, converting voltage and current data into power.
 
         :param self: an instance of PowerStage to be run
-        :param FileLoader pack_power_loader: loader to PackPower from Power
+        :param FileLoader pack_power_loader: loader to PackPower from Power Stage
         :returns: PackEnergy (TimeSeries)
         """
         return super().run(self, pack_power_loader)
