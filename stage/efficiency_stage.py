@@ -7,6 +7,23 @@ from prefect import task
 import numpy as np
 
 
+def windowed_mean(arr: np.ndarray, factor:int, allow_truncate=False) -> np.ndarray:
+    """Returns a new array representing the windowed mean of ``arr``.
+
+    :param ndarray arr: The array for which to compute a windowed mean.
+    :param int factor: The number of indices grouped into each window.
+        If ``allow_truncate`` is False, ``arr.size`` must be divisible by ``factor``.
+    :param bool allow_truncate: If true, allow this function to trim the end of ``arr``
+        until it is a multiple of ``factor``.
+    :return: A new array representing the windowed mean of ``arr``.
+    """
+    assert arr.ndim == 1, "can only down-sample 1-d array"
+    if allow_truncate: arr = arr[:-(arr.size % factor)]
+    else: assert arr.size % factor == 0, "array length must be a multiple of down-sampling factor"
+    reshaped = np.reshape(arr, (-1, factor))
+    return np.nanmean(reshaped, axis=1)
+
+
 class EfficiencyStage(Stage):
     @classmethod
     def get_stage_name(cls):
@@ -25,7 +42,7 @@ class EfficiencyStage(Stage):
         :param self: an instance of EfficiencyStage to be run
         :param FileLoader vehicle_velocity_loader: loader to VehicleVelocity from Ingest
         :param FileLoader motor_power_loader: loader to Motor Power from PowerStage
-        :returns: InstantaneousEfficiency, IntegratedEfficiency (FileLoaders pointing to TimeSeries)
+        :returns: Efficiency5Minute, Efficiency1Hour (FileLoaders pointing to TimeSeries)
         """
         return super().run(self, vehicle_velocity_loader, motor_power_loader)
 
@@ -47,66 +64,71 @@ class EfficiencyStage(Stage):
 
         return vehicle_velocity_result, motor_power_result
 
+    @staticmethod
+    def get_periodic_efficiency(vehicle_velocity: TimeSeries, motor_power: TimeSeries, period_seconds: float) -> TimeSeries:
+        vehicle_velocity_aligned, motor_power_aligned = TimeSeries.align(
+            vehicle_velocity, motor_power)
+        # (seconds/window) / (seconds/index) == indices/window
+        downsample_factor = int(period_seconds / vehicle_velocity_aligned.period)
+        vehicle_velocity_averaged: np.ndarray = windowed_mean(
+            vehicle_velocity_aligned, downsample_factor, allow_truncate=True)
+        motor_power_averaged: np.ndarray = windowed_mean(
+            motor_power_aligned, downsample_factor, allow_truncate=True)
+        efficiency = vehicle_velocity_aligned.promote(vehicle_velocity_averaged / motor_power_averaged)
+        efficiency.meta['period'] = period_seconds  # important: update the period for this TimeSeries
+        efficiency.units = "J/m"
+
     def transform(self, vehicle_velocity_result, motor_power_result) -> tuple[Result, Result]:
         try:
             vehicle_velocity_ts: TimeSeries = vehicle_velocity_result.unwrap().data
             motor_power_ts: TimeSeries = motor_power_result.unwrap().data
-            vehicle_velocity_aligned, motor_power_aligned = TimeSeries.align(
-                vehicle_velocity_ts, motor_power_ts)
-            instantaneous_efficiency_ts = vehicle_velocity_aligned.promote(vehicle_velocity_aligned / motor_power_aligned)
-            instantaneous_efficiency_ts.units = "J/m"
-            instantaneous_efficiency_ts.name = "Instantaneous Efficiency"
-            instantaneous_efficiency_result = Result.Ok(instantaneous_efficiency_ts)
+
+            efficiency_5min = self.get_periodic_efficiency(vehicle_velocity_ts, motor_power_ts, 300)
+            efficiency_5min.name = "Efficiency5Minute"
+            efficiency_5min_result = Result.Ok(efficiency_5min)
+
+            efficiency_1h = self.get_periodic_efficiency(vehicle_velocity_ts, motor_power_ts, 3600)
+            efficiency_1h.name = "Efficiency1Hour"
+            efficiency_1h_result = Result.Ok(efficiency_1h)
         except UnwrappedError as e:
             self.logger.error(f"Failed to unwrap result! \n {e}")
-            instantaneous_efficiency_result = Result.Err(RuntimeError("Failed to process instantaneous efficiency!"))
+            efficiency_5min_result = Result.Err(RuntimeError("Failed to process Efficiency5Minute!"))
+            efficiency_1h_result = Result.Err(RuntimeError("Failed to process Efficiency1Hour!"))
 
-        try:
-            instantaneous_efficiency_ts: TimeSeries = instantaneous_efficiency_result.unwrap()
-            integrated_efficiency_ts: TimeSeries = instantaneous_efficiency_ts.promote(
-                np.cumsum(instantaneous_efficiency_ts)
-            )
-            integrated_efficiency_ts.units = "J/m"
-            integrated_efficiency_ts.name = "Integrated Efficiency"
-            integrated_efficiency_result = Result.Ok(integrated_efficiency_ts)
-        except UnwrappedError as e:
-            self.logger.error(f"Failed to unwrap result! \n {e}")
-            integrated_efficiency_result = Result.Err(RuntimeError("Failed to process integrated efficiency!"))
+        return efficiency_5min_result, efficiency_1h_result
 
-        return instantaneous_efficiency_result, integrated_efficiency_result
-
-    def load(self, instantaneous_efficiency_result, integrated_efficiency_result) -> tuple[FileLoader, FileLoader]:
-        instantaneous_efficiency_file = File(
+    def load(self, efficiency_5min_result, efficiency_1h_result) -> tuple[FileLoader, FileLoader]:
+        efficiency_5min_file = File(
             canonical_path=CanonicalPath(
                 origin=self.context.title,
                 event=self.event_name,
                 source=self.get_stage_name(),
-                name="InstantaneousEfficiency",
+                name="Efficiency5Minute",
             ),
             file_type=FileType.TimeSeries,
-            data=instantaneous_efficiency_result.unwrap() if instantaneous_efficiency_result else None,
+            data=efficiency_5min_result.unwrap() if efficiency_5min_result else None,
             description="" # TODO
         )
 
-        integrated_efficiency_file = File(
+        efficiency_1h_file = File(
             canonical_path=CanonicalPath(
                 origin=self.context.title,
                 event=self.event_name,
                 source=self.get_stage_name(),
-                name="IntegratedEfficiency",
+                name="Efficiency1Hour",
             ),
             file_type=FileType.TimeSeries,
-            data=integrated_efficiency_result.unwrap() if integrated_efficiency_result else None,
+            data=efficiency_1h_result.unwrap() if efficiency_1h_result else None,
             description=""  # TODO
         )
 
-        instantaneous_efficiency_loader = self.context.data_source.store(instantaneous_efficiency_file)
-        self.logger.info(f"Successfully loaded InstantaneousEfficiency!")
+        efficiency_5min_loader = self.context.data_source.store(efficiency_5min_file)
+        self.logger.info(f"Successfully loaded Efficiency1Hour!")
 
-        integrated_efficiency_loader = self.context.data_source.store(integrated_efficiency_file)
-        self.logger.info(f"Successfully loaded IntegratedEfficiency!")
+        efficiency_1h_loader = self.context.data_source.store(efficiency_1h_file)
+        self.logger.info(f"Successfully loaded Efficiency5Minute!")
 
-        return instantaneous_efficiency_loader, integrated_efficiency_loader
+        return efficiency_5min_loader, efficiency_1h_loader
 
 
 stage_registry.register_stage(EfficiencyStage.get_stage_name(), EfficiencyStage)
