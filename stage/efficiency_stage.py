@@ -77,6 +77,7 @@ class EfficiencyStage(Stage):
         efficiency = vehicle_velocity_aligned.promote(vehicle_velocity_averaged / motor_power_averaged)
         efficiency.meta['period'] = period_seconds  # important: update the period for this TimeSeries
         efficiency.units = "J/m"
+        return efficiency
 
     def transform(self, vehicle_velocity_result, motor_power_result) -> tuple[Result, Result]:
         try:
