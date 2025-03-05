@@ -64,8 +64,7 @@ class EfficiencyStage(Stage):
 
         return vehicle_velocity_result, motor_power_result
 
-    @staticmethod
-    def get_periodic_efficiency(vehicle_velocity: TimeSeries, motor_power: TimeSeries, period_seconds: float) -> TimeSeries:
+    def get_periodic_efficiency(self, vehicle_velocity: TimeSeries, motor_power: TimeSeries, period_seconds: float) -> TimeSeries:
         vehicle_velocity_aligned, motor_power_aligned = TimeSeries.align(
             vehicle_velocity, motor_power)
 
