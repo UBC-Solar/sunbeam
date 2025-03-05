@@ -95,11 +95,11 @@ class EfficiencyStage(Stage):
                                        | (motor_power_averaged < min_avg_watts)
                                        | (motor_power_averaged > max_avg_watts))
         self.logger.info(f"motor_power_averaged: "
-                          f"min: {motor_power_averaged.min} at index {motor_power_averaged.argmin()}"
-                          f"max: {motor_power_averaged.min} at index {motor_power_averaged.argmax()}")
+                          f"min: {motor_power_averaged.min()} at index {motor_power_averaged.argmin()}"
+                          f"max: {motor_power_averaged.max()} at index {motor_power_averaged.argmax()}")
         self.logger.info(f"vehicle_velocity_averaged: "
-                          f"min: {vehicle_velocity_averaged.min} at index {vehicle_velocity_averaged.argmin()}"
-                          f"max: {vehicle_velocity_averaged.min} at index {vehicle_velocity_averaged.argmax()}")
+                          f"min: {vehicle_velocity_averaged.min()} at index {vehicle_velocity_averaged.argmin()}"
+                          f"max: {vehicle_velocity_averaged.max()} at index {vehicle_velocity_averaged.argmax()}")
         return bad_values_mask
 
     def transform(self, vehicle_velocity_result, motor_power_result) -> tuple[Result, Result]:
