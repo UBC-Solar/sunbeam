@@ -78,7 +78,7 @@ class EfficiencyStage(Stage):
         efficiency_array = motor_power_averaged / vehicle_velocity_averaged
 
         # clean bad values by setting them to zero
-        bad_values_mask = EfficiencyStage.get_anomaly_mask(motor_power_averaged, vehicle_velocity_averaged)
+        bad_values_mask = self.get_anomaly_mask(motor_power_averaged, vehicle_velocity_averaged)
         efficiency_array[bad_values_mask] = 0
         efficiency = vehicle_velocity_aligned.promote(efficiency_array)
 
