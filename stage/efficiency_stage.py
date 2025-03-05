@@ -74,7 +74,7 @@ class EfficiencyStage(Stage):
             np.array(vehicle_velocity_aligned), downsample_factor, allow_truncate=True)
         motor_power_averaged: np.ndarray = windowed_mean(
             np.array(motor_power_aligned), downsample_factor, allow_truncate=True)
-        efficiency = vehicle_velocity_aligned.promote(vehicle_velocity_averaged / motor_power_averaged)
+        efficiency = vehicle_velocity_aligned.promote(motor_power_averaged / vehicle_velocity_averaged)
         efficiency.meta['period'] = period_seconds  # important: update the period for this TimeSeries
         efficiency.units = "J/m"
         return efficiency
