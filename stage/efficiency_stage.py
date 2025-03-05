@@ -78,6 +78,16 @@ class EfficiencyStage(Stage):
         efficiency_array = motor_power_averaged / vehicle_velocity_averaged
 
         # clean bad values by setting them to zero
+        bad_values_mask = EfficiencyStage.get_anomaly_mask(motor_power_averaged, vehicle_velocity_averaged)
+        efficiency_array[bad_values_mask] = 0
+        efficiency = vehicle_velocity_aligned.promote(efficiency_array)
+
+        efficiency.meta['period'] = period_seconds  # important: update the period for this TimeSeries
+        efficiency.units = "J/m"
+        return efficiency
+
+    @staticmethod
+    def get_anomaly_mask(motor_power_averaged, vehicle_velocity_averaged):
         min_avg_meters_per_sec = 0
         max_avg_meters_per_sec = 50
         min_avg_watts = 0
@@ -86,12 +96,7 @@ class EfficiencyStage(Stage):
                                        | vehicle_velocity_averaged < min_avg_meters_per_sec
                                        | motor_power_averaged < min_avg_watts
                                        | motor_power_averaged > max_avg_watts)
-        efficiency_array[bad_values_mask] = 0
-        efficiency = vehicle_velocity_aligned.promote(efficiency_array)
-
-        efficiency.meta['period'] = period_seconds  # important: update the period for this TimeSeries
-        efficiency.units = "J/m"
-        return efficiency
+        return bad_values_mask
 
     def transform(self, vehicle_velocity_result, motor_power_result) -> tuple[Result, Result]:
         try:
