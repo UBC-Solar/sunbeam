@@ -118,6 +118,10 @@ class EfficiencyStage(Stage):
                     efficiency_lap_dist[array_index] = np.nan  # invalid data
                 else:
                     efficiency_lap_dist[array_index] = avg_power / avg_velocity
+                sum_power = 0
+                sum_velocity = 0
+                num_vals = 0
+                prev_lap_idx += 1
             sum_power += mp_aligned_arr[array_index]
             sum_velocity += vv_aligned_arr[array_index]
             num_vals += 1
