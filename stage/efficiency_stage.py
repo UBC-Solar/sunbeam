@@ -97,9 +97,10 @@ class EfficiencyStage(Stage):
         return bad_values_mask
 
     @staticmethod
-    def get_lap_dist_efficiency(vehicle_velocity_aligned, motor_power_aligned, lap_len_m) -> np.ndarray:
+    def get_lap_dist_efficiency(vehicle_velocity_aligned, motor_power_aligned, lap_len_m, logger=None) -> np.ndarray:
         integrated_velocity_m = np.cumsum(vehicle_velocity_aligned) * vehicle_velocity_aligned.period
         lap_index: list = [dist_m // lap_len_m for dist_m in integrated_velocity_m]
+        if logger is not None: logger.info(lap_index)
         efficiency_lap_dist = np.zeros(len(lap_index))
         vv_aligned_arr = np.array(vehicle_velocity_aligned)
         mp_aligned_arr = np.array(motor_power_aligned)
@@ -143,7 +144,7 @@ class EfficiencyStage(Stage):
             efficiency_1h_result = Result.Ok(efficiency_1h)
 
             ncm_lap_len_m = 5040.  # TODO: get based on from config?
-            efficiency_lap_dist: np.ndarray = self.get_lap_dist_efficiency(vehicle_velocity_aligned, motor_power_aligned, ncm_lap_len_m)
+            efficiency_lap_dist: np.ndarray = self.get_lap_dist_efficiency(vehicle_velocity_aligned, motor_power_aligned, ncm_lap_len_m, logger=self.logger)
             efficiency_lap_dist_result = Result.Ok(efficiency_lap_dist)
         except UnwrappedError as e:
             self.logger.error(f"Failed to unwrap result! \n {e}")
