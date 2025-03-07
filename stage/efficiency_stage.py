@@ -121,7 +121,7 @@ class EfficiencyStage(Stage):
                 sum_power = 0
                 sum_velocity = 0
                 num_vals = 0
-                prev_lap_idx += 1
+                prev_lap_idx = lap_idx
             sum_power += mp_aligned_arr[array_index]
             sum_velocity += vv_aligned_arr[array_index]
             num_vals += 1
