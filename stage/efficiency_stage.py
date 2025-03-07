@@ -100,7 +100,7 @@ class EfficiencyStage(Stage):
     def get_lap_dist_efficiency(vehicle_velocity_aligned, motor_power_aligned, lap_len_m, logger=None) -> np.ndarray:
         integrated_velocity_m = np.cumsum(vehicle_velocity_aligned) * vehicle_velocity_aligned.period
         lap_index: list = [dist_m // lap_len_m for dist_m in integrated_velocity_m]
-        if logger is not None: logger.info(lap_index)
+        if logger is not None: logger.info(f"{lap_index[::1000]}")
         efficiency_lap_dist = np.zeros(len(lap_index))
         vv_aligned_arr = np.array(vehicle_velocity_aligned)
         mp_aligned_arr = np.array(motor_power_aligned)
