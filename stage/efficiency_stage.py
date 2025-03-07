@@ -74,11 +74,11 @@ class EfficiencyStage(Stage):
             np.array(vehicle_velocity_aligned), downsample_factor, allow_truncate=True)
         motor_power_averaged: np.ndarray = windowed_mean(
             np.array(motor_power_aligned), downsample_factor, allow_truncate=True)
-        efficiency_array = motor_power_averaged / vehicle_velocity_averaged
+        efficiency_array = motor_power_averaged / vehicle_velocity_averaged  # (J/s) / (m/s) = J/m
 
         # clean bad values by setting them to zero
         bad_values_mask = self.get_anomaly_mask(motor_power_averaged, vehicle_velocity_averaged)
-        efficiency_array[bad_values_mask] = 0
+        efficiency_array[bad_values_mask] = np.nan
         efficiency = vehicle_velocity_aligned.promote(efficiency_array)
 
         efficiency.meta['period'] = period_seconds  # important: update the period for this TimeSeries
@@ -86,7 +86,7 @@ class EfficiencyStage(Stage):
         return efficiency
 
     def get_anomaly_mask(self, motor_power_averaged: np.ndarray, vehicle_velocity_averaged: np.ndarray) -> np.ndarray:
-        min_avg_meters_per_sec = 0
+        min_avg_meters_per_sec = 2
         max_avg_meters_per_sec = 50
         min_avg_watts = 0
         max_avg_watts = 10_000
