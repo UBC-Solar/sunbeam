@@ -97,11 +97,10 @@ class EfficiencyStage(Stage):
         return bad_values_mask
 
     @staticmethod
-    def get_lap_dist_efficiency(vehicle_velocity_aligned, motor_power_aligned, lap_len_m, logger=None) -> np.ndarray:
+    def get_lap_dist_efficiency(vehicle_velocity_aligned, motor_power_aligned, lap_len_m) -> np.ndarray:
         integrated_velocity_m = np.cumsum(vehicle_velocity_aligned) * vehicle_velocity_aligned.period
-        lap_index: list = [dist_m // lap_len_m for dist_m in integrated_velocity_m]
-        if logger is not None: logger.info(f"{lap_index[::1000]}")
-        efficiency_lap_dist = np.zeros(len(lap_index))
+        lap_index: list = [int(dist_m // lap_len_m) for dist_m in integrated_velocity_m]
+        efficiency_lap_dist = np.zeros(max(lap_index) + 1)
         vv_aligned_arr = np.array(vehicle_velocity_aligned)
         mp_aligned_arr = np.array(motor_power_aligned)
 
@@ -116,9 +115,9 @@ class EfficiencyStage(Stage):
                 avg_velocity = sum_velocity / num_vals
                 if ((avg_velocity > max_avg_meters_per_sec) | (avg_velocity < min_avg_meters_per_sec)
                         | (avg_power < min_avg_watts) | (avg_power > max_avg_watts)):
-                    efficiency_lap_dist[array_index] = np.nan  # invalid data
+                    efficiency_lap_dist[lap_idx] = np.nan  # invalid data
                 else:
-                    efficiency_lap_dist[array_index] = avg_power / avg_velocity
+                    efficiency_lap_dist[lap_idx] = avg_power / avg_velocity
                 sum_power = 0
                 sum_velocity = 0
                 num_vals = 0
@@ -144,7 +143,7 @@ class EfficiencyStage(Stage):
             efficiency_1h_result = Result.Ok(efficiency_1h)
 
             ncm_lap_len_m = 5040.  # TODO: get based on from config?
-            efficiency_lap_dist: np.ndarray = self.get_lap_dist_efficiency(vehicle_velocity_aligned, motor_power_aligned, ncm_lap_len_m, logger=self.logger)
+            efficiency_lap_dist: np.ndarray = self.get_lap_dist_efficiency(vehicle_velocity_aligned, motor_power_aligned, ncm_lap_len_m)
             efficiency_lap_dist_result = Result.Ok(efficiency_lap_dist)
         except UnwrappedError as e:
             self.logger.error(f"Failed to unwrap result! \n {e}")
