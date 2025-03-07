@@ -45,7 +45,7 @@ def run_sunbeam(git_target="pipeline"):
         pack_energy, = EnergyStage.run(energy_stage, pack_power)
 
         efficiency_stage: EfficiencyStage = EfficiencyStage(event_name)
-        efficiency_5min, efficiency_1h = EfficiencyStage.run(
+        efficiency_5min, efficiency_1h, efficiency_lap_dist = EfficiencyStage.run(
             efficiency_stage,
             ingress_outputs[event_name]["VehicleVelocity"],
             motor_power
