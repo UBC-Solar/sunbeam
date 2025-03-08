@@ -189,8 +189,7 @@ class IngressStage(Stage):
                         "data": queried_data,
                         "units": target.units,
                         "period": 1 / target.frequency,
-                        "description": target.description,
-                        "car": "Brightside"
+                        "description": target.description
                     })
 
                     self.logger.info(f"Successfully extracted time series data for {target.name} for {event.name}!")
@@ -232,7 +231,8 @@ class IngressStage(Stage):
                         )
 
                         time_series.meta = {
-                            "description": target["description"]
+                            "description": target["description"],
+                            "car": "Brightside"
                         }
 
                         file = File(
