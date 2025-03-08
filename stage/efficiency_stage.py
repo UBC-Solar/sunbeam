@@ -186,7 +186,7 @@ class EfficiencyStage(Stage):
                 source=self.get_stage_name(),
                 name="EfficiencyLapDist",
             ),
-            file_type=FileType.TimeSeries,
+            file_type=FileType.TimeSeries, # TODO set to ndarray
             data=efficiency_lap_dist_result.unwrap() if efficiency_lap_dist_result else None,
             description=""  # TODO
         )
