@@ -42,6 +42,11 @@ def run_sunbeam(git_target="pipeline"):
         )
 
         energy_stage: EnergyStage = EnergyStage(event_name)
+        integrated_pack_power, energy_vol_extrapolated, energy_from_integrated_power = EnergyStage.run(
+            energy_stage,
+            ingress_outputs[event_name]["VoltageofLeast"],
+            pack_power
+        )
         pack_energy, = EnergyStage.run(energy_stage, pack_power)
 
         efficiency_stage: EfficiencyStage = EfficiencyStage(event_name)
