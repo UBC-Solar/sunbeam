@@ -230,10 +230,7 @@ class IngressStage(Stage):
                             units=units
                         )
 
-                        time_series.meta = {
-                            "description": target["description"],
-                            "car": "Brightside"
-                        }
+                        time_series.meta.update({"description": target["description"]})
 
                         file = File(
                             canonical_path=CanonicalPath(
