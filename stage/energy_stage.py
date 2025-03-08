@@ -40,6 +40,7 @@ class EnergyStage(Stage):
             Battery energy estimated using VoltageofLeast & SANYO NCR18650GA datasheet 2A discharge curve.
             See https://github.com/UBC-Solar/data_analysis/blob/main/soc_analysis/datasheet_voltage_soc/charge_voltage_energy.ipynb for details.
 
+
         :param EnergyStage self: an instance of EnergyStage to be run
         :param FileLoader voltage_of_least_loader: loader to VoltageofLeast from Ingest
         :param FileLoader pack_power_loader: loader to Pack Power from PowerStage
