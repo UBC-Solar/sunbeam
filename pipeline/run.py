@@ -5,7 +5,6 @@ from data_source import DataSourceFactory
 from stage import Context, PowerStage, IngressStage, EnergyStage
 from pipeline.configure import build_config, build_stage_graph
 
-
 logger = SunbeamLogger("sunbeam")
 
 
@@ -41,8 +40,11 @@ def run_sunbeam(git_target="pipeline"):
         )
 
         energy_stage: EnergyStage = EnergyStage(event_name)
-        pack_energy, = EnergyStage.run(energy_stage, pack_power)
-
+        integrated_pack_power, energy_vol_extrapolated, energy_from_integrated_power = EnergyStage.run(
+            energy_stage,
+            ingress_outputs[event_name]["VoltageofLeast"],
+            pack_power
+        )
 
 if __name__ == "__main__":
     from dotenv import load_dotenv
