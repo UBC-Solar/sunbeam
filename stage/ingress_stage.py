@@ -8,6 +8,8 @@ from data_tools.collections.time_series import TimeSeries
 from typing import List, Dict
 import traceback
 from prefect import task
+import datetime
+import concurrent.futures
 
 
 class IngressStage(Stage):
@@ -84,27 +86,35 @@ class IngressStage(Stage):
                 raise StageError(self.get_stage_name(), f"Did not recognize {config["fs"]} as a valid Ingress "
                                                         f"stage data source!")
 
+    def _fetch_from_influxdb(self, event, target):
+        try:
+            queried_data: Result = self._ingress_data_source.get(CanonicalPath(
+                origin=self._ingress_origin,
+                source=self.get_stage_name(),
+                event=event.name,
+                name=target.field
+            )).unwrap()
+
+            return event.name, target.name, Result.Ok(queried_data)
+
+        except UnwrappedError as e:
+            self.logger.error(f"Failed to find cached time series data for {target.name} for {event.name}: "
+                              f"{traceback.format_exc()}")
+
+            return event.name, target.name, Result.Err(e)
+
     def _extract_existing(self, targets: List[TimeSeriesTarget], events: List[Event]) -> tuple[Dict[str, Dict[str, Result]]]:
         extracted_time_series_data = {}
 
         for event in events:
             extracted_time_series_data[event.name] = {}
 
-            for target in targets:
-                try:
-                    queried_data: Result = self._ingress_data_source.get(CanonicalPath(
-                        origin=self._ingress_origin,
-                        source=self.get_stage_name(),
-                        event=event.name,
-                        name=target.field
-                    )).unwrap()
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = {executor.submit(self._fetch_data, event, target): target for target in targets}
 
-                    extracted_time_series_data[event.name][target.name] = Result.Ok(queried_data)
-
-                except UnwrappedError as e:
-                    extracted_time_series_data[event.name][target.name] = Result.Err(e)
-                    self.logger.error(f"Failed to find cached time series data for {target.name} for {event.name}: "
-                                      f"{traceback.format_exc()}")
+            for future in concurrent.futures.as_completed(futures):
+                event_name, target_name, result = future.result()
+                extracted_time_series_data[event_name][target_name] = result
 
         return (extracted_time_series_data,)
 
@@ -158,6 +168,12 @@ class IngressStage(Stage):
 
             for target in targets:
                 try:
+                    fake_start_time = "2024-07-16T17:00:00Z"
+                    now = datetime.datetime.now(datetime.UTC)
+                    timestamp = datetime.datetime.strptime(fake_start_time, "%Y-%m-%dT%H:%M:%SZ")
+                    updated_timestamp = timestamp.replace(minute=now.minute, second=now.second)
+                    updated_timestamp_str = updated_timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
+
                     queried_data = self._ingress_data_source.get(
                         CanonicalPath(
                             origin=target.bucket,
@@ -165,8 +181,8 @@ class IngressStage(Stage):
                             event=target.measurement,
                             name=target.field
                         ),
-                        start=event.start_as_iso_str,
-                        stop=event.stop_as_iso_str
+                        start=fake_start_time,
+                        stop=updated_timestamp_str
                     ).unwrap()
 
                     extracted_time_series_data[event.name][target.name] = Result.Ok({
