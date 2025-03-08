@@ -32,7 +32,7 @@ class EnergyStage(Stage):
 
     @staticmethod
     @task(name="Energy")
-    def run(self, voltage_of_least_loader: FileLoader, pack_power_loader: FileLoader) -> tuple[FileLoader, ...]:
+    def run(self, voltage_of_least_loader: FileLoader, pack_power_loader: FileLoader) -> tuple[FileLoader, FileLoader, FileLoader]:
         """
         Run the Energy stage, producing battery energy estimates using various techniques.
 
