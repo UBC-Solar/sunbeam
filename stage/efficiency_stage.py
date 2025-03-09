@@ -164,7 +164,9 @@ class EfficiencyStage(Stage):
             ),
             file_type=FileType.TimeSeries,
             data=efficiency_5min_result.unwrap() if efficiency_5min_result else None,
-            description="" # TODO
+            description = "Driving efficiency in J/m, computed as avg_motor_power / avg_vehicle_velocity with values"
+                          "averaged over 5-minute periods. Values are np.nan where mean velocity is outside"
+                          "the range [2, 50] m/s or if mean power is outside the range [0, 10] kW."
         )
 
         efficiency_1h_file = File(
@@ -176,7 +178,9 @@ class EfficiencyStage(Stage):
             ),
             file_type=FileType.TimeSeries,
             data=efficiency_1h_result.unwrap() if efficiency_1h_result else None,
-            description=""  # TODO
+            description="Driving efficiency in J/m, computed as avg_motor_power / avg_vehicle_velocity with values"
+                        "averaged over 1-hour periods. Values are np.nan where mean velocity is outside"
+                        "the range [2, 50] m/s or if mean power is outside the range [0, 10] kW."
         )
 
         efficiency_lap_dist_file = File(
@@ -188,7 +192,15 @@ class EfficiencyStage(Stage):
             ),
             file_type=FileType.TimeSeries, # TODO set to ndarray
             data=efficiency_lap_dist_result.unwrap() if efficiency_lap_dist_result else None,
-            description=""  # TODO
+            description="Driving efficiency in J/m, computed as avg_motor_power / avg_vehicle_velocity with values"
+                        "averaged over each lap. The lap splitting calculation starts by integrating VehicelVelocity to"
+                        "get total distance as a function over time. Then, the values are split into lengths of 5.04km"
+                        "as this is the length of the FSGP track. Then, avg_motor_power & avg_vehicle_velocity are then"
+                        "taken over the timespan for each given lap. Since there is some error in VehicleVelocity and"
+                        "not all distance travelled is along the track, this should not be relied upon to exactly align"
+                        "with real lap times. However, it is a decent estimate: it predicts 48 laps for FSGP day 1"
+                        "where the real number was 46. Values are np.nan where mean velocity is outside"
+                        "the range [2, 50] m/s or if mean power is outside the range [0, 10] kW."
         )
 
         efficiency_5min_loader = self.context.data_source.store(efficiency_5min_file)
