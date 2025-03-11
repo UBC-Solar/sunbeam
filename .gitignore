@@ -8,3 +8,4 @@ db/
 
 **/*.log
 **/*.bin
+**/__pycache__/
