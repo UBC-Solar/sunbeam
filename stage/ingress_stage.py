@@ -8,7 +8,6 @@ from data_tools.collections.time_series import TimeSeries
 from typing import List, Dict
 import traceback
 from prefect import task
-import datetime
 import concurrent.futures
 
 
