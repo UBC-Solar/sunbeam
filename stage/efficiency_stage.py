@@ -11,6 +11,8 @@ max_avg_meters_per_sec = 50
 min_avg_watts = 0
 max_avg_watts = 10_000
 
+ncm_lap_len_m = 5040.
+
 def windowed_mean(arr: np.ndarray, factor:int, allow_truncate=False) -> np.ndarray:
     """Returns a new array representing the windowed mean of ``arr``.
 
@@ -142,7 +144,6 @@ class EfficiencyStage(Stage):
             efficiency_1h.name = "Efficiency1Hour"
             efficiency_1h_result = Result.Ok(efficiency_1h)
 
-            ncm_lap_len_m = 5040.  # TODO: get based on from config?
             efficiency_lap_dist: np.ndarray = self.get_lap_dist_efficiency(vehicle_velocity_aligned, motor_power_aligned, ncm_lap_len_m)
             efficiency_lap_dist_result = Result.Ok(efficiency_lap_dist)
         except UnwrappedError as e:
@@ -190,7 +191,7 @@ class EfficiencyStage(Stage):
                 source=self.get_stage_name(),
                 name="EfficiencyLapDist",
             ),
-            file_type=FileType.TimeSeries, # TODO set to ndarray
+            file_type=FileType.TimeSeries,  # actually an ndarray but this is not yet supported
             data=efficiency_lap_dist_result.unwrap() if efficiency_lap_dist_result else None,
             description="Driving efficiency in J/m, computed as avg_motor_power / avg_vehicle_velocity with values"
                         "averaged over each lap. The lap splitting calculation starts by integrating VehicelVelocity to"
