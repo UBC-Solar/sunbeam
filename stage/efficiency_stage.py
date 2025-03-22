@@ -13,7 +13,8 @@ max_avg_watts = 10_000
 
 ncm_lap_len_m = 5040.
 
-def windowed_mean(arr: np.ndarray, factor:int, allow_truncate=False) -> np.ndarray:
+
+def windowed_mean(arr: np.ndarray, factor: int, allow_truncate=False) -> np.ndarray:
     """Returns a new array representing the windowed mean of ``arr``.
 
     :param ndarray arr: The array for which to compute a windowed mean.
@@ -24,8 +25,10 @@ def windowed_mean(arr: np.ndarray, factor:int, allow_truncate=False) -> np.ndarr
     :return: A new array representing the windowed mean of ``arr``.
     """
     assert arr.ndim == 1, "can only down-sample 1-d array"
-    if allow_truncate: arr = arr[:-(arr.size % factor)]
-    else: assert arr.size % factor == 0, "array length must be a multiple of down-sampling factor"
+    if allow_truncate:
+        arr = arr[:-(arr.size % factor)]
+    else:
+        assert arr.size % factor == 0, "array length must be a multiple of down-sampling factor"
     reshaped = np.reshape(arr, (-1, factor))
     return np.nanmean(reshaped, axis=1)
 
@@ -71,14 +74,25 @@ class EfficiencyStage(Stage):
         return vehicle_velocity_result, motor_power_result
 
     @staticmethod
-    def get_periodic_efficiency(vehicle_velocity_aligned: TimeSeries, motor_power_aligned: TimeSeries,
-                                period_seconds: float) -> TimeSeries:
+    def get_periodic_efficiency(
+            vehicle_velocity_aligned: TimeSeries,
+            motor_power_aligned: TimeSeries,
+            period_seconds: float
+    ) -> TimeSeries:
         # (seconds/window) / (seconds/index) == indices/window
         downsample_factor = int(period_seconds / vehicle_velocity_aligned.period)
         vehicle_velocity_averaged: np.ndarray = windowed_mean(
-            np.array(vehicle_velocity_aligned), downsample_factor, allow_truncate=True)
+            np.array(vehicle_velocity_aligned),
+            downsample_factor,
+            allow_truncate=True
+        )
+
         motor_power_averaged: np.ndarray = windowed_mean(
-            np.array(motor_power_aligned), downsample_factor, allow_truncate=True)
+            np.array(motor_power_aligned),
+            downsample_factor,
+            allow_truncate=True
+        )
+
         efficiency_array = motor_power_averaged / vehicle_velocity_averaged  # (J/s) / (m/s) = J/m
 
         # clean bad values by setting them to zero
@@ -136,26 +150,45 @@ class EfficiencyStage(Stage):
             vehicle_velocity_aligned, motor_power_aligned = TimeSeries.align(
                 vehicle_velocity_ts, motor_power_ts)
 
-            efficiency_5min: TimeSeries = self.get_periodic_efficiency(vehicle_velocity_aligned, motor_power_aligned, 300)
+            efficiency_5min: TimeSeries = self.get_periodic_efficiency(
+                vehicle_velocity_aligned,
+                motor_power_aligned,
+                300
+            )
+
             efficiency_5min.name = "Efficiency5Minute"
             efficiency_5min_result = Result.Ok(efficiency_5min)
 
-            efficiency_1h: TimeSeries = self.get_periodic_efficiency(vehicle_velocity_aligned, motor_power_aligned, 3600)
+            efficiency_1h: TimeSeries = self.get_periodic_efficiency(
+                vehicle_velocity_aligned,
+                motor_power_aligned,
+                3600
+            )
+
             efficiency_1h.name = "Efficiency1Hour"
             efficiency_1h_result = Result.Ok(efficiency_1h)
 
-            efficiency_lap_dist: np.ndarray = self.get_lap_dist_efficiency(vehicle_velocity_aligned, motor_power_aligned, ncm_lap_len_m)
+            efficiency_lap_dist: np.ndarray = self.get_lap_dist_efficiency(
+                vehicle_velocity_aligned,
+                motor_power_aligned,
+                ncm_lap_len_m
+            )
+
             efficiency_lap_dist_result = Result.Ok(efficiency_lap_dist)
+
         except UnwrappedError as e:
             self.logger.error(f"Failed to unwrap result! \n {e}")
             efficiency_5min_result = Result.Err(RuntimeError("Failed to process Efficiency5Minute!"))
             efficiency_1h_result = Result.Err(RuntimeError("Failed to process Efficiency1Hour!"))
             efficiency_lap_dist_result = Result.Err(RuntimeError("Failed to process EfficiencyLapDist!"))
 
-
         return efficiency_5min_result, efficiency_1h_result, efficiency_lap_dist_result
 
-    def load(self, efficiency_5min_result, efficiency_1h_result, efficiency_lap_dist_result) -> tuple[FileLoader, FileLoader, FileLoader]:
+    def load(self,
+             efficiency_5min_result,
+             efficiency_1h_result,
+             efficiency_lap_dist_result
+             ) -> tuple[FileLoader, FileLoader, FileLoader]:
         efficiency_5min_file = File(
             canonical_path=CanonicalPath(
                 origin=self.context.title,
@@ -165,9 +198,9 @@ class EfficiencyStage(Stage):
             ),
             file_type=FileType.TimeSeries,
             data=efficiency_5min_result.unwrap() if efficiency_5min_result else None,
-            description = "Driving efficiency in J/m, computed as avg_motor_power / avg_vehicle_velocity with values "
-                          "averaged over 5-minute periods. Values are np.nan where mean velocity is outside "
-                          "the range [2, 50] m/s or if mean power is outside the range [0, 10] kW."
+            description="Driving efficiency in J/m, computed as avg_motor_power / avg_vehicle_velocity with values "
+                        "averaged over 5-minute periods. Values are np.nan where mean velocity is outside "
+                        "the range [2, 50] m/s or if mean power is outside the range [0, 10] kW."
         )
 
         efficiency_1h_file = File(
@@ -194,12 +227,12 @@ class EfficiencyStage(Stage):
             file_type=FileType.TimeSeries,  # actually an ndarray but this is not yet supported
             data=efficiency_lap_dist_result.unwrap() if efficiency_lap_dist_result else None,
             description="Driving efficiency in J/m, computed as avg_motor_power / avg_vehicle_velocity with values "
-                        "averaged over each lap. The lap splitting calculation starts by integrating VehicelVelocity to "
-                        "get total distance as a function over time. Then, the values are split into lengths of 5.04km "
-                        "as this is the length of the FSGP track. Then, avg_motor_power & avg_vehicle_velocity are then "
-                        "taken over the timespan for each given lap. Since there is some error in VehicleVelocity and "
-                        "not all distance travelled is along the track, this should not be relied upon to exactly align "
-                        "with real lap times. However, it is a decent estimate: it predicts 48 laps for FSGP day 1 "
+                        "averaged over each lap. The lap splitting calculation starts by integrating VehicelVelocity to"
+                        " get total distance as a function over time. Then, the values are split into lengths of 5.04km"
+                        " as this is the length of the FSGP track. Then, avg_motor_power & avg_vehicle_velocity are "
+                        " taken over the timespan for each given lap. Since there is some error in VehicleVelocity and "
+                        "not all distance travelled is along the track, this should not be relied upon to exactly align"
+                        " with real lap times. However, it is a decent estimate: it predicts 48 laps for FSGP day 1 "
                         "where the real number was 46. Values are np.nan where mean velocity is outside "
                         "the range [2, 50] m/s or if mean power is outside the range [0, 10] kW."
         )
