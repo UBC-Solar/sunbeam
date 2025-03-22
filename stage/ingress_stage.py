@@ -88,17 +88,33 @@ class IngressStage(Stage):
 
     def _fetch_from_influxdb(self, event, target):
         try:
-            queried_data: Result = self._ingress_data_source.get(CanonicalPath(
-                origin=self._ingress_origin,
-                source=self.get_stage_name(),
-                event=event.name,
-                name=target.field
-            )).unwrap()
+            fake_start_time = "2024-07-16T17:00:00Z"
+            now = datetime.datetime.now(datetime.UTC)
+            timestamp = datetime.datetime.strptime(fake_start_time, "%Y-%m-%dT%H:%M:%SZ")
+            updated_timestamp = timestamp.replace(minute=now.minute, second=now.second)
+            updated_timestamp_str = updated_timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-            return event.name, target.name, Result.Ok(queried_data)
+            queried_data = self._ingress_data_source.get(
+                CanonicalPath(
+                    origin=target.bucket,
+                    source=target.car,
+                    event=target.measurement,
+                    name=target.field
+                ),
+                start=fake_start_time,
+                stop=updated_timestamp_str
+            ).unwrap()
+
+            self.logger.info(f"Successfully extracted time series data for {target.name} for {event.name}!")
+            return event.name, target.name, Result.Ok({
+                "data": queried_data,
+                "units": target.units,
+                "period": 1 / target.frequency,
+                "description": target.description
+            })
 
         except UnwrappedError as e:
-            self.logger.error(f"Failed to find cached time series data for {target.name} for {event.name}: "
+            self.logger.error(f"Failed to extract time series data for {target.name} for {event.name}: "
                               f"{traceback.format_exc()}")
 
             return event.name, target.name, Result.Err(e)
@@ -109,12 +125,21 @@ class IngressStage(Stage):
         for event in events:
             extracted_time_series_data[event.name] = {}
 
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                futures = {executor.submit(self._fetch_data, event, target): target for target in targets}
+            for target in targets:
+                try:
+                    queried_data: Result = self._ingress_data_source.get(CanonicalPath(
+                        origin=self._ingress_origin,
+                        source=self.get_stage_name(),
+                        event=event.name,
+                        name=target.field
+                    )).unwrap()
 
-            for future in concurrent.futures.as_completed(futures):
-                event_name, target_name, result = future.result()
-                extracted_time_series_data[event_name][target_name] = result
+                    extracted_time_series_data[event.name][target.name] = Result.Ok(queried_data)
+
+                except UnwrappedError as e:
+                    extracted_time_series_data[event.name][target.name] = Result.Err(e)
+                    self.logger.error(f"Failed to find cached time series data for {target.name} for {event.name}: "
+                                      f"{traceback.format_exc()}")
 
         return (extracted_time_series_data,)
 
@@ -166,38 +191,12 @@ class IngressStage(Stage):
         for event in events:
             extracted_time_series_data[event.name] = {}
 
-            for target in targets:
-                try:
-                    fake_start_time = "2024-07-16T17:00:00Z"
-                    now = datetime.datetime.now(datetime.UTC)
-                    timestamp = datetime.datetime.strptime(fake_start_time, "%Y-%m-%dT%H:%M:%SZ")
-                    updated_timestamp = timestamp.replace(minute=now.minute, second=now.second)
-                    updated_timestamp_str = updated_timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = {executor.submit(self._fetch_from_influxdb, event, target): target for target in targets}
 
-                    queried_data = self._ingress_data_source.get(
-                        CanonicalPath(
-                            origin=target.bucket,
-                            source=target.car,
-                            event=target.measurement,
-                            name=target.field
-                        ),
-                        start=fake_start_time,
-                        stop=updated_timestamp_str
-                    ).unwrap()
-
-                    extracted_time_series_data[event.name][target.name] = Result.Ok({
-                        "data": queried_data,
-                        "units": target.units,
-                        "period": 1 / target.frequency,
-                        "description": target.description
-                    })
-
-                    self.logger.info(f"Successfully extracted time series data for {target.name} for {event.name}!")
-
-                except UnwrappedError as e:
-                    extracted_time_series_data[event.name][target.name] = Result.Err(e)
-                    self.logger.error(f"Failed to extract time series data for {target.name} for {event.name}: "
-                                      f"{traceback.format_exc()}")
+            for future in concurrent.futures.as_completed(futures):
+                event_name, target_name, result = future.result()
+                extracted_time_series_data[event_name][target_name] = result
 
         return (extracted_time_series_data,)
 
