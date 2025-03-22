@@ -105,7 +105,7 @@ class IngressStage(Stage):
                 stop=updated_timestamp_str
             ).unwrap()
 
-            self.logger.info(f"Successfully extracted time series data for {target.name} for {event.name}!")
+            # self.logger.info(f"Successfully extracted time series data for {target.name} for {event.name}!")
             return event.name, target.name, Result.Ok({
                 "data": queried_data,
                 "units": target.units,
@@ -114,8 +114,8 @@ class IngressStage(Stage):
             })
 
         except UnwrappedError as e:
-            self.logger.error(f"Failed to extract time series data for {target.name} for {event.name}: "
-                              f"{traceback.format_exc()}")
+            # self.logger.error(f"Failed to extract time series data for {target.name} for {event.name}: "
+            #                   f"{traceback.format_exc()}")
 
             return event.name, target.name, Result.Err(e)
 
