@@ -21,6 +21,7 @@ class SunbeamSourceConfig(DataSourceConfig):
 class InfluxDBDataSourceConfig(DataSourceConfig):
     start: str
     stop: str
+    url: str
 
 
 class SunbeamConfig(BaseModel):
