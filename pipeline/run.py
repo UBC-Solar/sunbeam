@@ -1,5 +1,4 @@
 from data_tools import DataSource
-from networkx.algorithms.efficiency_measures import efficiency
 from prefect import flow
 from logs import SunbeamLogger
 from data_source import DataSourceFactory
