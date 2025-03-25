@@ -49,7 +49,7 @@ class EfficiencyStage(Stage):
         TODO: writeme
 
         :param self: an instance of EfficiencyStage to be run
-        :param FileLoader vehicle_velocity_loader: loader to VehicleVelocity from Ingest
+        :param FileLoader vehicle_velocity_loader: loader to VehicleVelocity from Ingress
         :param FileLoader motor_power_loader: loader to Motor Power from PowerStage
         :returns: Efficiency5Minute, Efficiency1Hour, EfficiencyLapDist (FileLoaders pointing to TimeSeries)
         """
