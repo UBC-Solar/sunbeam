@@ -24,6 +24,8 @@ Then, setup some folders for databases and build Docker containers,
 ```bash
 make build
 ```
+> **NOTE:** If you are on Linux, you may need to do `sudo make build`.
+
 If you ever want to delete the database storage and created docker containers,
 ```bash
 make clean
