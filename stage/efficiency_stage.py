@@ -6,10 +6,10 @@ from data_tools.collections import TimeSeries
 from prefect import task
 import numpy as np
 
-min_avg_meters_per_sec = 2
-max_avg_meters_per_sec = 50
-min_avg_watts = 0
-max_avg_watts = 10_000
+MIN_AVG_METERS_PER_SEC = 2
+MAX_AVG_METERS_PER_SEC = 50
+MIN_AVG_WATTS = 0
+MAX_AVG_WATTS = 10_000
 
 ncm_lap_len_m = 5040.
 
@@ -92,10 +92,10 @@ class EfficiencyStage(Stage):
 
     @staticmethod
     def get_anomaly_mask(motor_power_averaged: np.ndarray, vehicle_velocity_averaged: np.ndarray) -> np.ndarray:
-        bad_values_mask: np.ndarray = ((vehicle_velocity_averaged > max_avg_meters_per_sec)
-                                       | (vehicle_velocity_averaged < min_avg_meters_per_sec)
-                                       | (motor_power_averaged < min_avg_watts)
-                                       | (motor_power_averaged > max_avg_watts))
+        bad_values_mask: np.ndarray = ((vehicle_velocity_averaged > MAX_AVG_METERS_PER_SEC)
+                                       | (vehicle_velocity_averaged < MIN_AVG_METERS_PER_SEC)
+                                       | (motor_power_averaged < MIN_AVG_WATTS)
+                                       | (motor_power_averaged > MAX_AVG_WATTS))
         return bad_values_mask
 
     @staticmethod
@@ -115,8 +115,8 @@ class EfficiencyStage(Stage):
                 # start of a new lap
                 avg_power = sum_power / num_vals
                 avg_velocity = sum_velocity / num_vals
-                if ((avg_velocity > max_avg_meters_per_sec) | (avg_velocity < min_avg_meters_per_sec)
-                        | (avg_power < min_avg_watts) | (avg_power > max_avg_watts)):
+                if ((avg_velocity > MAX_AVG_METERS_PER_SEC) | (avg_velocity < MIN_AVG_METERS_PER_SEC)
+                        | (avg_power < MIN_AVG_WATTS) | (avg_power > MAX_AVG_WATTS)):
                     efficiency_lap_dist[lap_idx] = np.nan  # invalid data
                 else:
                     efficiency_lap_dist[lap_idx] = avg_power / avg_velocity
