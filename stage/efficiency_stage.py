@@ -51,7 +51,7 @@ class EfficiencyStage(Stage):
         :param self: an instance of EfficiencyStage to be run
         :param FileLoader vehicle_velocity_loader: loader to VehicleVelocity from Ingress
         :param FileLoader motor_power_loader: loader to Motor Power from PowerStage
-        :returns: Efficiency5Minute, Efficiency1Hour, EfficiencyLapDist (FileLoaders pointing to TimeSeries)
+        :returns: Efficiency5Minute, Efficiency1Hour, EfficiencyLapDistance (FileLoaders pointing to TimeSeries)
         """
         return super().run(self, vehicle_velocity_loader, motor_power_loader)
 
@@ -116,7 +116,7 @@ class EfficiencyStage(Stage):
     def get_lap_dist_efficiency(vehicle_velocity_aligned, motor_power_aligned, lap_len_m) -> np.ndarray:
         integrated_velocity_m = np.cumsum(vehicle_velocity_aligned) * vehicle_velocity_aligned.period
         lap_index: list = [int(dist_m // lap_len_m) for dist_m in integrated_velocity_m]
-        efficiency_lap_dist = np.zeros(max(lap_index) + 1)
+        efficiency_lap_distance = np.zeros(max(lap_index) + 1)
         vv_aligned_arr = np.array(vehicle_velocity_aligned)
         mp_aligned_arr = np.array(motor_power_aligned)
 
@@ -131,9 +131,9 @@ class EfficiencyStage(Stage):
                 avg_velocity = sum_velocity / num_vals
                 if ((avg_velocity > MAX_AVG_METERS_PER_SEC) | (avg_velocity < MIN_AVG_METERS_PER_SEC)
                         | (avg_power < MIN_AVG_WATTS) | (avg_power > MAX_AVG_WATTS)):
-                    efficiency_lap_dist[lap_idx] = np.nan  # invalid data
+                    efficiency_lap_distance[lap_idx] = np.nan  # invalid data
                 else:
-                    efficiency_lap_dist[lap_idx] = avg_power / avg_velocity
+                    efficiency_lap_distance[lap_idx] = avg_power / avg_velocity
                 sum_power = 0
                 sum_velocity = 0
                 num_vals = 0
@@ -141,7 +141,7 @@ class EfficiencyStage(Stage):
             sum_power += mp_aligned_arr[array_index]
             sum_velocity += vv_aligned_arr[array_index]
             num_vals += 1
-        return np.array(efficiency_lap_dist)
+        return np.array(efficiency_lap_distance)
 
     def transform(self, vehicle_velocity_result, motor_power_result) -> tuple[Result, Result, Result]:
         try:
@@ -168,26 +168,26 @@ class EfficiencyStage(Stage):
             efficiency_1h.name = "Efficiency1Hour"
             efficiency_1h_result = Result.Ok(efficiency_1h)
 
-            efficiency_lap_dist: np.ndarray = self.get_lap_dist_efficiency(
+            efficiency_lap_distance: np.ndarray = self.get_lap_dist_efficiency(
                 vehicle_velocity_aligned,
                 motor_power_aligned,
-                ncm_lap_len_m
+                NCM_LAP_LEN_M
             )
 
-            efficiency_lap_dist_result = Result.Ok(efficiency_lap_dist)
+            efficiency_lap_distance_result = Result.Ok(efficiency_lap_distance)
 
         except UnwrappedError as e:
             self.logger.error(f"Failed to unwrap result! \n {e}")
             efficiency_5min_result = Result.Err(RuntimeError("Failed to process Efficiency5Minute!"))
             efficiency_1h_result = Result.Err(RuntimeError("Failed to process Efficiency1Hour!"))
-            efficiency_lap_dist_result = Result.Err(RuntimeError("Failed to process EfficiencyLapDist!"))
+            efficiency_lap_distance_result = Result.Err(RuntimeError("Failed to process EfficiencyLapDistance!"))
 
-        return efficiency_5min_result, efficiency_1h_result, efficiency_lap_dist_result
+        return efficiency_5min_result, efficiency_1h_result, efficiency_lap_distance_result
 
     def load(self,
              efficiency_5min_result,
              efficiency_1h_result,
-             efficiency_lap_dist_result
+             efficiency_lap_distance_result
              ) -> tuple[FileLoader, FileLoader, FileLoader]:
         efficiency_5min_file = File(
             canonical_path=CanonicalPath(
@@ -217,15 +217,15 @@ class EfficiencyStage(Stage):
                         "the range [2, 50] m/s or if mean power is outside the range [0, 10] kW."
         )
 
-        efficiency_lap_dist_file = File(
+        efficiency_lap_distance_file = File(
             canonical_path=CanonicalPath(
                 origin=self.context.title,
                 event=self.event_name,
                 source=self.get_stage_name(),
-                name="EfficiencyLapDist",
+                name="EfficiencyLapDistance",
             ),
             file_type=FileType.TimeSeries,  # actually an ndarray but this is not yet supported
-            data=efficiency_lap_dist_result.unwrap() if efficiency_lap_dist_result else None,
+            data=efficiency_lap_distance_result.unwrap() if efficiency_lap_distance_result else None,
             description="Driving efficiency in J/m, computed as avg_motor_power / avg_vehicle_velocity with values "
                         "averaged over each lap. The lap splitting calculation starts by integrating VehicelVelocity to"
                         " get total distance as a function over time. Then, the values are split into lengths of 5.04km"
@@ -243,10 +243,10 @@ class EfficiencyStage(Stage):
         efficiency_1h_loader = self.context.data_source.store(efficiency_1h_file)
         self.logger.info(f"Successfully loaded Efficiency5Minute!")
 
-        efficiency_lap_dist_loader = self.context.data_source.store(efficiency_lap_dist_file)
+        efficiency_lap_distance_loader = self.context.data_source.store(efficiency_lap_distance_file)
         self.logger.info(f"Successfully loaded EfficiencyLapDist!")
 
-        return efficiency_5min_loader, efficiency_1h_loader, efficiency_lap_dist_loader
+        return efficiency_5min_loader, efficiency_1h_loader, efficiency_lap_distance_loader
 
 
 stage_registry.register_stage(EfficiencyStage.get_stage_name(), EfficiencyStage)
