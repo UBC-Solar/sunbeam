@@ -127,10 +127,11 @@ class EfficiencyStage(Stage):
         integrated_velocity_m = np.cumsum(vehicle_velocity_aligned) * vehicle_velocity_aligned.period
         # lap_index is indexed by time and represents the lap index at each point in time.
         lap_index: list = [int(dist_m // lap_len_m) for dist_m in integrated_velocity_m]
-        efficiency_lap_distance = np.zeros(max(lap_index) + 1)
         vv_aligned_arr = np.array(vehicle_velocity_aligned)
         mp_aligned_arr = np.array(motor_power_aligned)
+        efficiency_lap_distance = np.zeros(max(lap_index) + 1)
 
+        # iterate over the time indices, and update efficiency_lap_distance every time we roll into a new lap
         sum_power = 0
         sum_velocity = 0
         num_vals = 0
@@ -138,20 +139,31 @@ class EfficiencyStage(Stage):
         for array_index, lap_idx in enumerate(lap_index):
             if lap_idx > prev_lap_idx:
                 # start of a new lap
+
+                # determine avg power and velocity over the last lap
                 avg_power = sum_power / num_vals
                 avg_velocity = sum_velocity / num_vals
+
+                # set value to:
+                #     np.nan if the speed or power are outside the acceptable range
+                #     otherwise the efficiency for the last lap
                 if ((avg_velocity > MAX_AVG_METERS_PER_SEC) | (avg_velocity < MIN_AVG_METERS_PER_SEC)
                         | (avg_power < MIN_AVG_WATTS) | (avg_power > MAX_AVG_WATTS)):
                     efficiency_lap_distance[lap_idx] = np.nan  # invalid data
                 else:
                     efficiency_lap_distance[lap_idx] = avg_power / avg_velocity
+
+                # reset the accumulating variables
                 sum_power = 0
                 sum_velocity = 0
                 num_vals = 0
                 prev_lap_idx = lap_idx
+
+            # accumulate values so that they can be averaged later
             sum_power += mp_aligned_arr[array_index]
             sum_velocity += vv_aligned_arr[array_index]
             num_vals += 1
+
         return np.array(efficiency_lap_distance)
 
     def transform(self, vehicle_velocity_result, motor_power_result) -> tuple[Result, Result, Result]:
