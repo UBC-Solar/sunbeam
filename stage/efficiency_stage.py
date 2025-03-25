@@ -46,7 +46,8 @@ class EfficiencyStage(Stage):
     @task(name="Efficiency")
     def run(self, vehicle_velocity_loader: FileLoader, motor_power_loader: FileLoader) -> tuple[FileLoader, ...]:
         """
-        TODO: writeme
+        Run the efficiency stage, which computes motor energy used per unit distance. Values are computed over various
+        time slices.
 
         :param self: an instance of EfficiencyStage to be run
         :param FileLoader vehicle_velocity_loader: loader to VehicleVelocity from Ingress
