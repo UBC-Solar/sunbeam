@@ -114,7 +114,18 @@ class EfficiencyStage(Stage):
 
     @staticmethod
     def get_lap_dist_efficiency(vehicle_velocity_aligned, motor_power_aligned, lap_len_m) -> np.ndarray:
+        """Produces an array which represents efficiency indexed by lap.
+
+        For example, the efficiency of the third lap is given by efficiency_lap_distance[2].
+        The lap index is approximate, as it is obtained by tiling arrays over the distance of the track.
+
+        :param TimeSeries vehicle_velocity_aligned: VehicleVelocity, aligned with motor_power_aligned
+        :param TimeSeries motor_power_aligned: MotorPower, aligned with vehicle_velocity_aligned
+        :param lap_len_m: Lap length in meters
+        :return: efficiency_lap_distance
+        """
         integrated_velocity_m = np.cumsum(vehicle_velocity_aligned) * vehicle_velocity_aligned.period
+        # lap_index is indexed by time and represents the lap index at each point in time.
         lap_index: list = [int(dist_m // lap_len_m) for dist_m in integrated_velocity_m]
         efficiency_lap_distance = np.zeros(max(lap_index) + 1)
         vv_aligned_arr = np.array(vehicle_velocity_aligned)
