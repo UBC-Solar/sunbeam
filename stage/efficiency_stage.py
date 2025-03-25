@@ -11,7 +11,7 @@ MAX_AVG_METERS_PER_SEC = 50
 MIN_AVG_WATTS = 0
 MAX_AVG_WATTS = 10_000
 
-ncm_lap_len_m = 5040.
+NCM_LAP_LEN_M = 5040.
 
 
 def windowed_mean(arr: np.ndarray, factor: int, allow_truncate=False) -> np.ndarray:
