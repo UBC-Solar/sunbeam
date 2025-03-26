@@ -31,6 +31,12 @@ If you ever want to delete the database storage and created docker containers,
 make clean
 ```
 
+Finally, you'll need to add `INFLUX_TOKEN` and `INFLUX_ORG` in the `.env` file created at `sunbeam/pipeline/.env`, it should look something like,
+```env
+INFLUX_TOKEN=s4Z9_S6_O09jHy665FtrEdS9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==
+INFLUX_ORG=8a0b6Ok98Jh31e96
+```
+
 ## Usage
 
 ### Running with Docker Compose
@@ -39,6 +45,8 @@ To run Sunbeam, activate the Docker compose cluster, whilst in the `sunbeam/` fo
 ```bash
 docker compose up
 ```
+> **NOTE:** If you are on Linux, you may need to do `sudo docker compose up`.
+
 Add `-d` if you don't want your terminal to be consumed. Feel free to use a window manager like `tmux`.
 To stop Sunbeam, whilst in the `sunbeam/` folder, run
 ```bash
