@@ -49,7 +49,7 @@ def run_sunbeam(git_target="pipeline"):
         )
 
         localization_stage: LocalizationStage = LocalizationStage(event_name)
-        lap_index_integrated_speed = LocalizationStage.run(
+        lap_index_integrated_speed, = LocalizationStage.run(
             localization_stage,
             ingress_outputs[event_name]["VehicleVelocity"]
         )
