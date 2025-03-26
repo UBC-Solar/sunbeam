@@ -133,10 +133,10 @@ class EfficiencyStage(Stage):
         :param TimeSeries lap_index_aligned: Index of the lap as a function of time.
         :return: efficiency_lap_distance
         """
-        lap_index = np.array(lap_index_aligned)
+        lap_index = np.array(lap_index_aligned, dtype=int)
         vv_aligned_arr = np.array(vehicle_velocity_aligned)
         mp_aligned_arr = np.array(motor_power_aligned)
-        efficiency_lap_distance = np.zeros(np.max(lap_index) + 1)
+        efficiency_lap_distance = np.zeros(int(np.max(lap_index) + 1))
 
         # iterate over the time indices, and update efficiency_lap_distance every time we roll into a new lap
         sum_power = 0
