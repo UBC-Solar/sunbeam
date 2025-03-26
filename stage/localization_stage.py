@@ -47,7 +47,7 @@ class LocalizationStage(Stage):
         vehicle_velocity_result: Result = vehicle_velocity_loader()
         return (vehicle_velocity_result,)
 
-    def transform(self, vehicle_velocity_result, motor_power_result) -> tuple[Result]:
+    def transform(self, vehicle_velocity_result) -> tuple[Result]:
         try:
             vehicle_velocity_ts: TimeSeries = vehicle_velocity_result.unwrap().data
             integrated_velocity_m = np.cumsum(vehicle_velocity_ts) * vehicle_velocity_ts.period
