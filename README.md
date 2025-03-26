@@ -36,7 +36,8 @@ Finally, you'll need to add `INFLUX_TOKEN` and `INFLUX_ORG` in the `.env` file c
 INFLUX_TOKEN=s4Z9_S6_O09jHy665FtrEdS9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==
 INFLUX_ORG=8a0b6Ok98Jh31e96
 ```
-
+> No, those are not real API keys.
+> 
 ## Usage
 
 ### Running with Docker Compose
