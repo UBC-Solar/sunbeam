@@ -208,7 +208,7 @@ class EfficiencyStage(Stage):
                     lap_index_integrated_speed_aligned
                 )
                 efficiency_lap_distance_result = Result.Ok(efficiency_lap_distance)
-            except UnboundLocalError as e:
+            except UnwrappedError as e:
                 self.logger.error(f"Failed to unwrap result! \n {e}")
                 efficiency_lap_distance_result = Result.Err(RuntimeError("Failed to process EfficiencyLapDistance!"))
 
