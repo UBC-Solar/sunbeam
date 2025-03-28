@@ -8,7 +8,6 @@ from data_tools.collections.time_series import TimeSeries
 from typing import List, Dict
 import traceback
 from prefect import task
-import datetime
 import concurrent.futures
 
 
@@ -88,12 +87,6 @@ class IngressStage(Stage):
 
     def _fetch_from_influxdb(self, event, target):
         try:
-            fake_start_time = "2024-07-16T17:00:00Z"
-            now = datetime.datetime.now(datetime.UTC)
-            timestamp = datetime.datetime.strptime(fake_start_time, "%Y-%m-%dT%H:%M:%SZ")
-            updated_timestamp = timestamp.replace(minute=now.minute, second=now.second)
-            updated_timestamp_str = updated_timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
-
             queried_data = self._ingress_data_source.get(
                 CanonicalPath(
                     origin=target.bucket,
@@ -101,8 +94,8 @@ class IngressStage(Stage):
                     event=target.measurement,
                     name=target.field
                 ),
-                start=fake_start_time,
-                stop=updated_timestamp_str
+                start=event.start_as_iso_str,
+                stop=event.stop_as_iso_str
             ).unwrap()
 
             return event.name, target.name, Result.Ok({
@@ -113,7 +106,6 @@ class IngressStage(Stage):
             })
 
         except UnwrappedError as e:
-            print(e)
             return event.name, target.name, Result.Err(e)
 
     def _extract_existing(self, targets: List[TimeSeriesTarget], events: List[Event]) -> tuple[Dict[str, Dict[str, Result]]]:
@@ -188,25 +180,12 @@ class IngressStage(Stage):
         for event in events:
             extracted_time_series_data[event.name] = {}
 
-            for target in targets:
-                fake_start_time = "2024-07-16T17:00:00Z"
-                now = datetime.datetime.now(datetime.UTC)
-                timestamp = datetime.datetime.strptime(fake_start_time, "%Y-%m-%dT%H:%M:%SZ")
-                updated_timestamp = timestamp.replace(minute=now.minute, second=now.second)
-                updated_timestamp_str = updated_timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = {executor.submit(self._fetch_from_influxdb, event, target): target for target in targets}
 
-                queried_data = self._ingress_data_source.get(
-                    CanonicalPath(
-                        origin=target.bucket,
-                        source=target.car,
-                        event=target.measurement,
-                        name=target.field
-                    ),
-                    start=fake_start_time,
-                    stop=updated_timestamp_str
-                ).unwrap()
-
-                extracted_time_series_data[event.name][target.name] = queried_data
+            for future in concurrent.futures.as_completed(futures):
+                event_name, target_name, result = future.result()
+                extracted_time_series_data[event_name][target_name] = result
 
         return (extracted_time_series_data,)
 
