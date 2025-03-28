@@ -113,7 +113,7 @@ class IngressStage(Stage):
             })
 
         except UnwrappedError as e:
-
+            print(e)
             return event.name, target.name, Result.Err(e)
 
     def _extract_existing(self, targets: List[TimeSeriesTarget], events: List[Event]) -> tuple[Dict[str, Dict[str, Result]]]:
