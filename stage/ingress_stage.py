@@ -188,12 +188,25 @@ class IngressStage(Stage):
         for event in events:
             extracted_time_series_data[event.name] = {}
 
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                futures = {executor.submit(self._fetch_from_influxdb, event, target): target for target in targets}
+            for target in targets:
+                fake_start_time = "2024-07-16T17:00:00Z"
+                now = datetime.datetime.now(datetime.UTC)
+                timestamp = datetime.datetime.strptime(fake_start_time, "%Y-%m-%dT%H:%M:%SZ")
+                updated_timestamp = timestamp.replace(minute=now.minute, second=now.second)
+                updated_timestamp_str = updated_timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-            for future in concurrent.futures.as_completed(futures):
-                event_name, target_name, result = future.result()
-                extracted_time_series_data[event_name][target_name] = result
+                queried_data = self._ingress_data_source.get(
+                    CanonicalPath(
+                        origin=target.bucket,
+                        source=target.car,
+                        event=target.measurement,
+                        name=target.field
+                    ),
+                    start=fake_start_time,
+                    stop=updated_timestamp_str
+                ).unwrap()
+
+                extracted_time_series_data[event.name][target.name] = queried_data
 
         return (extracted_time_series_data,)
 
