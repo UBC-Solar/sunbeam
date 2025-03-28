@@ -12,11 +12,12 @@ class InfluxDBDataSource(DataSource):
 
         self._start = config.start
         self._stop = config.stop
+        self._url = config.url
 
         influxdb_token = os.getenv("INFLUX_TOKEN")
         influxdb_org = os.getenv("INFLUX_ORG")
 
-        self._influxdb_client = DBClient(influxdb_org, influxdb_token)
+        self._influxdb_client = DBClient(influxdb_org, influxdb_token, url=self._url)
 
     def store(self, **kwargs) -> FileLoader:
         raise NotImplementedError("`store` method is not implemented for InfluxDBDataSource "
