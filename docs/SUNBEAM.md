@@ -263,7 +263,7 @@ Where does the flow run? On the agent! The agent listens for flows which have be
 
 But how do **you** actually deploy a version of the pipeline? Sunbeam has its [API](API.md) for that, which handles all actual communication with Prefect and simplifies it to just a simple API call for you, the user. When a pipeline is deployed, it will be automatically ran.
 
-> Leave interactions with Prefect to the Sunbeam API unless you know what you're doing! `MongoDBDataSource` forbids multiple `File`s of the same location from existing. So, if you manually, using the Prefect UI, try to get a pipeline to run twice, it will fail.
+> Leave interactions with Prefect to the Sunbeam API unless you know what you're doing! Generally, you are safe to schedule and run flows using the Prefect UI, but avoid touching deployments directly and use the Pipelines API for those operations.
 
 ## Development 
 
