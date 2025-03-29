@@ -12,4 +12,5 @@ build:
 	mkdir -p db/mongo_data/
 	mkdir -p db/pg_data/
 	mkdir -p db/redis-data
+	touch pipeline/.env
 	docker compose build
