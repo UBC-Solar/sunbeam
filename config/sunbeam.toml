@@ -16,7 +16,7 @@ fs_root = "fs_data"
 [stage_data_source.InfluxDBDataSource]
 
 [ingress_data_source]
-data_source_type = "MongoDBDataSource"
+data_source_type = "InfluxDBDataSource"
 
 [ingress_data_source.MongoDBDataSource]
 ingress_origin = "influxdb_cache"
@@ -29,5 +29,5 @@ fs_root = "fs_data"
 
 [ingress_data_source.InfluxDBDataSource]
 start = "2024-07-01T01:00:00Z"
-stop = "2024-08-30T01:00:00Z"
-url = "http://influxdb.telemetry.ubcsolar.com"
+stop = "2025-08-30T01:00:00Z"
+url = "http://host.docker.internal:8086"
