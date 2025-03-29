@@ -7,6 +7,7 @@ from bokeh.plotting import figure, output_file, save
 from bokeh.models import ColumnDataSource, DatetimeTickFormatter
 from data_tools.collections import TimeSeries
 from data_tools.schema import File, CanonicalPath
+import numpy as np
 import dill
 
 
@@ -96,7 +97,7 @@ def _serve_file(file, origin, event, source, name, file_type):
             return send_file(file_stream, as_attachment=True, download_name=f"{name}.{file_type}")
 
         case "plot":
-            data: TimeSeries = dill.loads(file["data"])
+            data: TimeSeries | np.ndarray = dill.loads(file["data"])
 
             return _create_bokeh_plot(data, name)
 
@@ -169,11 +170,11 @@ def get_file(collection, path, request_args):
             return "Invalid Path!", 404
 
 
-def _create_bokeh_plot(data: TimeSeries, title: str) -> str:
+def _create_bokeh_plot(data: TimeSeries | np.ndarray, title: str) -> str:
     """
     Create an interactive Bokeh plot as raw HTML from ``data``.
 
-    :param TimeSeries data: the time-series data to be plotted
+    :param data: the time-series or numpy array data to be plotted
     :param str title: the title of the plot
     :return: HTML as a string of the interactive Bokeh plot
     """
@@ -185,18 +186,21 @@ def _create_bokeh_plot(data: TimeSeries, title: str) -> str:
         # Specify the temporary file as the output for Bokeh
         output_file(temp_file.name)
 
-        source = ColumnDataSource(data=dict(dates=data.datetime_x_axis, values=data))
-
-        # Create a figure with a datetime x-axis
-        p = figure(title=title, x_axis_type='datetime', x_axis_label='Date',
-                   y_axis_label=data.units)
-
-        p.xaxis.formatter = DatetimeTickFormatter(
-            hours="%d %Hh",
-            days="%d %Hh",
-            months="%d %Hh",
-            years="%d %Hh"
-        )
+        if isinstance(data, TimeSeries):
+            source = ColumnDataSource(data=dict(dates=data.datetime_x_axis, values=data))
+            # Create a figure with a datetime x-axis
+            p = figure(title=title, x_axis_type='datetime', x_axis_label='Date',
+                       y_axis_label=data.units)
+            p.xaxis.formatter = DatetimeTickFormatter(
+                hours="%d %Hh",
+                days="%d %Hh",
+                months="%d %Hh",
+                years="%d %Hh"
+            )
+        else:
+            # Default figure for arbitrary ndarray
+            source = ColumnDataSource(data=data)
+            p = figure(title=title, x_axis_label='Array Index', y_axis_label="Unknown Units")
 
         # Add a line renderer
         p.line('dates', 'values', source=source, legend_label="Values", line_width=2)

@@ -2,13 +2,16 @@
 
 ## Requirements
 
-Versions for dependencies (except Python) indicated are recommended
+Sunbeam will require the following dependencies for installation and use,
 
 * Git [^1]
-* Python >=3.12 [^2]
-* Poetry >=1.8.3 [^3]
 * Docker >=27.4.0 [^4]
 * Docker Compose >=2.31.0 [^5]
+
+If you want to run Sunbeam locally (not through Docker), you'll need,
+* Python >=3.12 [^2]
+* Poetry >=1.8.3 [^3]
+
 
 ## Installation
 
@@ -53,7 +56,10 @@ then,
 ```bash
 poetry install
 ```
-
+You should be able to run the entrypoint,
+```bash
+poetry run python3 pipeline/run.py
+```
 
 ## Appendix
 
