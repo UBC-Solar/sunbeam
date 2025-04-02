@@ -1,0 +1,9 @@
+{
+    "job_configuration": {
+        "networks": [" sunbeam_prefect-network"]
+    },
+  "variables": {
+    "type": "object",
+    "properties": {}
+  }
+}

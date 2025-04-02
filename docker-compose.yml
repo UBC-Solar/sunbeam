@@ -1,6 +1,6 @@
 services:
   prefect-server:
-    image: prefecthq/prefect:2.20-python3.12
+    image: prefecthq/prefect:3.3.1-python3.12
     ports:
       - "4200:4200"
     networks:
@@ -33,6 +33,7 @@ services:
     image: sunbeam-prefect-agent:latest
     volumes:
       - ./fs_data:/app/fs_data
+      - /var/run/docker.sock:/var/run/docker.sock  # This grants access to Docker
     build:
       context: .
       dockerfile: ./Dockerfile
@@ -51,8 +52,8 @@ services:
     # Note: the last command blocks (so insert any additonal commands before the last one!)
     command: > 
       sh -c "export $(cat .env | xargs) && 
-             poetry run prefect work-pool create --type docker default-work-pool --overwrite &&
-             poetry run prefect worker start --pool default-work-pool --type docker"
+             poetry run prefect work-pool create --type docker default-work-pool --overwrite --base-job-template=job_template.json &&
+             poetry run prefect worker start --pool default-work-pool"
 
   postgres:
     image: postgres:13

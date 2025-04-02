@@ -1,4 +1,4 @@
-FROM prefecthq/prefect:2.20-python3.12
+FROM prefecthq/prefect:3.3.1-python3.12
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -18,6 +18,8 @@ WORKDIR /app
 COPY ./pyproject.toml .
 #
 COPY ./poetry.lock .
+
+COPY ./job_template.json .
 #
 #COPY --from=root ./config ./config
 #
@@ -34,5 +36,3 @@ ENV POETRY_VERSION 1.8.3
 RUN pip install poetry==$POETRY_VERSION
 
 RUN poetry install
-
-RUN poetry add prefect-docker
