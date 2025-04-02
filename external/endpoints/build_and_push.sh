@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if [ $# -ne 1 ]; then
+    echo "Usage: $0 <The GitHub branch or tag to build>"
+    exit 1
+fi
+
 GIT_BRANCH=$1
 IMAGE_NAME="ubcsolarstrategy/sunbeam:${GIT_BRANCH}"
 
