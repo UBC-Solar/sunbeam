@@ -4,12 +4,13 @@ from prefect import flow
 from prefect import exceptions as prefect_exceptions
 from prefect_github import GitHubRepository
 from prefect.client.orchestration import get_client
+import subprocess
+import pathlib
 import asyncio
 import re
 
-
+BUILD_SCRIPT_PATH = pathlib.Path(__file__).parent.absolute() / "scripts" / "build_and_push.sh"
 SOURCE_REPO = "https://github.com/UBC-Solar/sunbeam.git"
-
 
 PIPELINE_NAME_PATTERN = r"pipeline-(.+)"
 
@@ -55,15 +56,21 @@ def commission_pipeline(git_target):
     )
     repo_block.save(name=f"source", overwrite=True)
 
+    # We run a script that clones the repo, builds a Docker image with all the dependencies,
+    # and then pushes the image to our Docker Hub organization, ubcsolarstrategy.
+    subprocess.run([f"./{BUILD_SCRIPT_PATH}", git_target], shell=True, check=True)
+
     flow.from_source(
         source=repo_block,
         entrypoint="pipeline/run.py:run_sunbeam"
     ).deploy(
         name=f"pipeline-{git_target}",
         work_pool_name="default-work-pool",
+        image=f"ubcsolarstrategy/sunbeam:{git_target}",
         parameters={
             "git_target": git_target
-        }
+        },
+        build=False
     )
 
     async def run_deployment_by_name(deployment_name):
