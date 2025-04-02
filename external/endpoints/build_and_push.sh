@@ -28,7 +28,7 @@ cd repo-$GIT_BRANCH
 
 # Build Docker image
 echo -e "Building Docker image ${IMAGE_NAME}..."
-docker build -t $IMAGE_NAME ./pipeline
+docker build -t $IMAGE_NAME .
 if [ $? -eq 0 ]; then
 echo -e "Image has been successfully built..."
 else

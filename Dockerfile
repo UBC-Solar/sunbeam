@@ -6,9 +6,9 @@ RUN apt-get update && apt-get install -y git && \
 
 WORKDIR /app
 
-COPY ../pyproject.toml .
+COPY ./pyproject.toml .
 #
-COPY ../poetry.lock .
+COPY ./poetry.lock .
 #
 #COPY --from=root ./config ./config
 #
