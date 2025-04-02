@@ -34,7 +34,7 @@ services:
     volumes:
       - ./fs_data:/app/fs_data
     build:
-      context: ./pipeline
+      context: .
       dockerfile: ./Dockerfile
       additional_contexts:
         - root=.
@@ -51,8 +51,8 @@ services:
     # Note: the last command blocks (so insert any additonal commands before the last one!)
     command: > 
       sh -c "export $(cat .env | xargs) && 
-             poetry run prefect work-pool create --type process default-work-pool --overwrite &&
-             poetry run prefect worker start --pool default-work-pool"
+             poetry run prefect work-pool create --type docker default-work-pool --overwrite &&
+             poetry run prefect worker start --pool default-work-pool --type docker"
 
   postgres:
     image: postgres:13

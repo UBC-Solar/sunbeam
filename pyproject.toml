@@ -7,17 +7,18 @@ readme = "README.md"
 package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = ">=3.10,<3.14"
 pydantic = "^2.8.2"
 toml = "^0.10.2"
-prefect = "^2.20.2"
-prefect-github = "^0.2.7"
 python-dotenv = "^1.0.1"
 pymongo = "^4.8.0"
 tqdm = "^4.66.5"
 ubc-solar-data-tools = "^1.6.0"
 dill = "^0.3.9"
 networkx = "^3.4.2"
+prefect-docker = "^0.6.2"
+prefect-github = "^0.3.1"
+prefect = "^3.3.1"
 
 [tool.poetry.group.external.dependencies]
 flask = {version = "^3.0.3", extras = ["async"]}

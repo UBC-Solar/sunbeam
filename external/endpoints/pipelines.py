@@ -58,7 +58,18 @@ def commission_pipeline(git_target):
 
     # We run a script that clones the repo, builds a Docker image with all the dependencies,
     # and then pushes the image to our Docker Hub organization, ubcsolarstrategy.
-    subprocess.run([f"./{BUILD_SCRIPT_PATH}", git_target], shell=True, check=True)
+    try:
+        result = subprocess.run(
+            [f"./{BUILD_SCRIPT_PATH}", git_target],
+            check=True,
+            text=True,
+            capture_output=True  # Captures both stdout and stderr
+        )
+        print(result)
+    except subprocess.CalledProcessError as e:
+        print(f"Command failed with exit code {e.returncode}")
+        print(f"STDOUT: {e.stdout}")  # Output from the command (if any)
+        print(f"STDERR: {e.stderr}")  # Error message
 
     flow.from_source(
         source=repo_block,
