@@ -30,4 +30,4 @@ fs_root = "fs_data"
 [ingress_data_source.InfluxDBDataSource]
 start = "2024-07-01T01:00:00Z"
 stop = "2025-08-30T01:00:00Z"
-url = "http://172.26.0.1:8086"
+url = "http://172.17.0.1:8086"
