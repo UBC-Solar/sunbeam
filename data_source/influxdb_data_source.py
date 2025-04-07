@@ -2,20 +2,22 @@ from data_tools.schema import DataSource, FileLoader, Result, CanonicalPath
 from data_tools.query import DBClient
 from data_tools.utils import parse_iso_datetime
 from datetime import datetime
+from config import InfluxDBDataSourceConfig
 import os
 
 
 class InfluxDBDataSource(DataSource):
-    def __init__(self, start: datetime, stop: datetime, *args, **kwargs):
+    def __init__(self, config: InfluxDBDataSourceConfig, *args, **kwargs):
         super().__init__()
 
-        self._start = start
-        self._stop = stop
+        self._start = config.start
+        self._stop = config.stop
+        self._url = config.url
 
         influxdb_token = os.getenv("INFLUX_TOKEN")
         influxdb_org = os.getenv("INFLUX_ORG")
 
-        self._influxdb_client = DBClient(influxdb_org, influxdb_token)
+        self._influxdb_client = DBClient(influxdb_org, influxdb_token, url=self._url)
 
     def store(self, **kwargs) -> FileLoader:
         raise NotImplementedError("`store` method is not implemented for InfluxDBDataSource "

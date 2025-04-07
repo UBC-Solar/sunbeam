@@ -3,10 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Access</title>
+    <title>Access File</title>
 </head>
 <body>
-    <h1>Access {{ file_name }}</h1>
+    <h1> {{ file_name }}</h1>
+    <p>
+        <b>Metadata</b> {{ metadata }}
+    </p>
+    <p>
+        <b>File Type</b> {{ file_type }}
+    </p>
+    <p>
+        <b>Description</b> {{ description }}
+    </p>
     <ul>
         {% for file_type in file_types %}
             <li>
@@ -16,5 +25,7 @@
             </li>
         {% endfor %}
     </ul>
+    <a href="{{ request.path.rsplit('/', 1)[0] if '/' in request.path.rsplit('/', 1)[0] else '/' }}">Back</a>
+
 </body>
 </html>

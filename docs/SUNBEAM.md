@@ -72,11 +72,9 @@ Now, we can define how to create an instance of our `PowerStage` (remember, all 
         """    
         super().__init__()  
       
-        self._event_name = event_name  
-      
-        self.declare_output("pack_power")  
+        self._event_name = event_name
 ```
-We do a few things here. Firstly, we initialize the ``Stage`` base class. Next, we save the name of the event that we are currently processing, such as "FSGP Day 1", so that we know how to properly save our outputs to the right spot. Lastly, we declare what outputs we are intending to produce. 
+We first initialize the ``Stage`` base class. Then we save the name of the event that we are currently processing, such as "FSGP Day 1", so that we know how to properly save our outputs to the right spot.
 
 > When I said that stages are stateless, I meant it! To force this statelessness, trying to set an attribute after `__init__` will raise an error.
 
@@ -265,7 +263,7 @@ Where does the flow run? On the agent! The agent listens for flows which have be
 
 But how do **you** actually deploy a version of the pipeline? Sunbeam has its [API](API.md) for that, which handles all actual communication with Prefect and simplifies it to just a simple API call for you, the user. When a pipeline is deployed, it will be automatically ran.
 
-> Leave interactions with Prefect to the Sunbeam API unless you know what you're doing! `MongoDBDataSource` forbids multiple `File`s of the same location from existing. So, if you manually, using the Prefect UI, try to get a pipeline to run twice, it will fail.
+> Leave interactions with Prefect to the Sunbeam API unless you know what you're doing! Generally, you are safe to schedule and run flows using the Prefect UI, but avoid touching deployments directly and use the Pipelines API for those operations.
 
 ## Development 
 

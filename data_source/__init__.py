@@ -10,6 +10,10 @@ from .mongodb_data_source import (
     MongoDBDataSource
 )
 
+from .sunbeam_data_source import (
+    SunbeamDataSource
+)
+
 from .data_source_factory import (
     DataSourceType,
     DataSourceFactory
@@ -21,5 +25,6 @@ __all__ = [
     "InfluxDBDataSource",
     "DataSourceFactory",
     "DataSourceType",
-    "MongoDBDataSource"
+    "MongoDBDataSource",
+    "SunbeamDataSource"
 ]

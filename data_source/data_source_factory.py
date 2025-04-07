@@ -1,12 +1,13 @@
 from enum import StrEnum
 from data_tools.schema import DataSource
-from data_source import fs_data_source, influxdb_data_source, mongodb_data_source
+from data_source import fs_data_source, influxdb_data_source, mongodb_data_source, sunbeam_data_source
 
 
 class DataSourceType(StrEnum):
     FS = "FSDataSource"
     InfluxDB = "InfluxDBDataSource"
     MongoDB = "MongoDBDataSource"
+    Sunbeam = "SunbeamDataSource"
 
 
 class DataSourceFactory:
@@ -21,3 +22,6 @@ class DataSourceFactory:
 
             case DataSourceType.MongoDB:
                 return mongodb_data_source.MongoDBDataSource(*args, **kwargs)
+
+            case DataSourceType.Sunbeam:
+                return sunbeam_data_source.SunbeamDataSource(*args, **kwargs)

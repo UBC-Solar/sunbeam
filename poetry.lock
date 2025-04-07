@@ -2828,6 +2828,21 @@ files = [
 ]
 
 [[package]]
+name = "redis"
+version = "5.2.1"
+description = "Python client for Redis database and key-value store"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "redis-5.2.1-py3-none-any.whl", hash = "sha256:ee7e1056b9aea0f04c6c2ed59452947f34c4940ee025f5dd83e6a6418b6989e4"},
+    {file = "redis-5.2.1.tar.gz", hash = "sha256:16f2e22dff21d5125e8481515e386711a34cbec50f0e44413dd7d9c060a54e0f"},
+]
+
+[package.extras]
+hiredis = ["hiredis (>=3.0.0)"]
+ocsp = ["cryptography (>=36.0.1)", "pyopenssl (==23.2.1)", "requests (>=2.31.0)"]
+
+[[package]]
 name = "referencing"
 version = "0.35.1"
 description = "JSON Referencing + Python"
@@ -3534,12 +3549,12 @@ devenv = ["check-manifest", "pytest (>=4.3)", "pytest-cov", "pytest-mock (>=3.3)
 
 [[package]]
 name = "ubc-solar-data-tools"
-version = "1.4.0"
+version = "1.6.0"
 description = "UBC Solar's data analysis and querying tools"
 optional = false
 python-versions = "<4.0,>=3.10"
 files = [
-    {file = "ubc_solar_data_tools-1.4.0.tar.gz", hash = "sha256:f2256276c0d575af9f4c3d547ff65f61697c3044e6e6b12c9bfe89d7102c791b"},
+    {file = "ubc_solar_data_tools-1.6.0.tar.gz", hash = "sha256:44a6fb0ba421bc0c1dbfaed9c5c31ec33d5b681059dc9bca5faee72483b26b7e"},
 ]
 
 [package.dependencies]
@@ -3820,4 +3835,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "cdbcd1616863106067fa4402c0b54b7cea969e74c4cf1350c54cc8a6abafbb97"
+content-hash = "92a895da5ed9f4fc27b475be7375ce98bc709ead055662cd15d3a119f30e41b9"

@@ -4,5 +4,8 @@ data/
 .vscode/
 .env
 db/
+.bin
 
 **/*.log
+**/*.bin
+**/__pycache__/
