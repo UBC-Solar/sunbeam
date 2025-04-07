@@ -6,7 +6,7 @@ stages_to_run = [
 ]
 
 [stage_data_source]
-data_source_type = "MongoDBDataSource"
+data_source_type = "InfluxDBDataSource"
 
 [stage_data_source.FSDataSource]
 fs_root = "fs_data"
