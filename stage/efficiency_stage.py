@@ -6,6 +6,7 @@ from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalP
 from data_tools.collections import TimeSeries
 from prefect import task
 import numpy as np
+import copy
 
 MIN_AVG_METERS_PER_SEC = 2
 MAX_AVG_METERS_PER_SEC = 50
@@ -62,8 +63,13 @@ class EfficiencyStage(Stage):
         return super().run(self, vehicle_velocity_loader, motor_power_loader, lap_index_integrated_speed_loader)
 
     @property
-    def event_name(self):
+    def event_name(self) -> str:
         return self._event_name
+
+    @property
+    def event(self) -> Event:
+        """Get a copy of this stage's event"""
+        return copy.deepcopy(self.event)
 
     def __init__(self, event: Event):
         """

@@ -8,6 +8,7 @@ from prefect import task
 from scipy.interpolate import CubicSpline
 import numpy as np
 from typing import Callable
+import copy
 
 
 # lookup table mapping cell voltage to cell energy, derived from SANYO NCR18650GA datasheet 2A discharge curve.
@@ -59,8 +60,13 @@ class EnergyStage(Stage):
         return super().run(self,voltage_of_least_loader, pack_power_loader)
 
     @property
-    def event_name(self):
+    def event_name(self) -> str:
         return self._event_name
+
+    @property
+    def event(self) -> Event:
+        """Get a copy of this stage's event"""
+        return copy.deepcopy(self.event)
 
     def __init__(self, event: Event):
         """

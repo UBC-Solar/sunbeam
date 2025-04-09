@@ -5,6 +5,7 @@ from stage.stage_registry import stage_registry
 from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath
 from data_tools.collections import TimeSeries
 from prefect import task
+import copy
 
 
 class PowerStage(Stage):
@@ -48,8 +49,13 @@ class PowerStage(Stage):
         )
 
     @property
-    def event_name(self):
+    def event_name(self) -> str:
         return self._event_name
+
+    @property
+    def event(self) -> Event:
+        """Get a copy of this stage's event"""
+        return copy.deepcopy(self.event)
 
     def __init__(self, event: Event):
         """

@@ -1,4 +1,3 @@
-from asyncpg.protocol.coreproto import RESULT_OK
 from data_tools.schema import FileLoader
 from data_tools import Event
 from stage.stage import Stage
@@ -8,6 +7,7 @@ from data_tools.collections import TimeSeries
 from data_tools.lap_tools import FSGPDayLaps
 from prefect import task
 import numpy as np
+import copy
 
 
 NCM_LAP_LEN_M = 5040.
@@ -49,8 +49,13 @@ class LocalizationStage(Stage):
         return super().run(self, vehicle_velocity_loader)
 
     @property
-    def event_name(self):
+    def event_name(self) -> str:
         return self._event_name
+
+    @property
+    def event(self) -> Event:
+        """Get a copy of this stage's event"""
+        return copy.deepcopy(self.event)
 
     def __init__(self, event: Event):
         """
@@ -81,7 +86,7 @@ class LocalizationStage(Stage):
         if not np.all([
             flag in self._event.flags for flag in ["ncm_motorsports_park", "has_spreadsheet"]
         ]):
-
+            ...
 
         try:
             vehicle_velocity_ts: TimeSeries = vehicle_velocity_result.unwrap().data
