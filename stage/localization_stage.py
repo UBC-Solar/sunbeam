@@ -1,3 +1,4 @@
+from asyncpg.protocol.coreproto import RESULT_OK
 from data_tools.schema import FileLoader
 from data_tools import Event
 from stage.stage import Stage
@@ -25,11 +26,25 @@ class LocalizationStage(Stage):
     @task(name="Localization")
     def run(self, vehicle_velocity_loader: FileLoader) -> tuple[FileLoader, ...]:
         """
-        Run the localization stage, which computes various metrics relating to the car's location over time.
+        Run the localization stage, which computes various metrics relating to the car's location in a track race.
+
+        Outputs will be FileLoaders pointing to None for non-track events, or if the prerequisite data is unavailable.
+        1. LapIndexIntegratedSpeed
+            Do not use this unless it is the only option. Integrates speed and tiles by track length to approximate
+            the lap index we are on at any given time. Lap index is the integer number of laps we have completed
+            around the track (starting at zero).
+        2. LapIndexSpreadsheet
+            Uses data from the FSGP timing spreadsheet (via FSGPDayLaps) to determine lap index.
+            Lap index is the integer number of laps we have completed around the track
+            at any given time (starting at zero).
+        3. TrackIndexSpreadsheet
+            Integrates speed within a lap to determine the car's coordinate within the track. We use a list of
+            lat/lon pairs to represent a track's indices, and round to the nearest one. References the FSGP timing
+            spreadsheet (via FSGPDayLaps) for lap start/stop times.
 
         :param self: an instance of LocalizationStage to be run
         :param FileLoader vehicle_velocity_loader: loader to VehicleVelocity from Ingress
-        :returns: LapIndexIntegratedSpeed (FileLoader pointing to TimeSeries)
+        :returns: LapIndexIntegratedSpeed, LapIndexSpreadsheet, TrackIndexSpreadsheet (FileLoaders pointing to TimeSeries)
         """
         return super().run(self, vehicle_velocity_loader)
 
@@ -60,6 +75,13 @@ class LocalizationStage(Stage):
         return Result.Ok(lap_index_integrated_speed)
 
     def transform(self, vehicle_velocity_result) -> tuple[Result]:
+
+        if "ncm_motorsports_park" not in self._event.flags:
+            lap_index_integrated_speed_result = Result.Ok(None)
+        if not np.all([
+            flag in self._event.flags for flag in ["ncm_motorsports_park", "has_spreadsheet"]
+        ]):
+
 
         try:
             vehicle_velocity_ts: TimeSeries = vehicle_velocity_result.unwrap().data
