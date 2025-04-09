@@ -29,35 +29,34 @@ def run_sunbeam(git_target="pipeline"):
 
     # We will process each event separately.
     for event in events:
-        event_name = event.name
 
-        power_stage: PowerStage = PowerStage(event_name)
+        power_stage: PowerStage = PowerStage(event)
         pack_power, motor_power = PowerStage.run(
             power_stage,
-            ingress_outputs[event_name]["TotalPackVoltage"],
-            ingress_outputs[event_name]["PackCurrent"],
-            ingress_outputs[event_name]["BatteryVoltage"],
-            ingress_outputs[event_name]["BatteryCurrent"],
-            ingress_outputs[event_name]["BatteryCurrentDirection"],
+            ingress_outputs[event.name]["TotalPackVoltage"],
+            ingress_outputs[event.name]["PackCurrent"],
+            ingress_outputs[event.name]["BatteryVoltage"],
+            ingress_outputs[event.name]["BatteryCurrent"],
+            ingress_outputs[event.name]["BatteryCurrentDirection"],
         )
 
-        energy_stage: EnergyStage = EnergyStage(event_name)
+        energy_stage: EnergyStage = EnergyStage(event)
         integrated_pack_power, energy_vol_extrapolated, energy_from_integrated_power = EnergyStage.run(
             energy_stage,
-            ingress_outputs[event_name]["VoltageofLeast"],
+            ingress_outputs[event.name]["VoltageofLeast"],
             pack_power
         )
 
-        localization_stage: LocalizationStage = LocalizationStage(event_name)
+        localization_stage: LocalizationStage = LocalizationStage(event)
         lap_index_integrated_speed, = LocalizationStage.run(
             localization_stage,
-            ingress_outputs[event_name]["VehicleVelocity"]
+            ingress_outputs[event.name]["VehicleVelocity"]
         )
 
-        efficiency_stage: EfficiencyStage = EfficiencyStage(event_name)
+        efficiency_stage: EfficiencyStage = EfficiencyStage(event)
         efficiency_5min, efficiency_1h, efficiency_lap_distance = EfficiencyStage.run(
             efficiency_stage,
-            ingress_outputs[event_name]["VehicleVelocity"],
+            ingress_outputs[event.name]["VehicleVelocity"],
             motor_power,
             lap_index_integrated_speed
         )

@@ -1,4 +1,5 @@
 from data_tools.schema import FileLoader
+from data_tools import Event
 from stage.stage import Stage
 from stage.stage_registry import stage_registry
 from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath
@@ -50,13 +51,14 @@ class PowerStage(Stage):
     def event_name(self):
         return self._event_name
 
-    def __init__(self, event_name: str):
+    def __init__(self, event: Event):
         """
-        :param str event_name: which event is currently being processed
+        :param event: the event currently being processed
         """
         super().__init__()
 
-        self._event_name = event_name
+        self._event = event
+        self._event_name = event.name
 
     def extract(self,
             total_pack_voltage_loader: FileLoader,

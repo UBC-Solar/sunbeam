@@ -1,8 +1,10 @@
 from data_tools.schema import FileLoader
+from data_tools import Event
 from stage.stage import Stage
 from stage.stage_registry import stage_registry
 from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath
 from data_tools.collections import TimeSeries
+from data_tools.lap_tools import FSGPDayLaps
 from prefect import task
 import numpy as np
 
@@ -35,28 +37,33 @@ class LocalizationStage(Stage):
     def event_name(self):
         return self._event_name
 
-    def __init__(self, event_name: str):
+    def __init__(self, event: Event):
         """
-        :param str event_name: which event is currently being processed
+        :param event: the event currently being processed
         """
         super().__init__()
 
-        self._event_name = event_name
+        self._event = event
+        self._event_name = event.name
 
     def extract(self, vehicle_velocity_loader: FileLoader) -> tuple[Result]:
         vehicle_velocity_result: Result = vehicle_velocity_loader()
         return (vehicle_velocity_result,)
 
+    @staticmethod
+    def _get_lap_index_integrated_speed(vehicle_velocity_ts: TimeSeries) -> Result[TimeSeries]:
+        integrated_velocity_m = np.cumsum(vehicle_velocity_ts) * vehicle_velocity_ts.period
+        lap_index_integrated_speed = vehicle_velocity_ts.promote(
+            np.array([int(dist_m // NCM_LAP_LEN_M) for dist_m in integrated_velocity_m]))
+        lap_index_integrated_speed.name = "LapIndexIntegratedSpeed"
+        lap_index_integrated_speed.units = "Laps"
+        return Result.Ok(lap_index_integrated_speed)
+
     def transform(self, vehicle_velocity_result) -> tuple[Result]:
+
         try:
             vehicle_velocity_ts: TimeSeries = vehicle_velocity_result.unwrap().data
-            integrated_velocity_m = np.cumsum(vehicle_velocity_ts) * vehicle_velocity_ts.period
-            lap_index_integrated_speed = vehicle_velocity_ts.promote(
-                np.array([int(dist_m // NCM_LAP_LEN_M) for dist_m in integrated_velocity_m]))
-            lap_index_integrated_speed.name = "LapIndexIntegratedSpeed"
-            lap_index_integrated_speed.units = "Laps"
-            lap_index_integrated_speed_result = Result.Ok(lap_index_integrated_speed)
-
+            lap_index_integrated_speed_result = self._get_lap_index_integrated_speed(vehicle_velocity_ts)
         except UnwrappedError as e:
             self.logger.error(f"Failed to unwrap result! \n {e}")
             lap_index_integrated_speed_result = Result.Err(RuntimeError("Failed to process LapIndexIntegratedSpeed!"))
