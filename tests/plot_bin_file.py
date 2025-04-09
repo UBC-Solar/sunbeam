@@ -1,13 +1,17 @@
 import matplotlib.pyplot as plt
 import dill
-import os
+import pathlib
 
 if __name__ == '__main__':
-    with open(os.path.join(os.getcwd(), 'EfficiencyLapDist.bin'), 'rb') as f:
+
+    event_name = "ASC_2024_Day_1"
+    stage_dir = "localization"
+    file_name = "LapIndexIntegratedSpeed.bin"
+    path_to_bin = pathlib.Path("../fs_data/pipeline") / event_name / stage_dir / file_name
+
+    with open(path_to_bin, 'rb') as f:
         data = dill.load(f).data
 
     plt.plot(data)
-    plt.title('EfficiencyLapDist.bin - FSGP 2024 Day 1')
-    plt.xlabel('Lap Index, Day 1')
-    plt.ylabel('Efficiency, J/m')
+    plt.title(f"{file_name} for {event_name}")
     plt.show()
