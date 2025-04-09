@@ -40,6 +40,15 @@ class EnergyStage(Stage):
         1. EnergyVOLExtrapolated
             Battery energy estimated using VoltageofLeast & SANYO NCR18650GA datasheet 2A discharge curve.
             See https://github.com/UBC-Solar/data_analysis/blob/main/soc_analysis/datasheet_voltage_soc/charge_voltage_energy.ipynb for details.
+        2. IntegratedPackPower
+            The integral of pack power in watt-hours. Starts at zero for each event.
+        3. EnergyFromIntegratedPower
+            Estimated energy in the battery in watt-hours. The starting value is given by the startingvalue of
+            EnergyVOLExtrapolated, then IntegratedPackPower is subtracted from this. This technique of determining
+            battery energy is equivalent to 'coulomb counting'. Values may be smoother than EnergyVOLExtrapolated and
+            more accurate in the short term, but can diverge from the truth over time as systematic error is integrated.
+            This value is also problematic if telemetry is missing values, as this will appear as if no power was used
+            during this time.
 
 
         :param EnergyStage self: an instance of EnergyStage to be run
