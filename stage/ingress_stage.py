@@ -261,9 +261,14 @@ class IngressStage(Stage):
 
                 if result:
                     existing_file = result.unwrap()
-                    existing_file.canonical_path = canonical_path
-                    result_dict[event_name][name] = self.context.data_source.store(existing_file)
-
+                    updated_file = File(
+                        data=existing_file.data,
+                        file_type=existing_file.file_type,
+                        canonical_path=canonical_path,
+                        metadata=existing_file.metadata,
+                        description=existing_file.description
+                    )
+                    result_dict[event_name][name] = self.context.data_source.store(updated_file)
                     self.logger.info(f"Successfully loaded {name} for {event_name}!")
 
                 else:
