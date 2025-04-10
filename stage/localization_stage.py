@@ -6,12 +6,18 @@ from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalP
 from data_tools.collections import TimeSeries
 from data_tools.lap_tools import FSGPDayLaps
 from prefect import task
+from numpy.typing import NDArray
 import numpy as np
 import copy
 
 
 NCM_LAP_LEN_M = 5040.
 
+fsgp_lap_days = {
+    "FSGP_2024_Day_1": 1,
+    "FSGP_2024_Day_2": 2,
+    "FSGP_2024_Day_3": 3
+}
 
 class LocalizationStage(Stage):
     @classmethod
@@ -79,25 +85,49 @@ class LocalizationStage(Stage):
         lap_index_integrated_speed.units = "Laps"
         return Result.Ok(lap_index_integrated_speed)
 
-    def transform(self, vehicle_velocity_result) -> tuple[Result]:
+    @staticmethod
+    def _get_lap_index_spreadsheet(event: Event, vehicle_velocity_ts: TimeSeries):
+        if event.name not in fsgp_lap_days.keys():
+            return Result.Ok(None)  # result is not defined
 
-        if "ncm_motorsports_park" not in self._event.flags:
-            lap_index_integrated_speed_result = Result.Ok(None)
-        if not np.all([
-            flag in self._event.flags for flag in ["ncm_motorsports_park", "has_spreadsheet"]
-        ]):
-            ...
+        # we don't actually need vehicle_velocity here, but we need the time data & promote method
+        unix_times: NDArray[float] = vehicle_velocity_ts.unix_x_axis
 
+        lap_info = FSGPDayLaps(fsgp_lap_days[event.name])
+        num_laps = lap_info.get_lap_count()
+        # lap_starts is epoch times in increasing order
+        lap_starts: list[float] = [lap_info.get_start_utc(lap_idx + 1).timestamp() for lap_idx in range(num_laps)]
+        race_end: float = lap_info.get_finish_utc(num_laps).timestamp()  # end of last lap
+
+        lap_indices: NDArray[int] = np.zeros(unix_times.shape, dtype=int)
+        for i, time in enumerate(unix_times):
+            if (time < lap_starts[0]) or (time > race_end):
+                lap_indices[i] = np.nan
+            else:
+                lap_indices[i] = np.argmax(time > np.array(lap_starts))
+        lap_indices_ts = vehicle_velocity_ts.promote(lap_indices)
+        lap_indices.name = "LapIndexSpreadsheet"
+        lap_indices.units = "Laps"
+        return Result.Ok(lap_indices_ts)
+
+    def transform(self, vehicle_velocity_result) -> tuple[Result, Result, Result]:
         try:
             vehicle_velocity_ts: TimeSeries = vehicle_velocity_result.unwrap().data
             lap_index_integrated_speed_result = self._get_lap_index_integrated_speed(vehicle_velocity_ts)
+            lap_index_spreadsheet_result = self._get_lap_index_spreadsheet(self.event, vehicle_velocity_ts)
+            track_index_spreadsheet_result = Result.Ok(None)  # TODO
         except UnwrappedError as e:
-            self.logger.error(f"Failed to unwrap result! \n {e}")
+            self.logger.error(f"Failed to unwrap vehicle velocity result! \n {e}")
             lap_index_integrated_speed_result = Result.Err(RuntimeError("Failed to process LapIndexIntegratedSpeed!"))
+            lap_index_spreadsheet_result = Result.Err(RuntimeError("Failed to process LapIndexSpreadsheet!"))
+            track_index_spreadsheet_result = Result.Err(RuntimeError("Failed to process TrackIndexSpreadsheet!"))
 
-        return (lap_index_integrated_speed_result,)
+        return lap_index_integrated_speed_result, lap_index_spreadsheet_result, track_index_spreadsheet_result
 
-    def load(self, lap_index_integrated_speed_result) -> tuple[FileLoader]:
+    def load(self,
+             lap_index_integrated_speed_result,
+             lap_index_spreadsheet_result,
+             track_index_spreadsheet_result) -> tuple[FileLoader, FileLoader, FileLoader]:
 
         lap_index_integrated_speed_file = File(
             canonical_path=CanonicalPath(
@@ -113,11 +143,27 @@ class LocalizationStage(Stage):
                         f"length of {NCM_LAP_LEN_M} meters."
         )
 
+        lap_index_spreadsheet_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=self.get_stage_name(),
+                name="LapIndexIntegratedSpeed",
+            ),
+            file_type=FileType.TimeSeries,
+            data=lap_index_spreadsheet_result.unwrap() if lap_index_spreadsheet_result else None,
+            description="Uses data from the FSGP timing spreadsheet (via FSGPDayLaps) to determine lap index."
+                        "Lap index is the integer number of laps we have completed around the track"
+                        "at any given time (starting at zero)."
+        )
 
         lap_index_integrated_speed_loader = self.context.data_source.store(lap_index_integrated_speed_file)
         self.logger.info(f"Successfully loaded LapIndexIntegratedSpeed!")
 
-        return (lap_index_integrated_speed_loader,)
+        lap_index_spreadsheet_loader = self.context.data_source.store(lap_index_spreadsheet_file)
+        self.logger.info(f"Successfully loaded LapIndexSpreadsheet!")
+
+        return lap_index_integrated_speed_loader, lap_index_spreadsheet_loader, lap_index_integrated_speed_loader # placeholder 3rd value!
 
 
 stage_registry.register_stage(LocalizationStage.get_stage_name(), LocalizationStage)
