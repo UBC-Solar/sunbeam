@@ -210,6 +210,7 @@ class EfficiencyStage(Stage):
                 lap_index_integrated_speed = lap_index_integrated_speed_result.unwrap().data
                 lap_index_integrated_speed_aligned, vehicle_velocity_aligned, motor_power_aligned = TimeSeries.align(
                     lap_index_integrated_speed, vehicle_velocity_ts, motor_power_ts)
+
                 efficiency_lap_distance: np.ndarray = self.get_lap_dist_efficiency(
                     vehicle_velocity_aligned,
                     motor_power_aligned,

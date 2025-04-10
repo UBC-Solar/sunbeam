@@ -91,23 +91,27 @@ class LocalizationStage(Stage):
             return Result.Ok(None)  # result is not defined
 
         # we don't actually need vehicle_velocity here, but we need the time data & promote method
-        unix_times: NDArray[float] = vehicle_velocity_ts.unix_x_axis
+        # unfortunately the times are off by 7h (vancouver time offset)
+        timezone_fix = 60 * 60 * 7
+        unix_times: NDArray[float] = vehicle_velocity_ts.unix_x_axis + timezone_fix
 
         lap_info = FSGPDayLaps(fsgp_lap_days[event.name])
         num_laps = lap_info.get_lap_count()
         # lap_starts is epoch times in increasing order
-        lap_starts: list[float] = [lap_info.get_start_utc(lap_idx + 1).timestamp() for lap_idx in range(num_laps)]
+        lap_starts: list[float] = [
+            lap_info.get_start_utc(lap_idx + 1).timestamp() for lap_idx in range(num_laps)
+        ]
         race_end: float = lap_info.get_finish_utc(num_laps).timestamp()  # end of last lap
 
-        lap_indices: NDArray[int] = np.zeros(unix_times.shape, dtype=int)
+        lap_indices: NDArray = np.zeros(unix_times.shape)
         for i, time in enumerate(unix_times):
             if (time < lap_starts[0]) or (time > race_end):
                 lap_indices[i] = np.nan
             else:
-                lap_indices[i] = np.argmax(time > np.array(lap_starts))
+                lap_indices[i] = np.argmin(time > np.array(lap_starts))
         lap_indices_ts = vehicle_velocity_ts.promote(lap_indices)
-        lap_indices.name = "LapIndexSpreadsheet"
-        lap_indices.units = "Laps"
+        lap_indices_ts.name = "LapIndexSpreadsheet"
+        lap_indices_ts.units = "Laps"
         return Result.Ok(lap_indices_ts)
 
     def transform(self, vehicle_velocity_result) -> tuple[Result, Result, Result]:
@@ -121,7 +125,6 @@ class LocalizationStage(Stage):
             lap_index_integrated_speed_result = Result.Err(RuntimeError("Failed to process LapIndexIntegratedSpeed!"))
             lap_index_spreadsheet_result = Result.Err(RuntimeError("Failed to process LapIndexSpreadsheet!"))
             track_index_spreadsheet_result = Result.Err(RuntimeError("Failed to process TrackIndexSpreadsheet!"))
-
         return lap_index_integrated_speed_result, lap_index_spreadsheet_result, track_index_spreadsheet_result
 
     def load(self,
@@ -148,7 +151,7 @@ class LocalizationStage(Stage):
                 origin=self.context.title,
                 event=self.event_name,
                 source=self.get_stage_name(),
-                name="LapIndexIntegratedSpeed",
+                name="LapIndexSpreadsheet",
             ),
             file_type=FileType.TimeSeries,
             data=lap_index_spreadsheet_result.unwrap() if lap_index_spreadsheet_result else None,
@@ -162,7 +165,6 @@ class LocalizationStage(Stage):
 
         lap_index_spreadsheet_loader = self.context.data_source.store(lap_index_spreadsheet_file)
         self.logger.info(f"Successfully loaded LapIndexSpreadsheet!")
-
         return lap_index_integrated_speed_loader, lap_index_spreadsheet_loader, lap_index_integrated_speed_loader # placeholder 3rd value!
 
 
