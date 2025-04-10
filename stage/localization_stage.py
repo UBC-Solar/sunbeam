@@ -55,7 +55,7 @@ class LocalizationStage(Stage):
     @property
     def event(self) -> Event:
         """Get a copy of this stage's event"""
-        return copy.deepcopy(self.event)
+        return copy.deepcopy(self._event)
 
     def __init__(self, event: Event):
         """
