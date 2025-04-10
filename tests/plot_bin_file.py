@@ -15,9 +15,10 @@ if __name__ == '__main__':
     with open(path_to_bin2, 'rb') as f:
         data2 = dill.load(f).data
 
-    breakpoint()
-
-    plt.plot(data)
-    plt.plot(data2)
-    plt.title(f"{file_name} for {event_name}")
+    plt.plot(data2.x_axis, data2, label="integrated speed")
+    plt.plot(data.x_axis, data, label="from spreadsheet")
+    plt.xlabel("Time")
+    plt.ylabel("Lap Index")
+    plt.legend()
+    # plt.title(f"{file_name} for {event_name}")
     plt.show()

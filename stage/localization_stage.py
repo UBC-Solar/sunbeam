@@ -97,18 +97,18 @@ class LocalizationStage(Stage):
 
         lap_info = FSGPDayLaps(fsgp_lap_days[event.name])
         num_laps = lap_info.get_lap_count()
-        # lap_starts is epoch times in increasing order
-        lap_starts: list[float] = [
-            lap_info.get_start_utc(lap_idx + 1).timestamp() for lap_idx in range(num_laps)
+        race_start_unix = lap_info.get_start_utc(1).timestamp()
+        lap_finishes_unix: list[float] = [
+            lap_info.get_finish_utc(lap_idx + 1).timestamp() for lap_idx in range(num_laps)
         ]
-        race_end: float = lap_info.get_finish_utc(num_laps).timestamp()  # end of last lap
 
         lap_indices: NDArray = np.zeros(unix_times.shape)
         for i, time in enumerate(unix_times):
-            if (time < lap_starts[0]) or (time > race_end):
+            if (time < race_start_unix):
                 lap_indices[i] = np.nan
             else:
-                lap_indices[i] = np.argmin(time > np.array(lap_starts))
+                lap_indices[i] = np.count_nonzero(time > np.array(lap_finishes_unix))
+
         lap_indices_ts = vehicle_velocity_ts.promote(lap_indices)
         lap_indices_ts.name = "LapIndexSpreadsheet"
         lap_indices_ts.units = "Laps"
