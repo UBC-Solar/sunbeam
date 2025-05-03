@@ -7,7 +7,6 @@ from data_tools.collections import TimeSeries
 from data_tools.lap_tools import FSGPDayLaps
 from prefect import task
 from numpy.typing import NDArray
-from scipy import integrate
 from physics.environment.gis.gis import GIS
 import numpy as np
 import copy
@@ -423,20 +422,22 @@ class LocalizationStage(Stage):
         if event.name not in fsgp_lap_days.keys():
             return Result.Ok(None)  # result is not defined
 
-        breakpoint()
         # get indices in time for when a new lap begins
-        lap_starts = np.nonzero(np.diff(np.nan_to_num(lap_index_spreadsheet)))[0]
-        velocity_by_lap = np.split(vehicle_velocity_ts, lap_starts)[1:]  # discard times before the first lap started
+        # set nans to -1 so that we have an increase when we begin lap 0
+        lap_starts = np.nonzero(np.diff(np.nan_to_num(lap_index_spreadsheet, nan=-1)))[0] + np.array(1)
+        velocity_split = np.split(vehicle_velocity_ts, lap_starts)
+        velocity_by_lap = velocity_split[1:] # discard times before the first lap started
 
         track_indices: list[NDArray] = []
         for lap_velocity_array in velocity_by_lap:
-            lap_cumulative_distance_m = integrate.cumulative_simpson(lap_velocity_array, dx=vehicle_velocity_ts.period)
-            norm_factor = NCM_LAP_LEN_M / lap_cumulative_distance_m[-1]  # normalize such that all laps appear to travel the same distance
-            lap_norm_distance_m = lap_cumulative_distance_m * norm_factor
-            breakpoint()
-            track_indices.append(gis.calculate_closest_gis_indices(lap_norm_distance_m))
+            lap_total_distance_m = np.sum(lap_velocity_array) * vehicle_velocity_ts.period
+            norm_factor = NCM_LAP_LEN_M / lap_total_distance_m  # normalize such that all laps appear to travel the same distance
+            lap_distances_per_tick = lap_velocity_array * norm_factor * vehicle_velocity_ts.period
+            # subtract a small amount rust implementation fails if cumulative distance >= NCM_LAP_LEN_M
+            lap_distances_per_tick = lap_distances_per_tick - np.array(0.001)
+            track_indices.append(gis.calculate_closest_gis_indices(lap_distances_per_tick))
 
-        track_indices_flat = np.concatenate(track_indices)
+        track_indices_flat = np.concatenate([np.zeros_like(velocity_split[0])] + track_indices)
         track_indices_ts = vehicle_velocity_ts.promote(track_indices_flat)
         track_indices_ts.name = "TrackIndexSpreadsheet"
         track_indices_ts.units = "Track Index"
@@ -448,9 +449,10 @@ class LocalizationStage(Stage):
             lap_index_integrated_speed_result = self._get_lap_index_integrated_speed(vehicle_velocity_ts)
             lap_index_spreadsheet_ts = self._get_lap_index_spreadsheet(self.event, vehicle_velocity_ts)
             lap_index_spreadsheet_result = Result.Ok(lap_index_spreadsheet_ts)
-            track_index_spreadsheet_result = self._get_track_index_spreadsheet(
+            track_index_spreadsheet_ts = self._get_track_index_spreadsheet(
                 self.event, lap_index_spreadsheet_ts, vehicle_velocity_ts
             )
+            track_index_spreadsheet_result = Result.Ok(track_index_spreadsheet_ts)
         except UnwrappedError as e:
             self.logger.error(f"Failed to unwrap vehicle velocity result! \n {e}")
             lap_index_integrated_speed_result = Result.Err(RuntimeError("Failed to process LapIndexIntegratedSpeed!"))
