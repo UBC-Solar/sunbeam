@@ -14,7 +14,8 @@ import copy
 
 NCM_LAP_LEN_M = 5033.62413472
 
-reverse_coords = [[ 37.00107373, -86.36854755],
+reverse_coords = [
+    [ 37.00107373, -86.36854755],
     [ 37.0011529 , -86.36837867],
     [ 37.00122817, -86.3682181 ],
     [ 37.00133071, -86.36801267],
@@ -305,7 +306,7 @@ reverse_coords = [[ 37.00107373, -86.36854755],
     [ 37.00090662, -86.36891836],
     [ 37.00098578, -86.36874579],
     [ 37.00107373, -86.36854755]
-  ]
+]
 coords = reverse_coords[::-1]
 route_data = {
     "path" : coords,
@@ -346,14 +347,17 @@ class LocalizationStage(Stage):
             Uses data from the FSGP timing spreadsheet (via FSGPDayLaps) to determine lap index.
             Lap index is the integer number of laps we have completed around the track
             at any given time (starting at zero).
-        3. TrackIndexSpreadsheet
+        3. TrackDistanceSpreadsheet
+            Uses data from the FSGP timing spreadsheet (via FSGPDayLaps) to determine lap splits, then
+            integrates speed over the current lap to determine distance travelled along the track.
+        4. TrackIndexSpreadsheet
             Integrates speed within a lap to determine the car's coordinate within the track. We use a list of
             lat/lon pairs to represent a track's indices, and round to the nearest one. References the FSGP timing
             spreadsheet (via FSGPDayLaps) for lap start/stop times.
 
         :param self: an instance of LocalizationStage to be run
         :param FileLoader vehicle_velocity_loader: loader to VehicleVelocity from Ingress
-        :returns: LapIndexIntegratedSpeed, LapIndexSpreadsheet, TrackIndexSpreadsheet (FileLoaders pointing to TimeSeries)
+        :returns: LapIndexIntegratedSpeed, LapIndexSpreadsheet, TrackDistanceSpreadsheet, TrackIndexSpreadsheet (FileLoaders pointing to TimeSeries)
         """
         return super().run(self, vehicle_velocity_loader)
 
@@ -391,7 +395,7 @@ class LocalizationStage(Stage):
     @staticmethod
     def _get_lap_index_spreadsheet(event: Event, vehicle_velocity_ts: TimeSeries):
         if event.name not in fsgp_lap_days.keys():
-            return Result.Ok(None)  # result is not defined
+            return None  # result is not defined
 
         # we don't actually need vehicle_velocity here, but we need the time data & promote method
         # unfortunately the times are off by 7h (vancouver time offset)
@@ -404,10 +408,9 @@ class LocalizationStage(Stage):
         lap_finishes_unix: list[float] = [
             lap_info.get_finish_utc(lap_idx + 1).timestamp() for lap_idx in range(num_laps)
         ]
-
         lap_indices: NDArray = np.zeros(unix_times.shape)
         for i, time in enumerate(unix_times):
-            if (time < race_start_unix):
+            if (time < race_start_unix) or (time > lap_finishes_unix[-1]):
                 lap_indices[i] = np.nan
             else:
                 lap_indices[i] = np.count_nonzero(time > np.array(lap_finishes_unix))
@@ -420,50 +423,63 @@ class LocalizationStage(Stage):
     @staticmethod
     def _get_track_index_spreadsheet(event: Event, lap_index_spreadsheet: TimeSeries, vehicle_velocity_ts: TimeSeries):
         if event.name not in fsgp_lap_days.keys():
-            return Result.Ok(None)  # result is not defined
+            return None, None  # result is not defined
 
         # get indices in time for when a new lap begins
         # set nans to -1 so that we have an increase when we begin lap 0
         lap_starts = np.nonzero(np.diff(np.nan_to_num(lap_index_spreadsheet, nan=-1)))[0] + np.array(1)
         velocity_split = np.split(vehicle_velocity_ts, lap_starts)
-        velocity_by_lap = velocity_split[1:] # discard times before the first lap started
+        velocity_by_lap = velocity_split[1:-1] # discard times outside of when we are doing laps
 
+        track_distance: list[NDArray] = []
         track_indices: list[NDArray] = []
         for lap_velocity_array in velocity_by_lap:
             lap_total_distance_m = np.sum(lap_velocity_array) * vehicle_velocity_ts.period
+            track_distance.append(np.cumsum(lap_velocity_array) * vehicle_velocity_ts.period)
             norm_factor = NCM_LAP_LEN_M / lap_total_distance_m  # normalize such that all laps appear to travel the same distance
-            lap_distances_per_tick = lap_velocity_array * norm_factor * vehicle_velocity_ts.period
-            # subtract a small amount rust implementation fails if cumulative distance >= NCM_LAP_LEN_M
-            lap_distances_per_tick = lap_distances_per_tick - np.array(0.001)
-            track_indices.append(gis.calculate_closest_gis_indices(lap_distances_per_tick))
+            lap_distance_per_tick = lap_velocity_array * norm_factor * vehicle_velocity_ts.period
+            track_indices.append(gis.calculate_closest_gis_indices(lap_distance_per_tick))
 
-        track_indices_flat = np.concatenate([np.zeros_like(velocity_split[0])] + track_indices)
-        track_indices_ts = vehicle_velocity_ts.promote(track_indices_flat)
-        track_indices_ts.name = "TrackIndexSpreadsheet"
-        track_indices_ts.units = "Track Index"
-        return track_indices_ts
+        track_distance_flat = np.concatenate(
+            [np.full_like(velocity_split[0], np.nan)] + track_distance + [np.full_like(velocity_split[-1], np.nan)]
+        )
+        track_distance_ts = vehicle_velocity_ts.promote(track_distance_flat)
+        track_distance_ts.name = "TrackDistanceSpreadsheet"
+        track_distance_ts.units = "m"
 
-    def transform(self, vehicle_velocity_result) -> tuple[Result, Result, Result]:
+        track_index_flat = np.concatenate(
+            [np.zeros_like(velocity_split[0])] + track_indices + [np.full_like(velocity_split[-1], np.nan)]
+        )
+        track_index_ts = vehicle_velocity_ts.promote(track_index_flat)
+        track_index_ts.name = "TrackIndexSpreadsheet"
+        track_index_ts.units = "Track Index"
+        return track_distance_ts, track_index_ts
+
+    def transform(self, vehicle_velocity_result) -> tuple[Result, Result, Result, Result]:
         try:
             vehicle_velocity_ts: TimeSeries = vehicle_velocity_result.unwrap().data
             lap_index_integrated_speed_result = self._get_lap_index_integrated_speed(vehicle_velocity_ts)
             lap_index_spreadsheet_ts = self._get_lap_index_spreadsheet(self.event, vehicle_velocity_ts)
             lap_index_spreadsheet_result = Result.Ok(lap_index_spreadsheet_ts)
-            track_index_spreadsheet_ts = self._get_track_index_spreadsheet(
+            track_distance_spreadsheet_ts, track_index_spreadsheet_ts = self._get_track_index_spreadsheet(
                 self.event, lap_index_spreadsheet_ts, vehicle_velocity_ts
             )
+            track_distance_spreadsheet_result = Result.Ok(track_distance_spreadsheet_ts)
             track_index_spreadsheet_result = Result.Ok(track_index_spreadsheet_ts)
         except UnwrappedError as e:
             self.logger.error(f"Failed to unwrap vehicle velocity result! \n {e}")
             lap_index_integrated_speed_result = Result.Err(RuntimeError("Failed to process LapIndexIntegratedSpeed!"))
             lap_index_spreadsheet_result = Result.Err(RuntimeError("Failed to process LapIndexSpreadsheet!"))
+            track_distance_spreadsheet_result = Result.Err(RuntimeError("Failed to process TrackDistanceSpreadsheet!"))
             track_index_spreadsheet_result = Result.Err(RuntimeError("Failed to process TrackIndexSpreadsheet!"))
-        return lap_index_integrated_speed_result, lap_index_spreadsheet_result, track_index_spreadsheet_result
+        return (lap_index_integrated_speed_result, lap_index_spreadsheet_result,
+                track_distance_spreadsheet_result, track_index_spreadsheet_result)
 
     def load(self,
              lap_index_integrated_speed_result,
              lap_index_spreadsheet_result,
-             track_index_spreadsheet_result) -> tuple[FileLoader, FileLoader, FileLoader]:
+             track_distance_spreadsheet_result,
+             track_index_spreadsheet_result) -> tuple[FileLoader, FileLoader, FileLoader, FileLoader]:
 
         lap_index_integrated_speed_file = File(
             canonical_path=CanonicalPath(
@@ -493,6 +509,19 @@ class LocalizationStage(Stage):
                         "at any given time (starting at zero)."
         )
 
+        track_distance_spreadsheet_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=self.get_stage_name(),
+                name="TrackDistanceSpreadsheet",
+            ),
+            file_type=FileType.TimeSeries,
+            data=track_distance_spreadsheet_result.unwrap() if track_distance_spreadsheet_result else None,
+            description="Uses data from the FSGP timing spreadsheet (via FSGPDayLaps) to determine lap splits, then "
+                        "integrates speed over the current lap to determine distance travelled along the track."
+        )
+
         track_index_spreadsheet_file = File(
             canonical_path=CanonicalPath(
                 origin=self.context.title,
@@ -512,10 +541,14 @@ class LocalizationStage(Stage):
         lap_index_spreadsheet_loader = self.context.data_source.store(lap_index_spreadsheet_file)
         self.logger.info(f"Successfully loaded LapIndexSpreadsheet!")
 
+        track_distance_spreadsheet_loader = self.context.data_source.store(track_distance_spreadsheet_file)
+        self.logger.info(f"Successfully loaded TrackDistanceSpreadsheet!")
+
         track_index_spreadsheet_loader = self.context.data_source.store(track_index_spreadsheet_file)
         self.logger.info(f"Successfully loaded TrackIndexSpreadsheet!")
 
-        return lap_index_integrated_speed_loader, lap_index_spreadsheet_loader, lap_index_integrated_speed_loader # placeholder 3rd value!
+        return (lap_index_integrated_speed_loader, lap_index_spreadsheet_loader,
+                track_distance_spreadsheet_loader, track_index_spreadsheet_loader)
 
 
 stage_registry.register_stage(LocalizationStage.get_stage_name(), LocalizationStage)

@@ -4,7 +4,7 @@ import pathlib
 
 if __name__ == '__main__':
 
-    event_name = "FSGP_2024_Day_1"
+    event_name = "FSGP_2024_Day_2"
 
     stage_dir = "localization"
     file_name = "TrackIndexSpreadsheet.bin"
@@ -18,6 +18,8 @@ if __name__ == '__main__':
         data = dill.load(f).data
     with open(path_to_bin2, 'rb') as f:
         data2 = dill.load(f).data
+
+    data, data2 = data.align(data, data2)
 
     plt.plot(data.x_axis, data, label="track index")
     plt.plot(data2.x_axis, data2, label="lap index")

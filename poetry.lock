@@ -4086,30 +4086,19 @@ sqlalchemy = ">=2.0.5,<3.0.0"
 
 [[package]]
 name = "ubc-solar-physics"
-version = "1.5.0"
+version = "1.5.1.dev9+gc6902d5.d20250506"
 description = "UBC Solar's Simulation Environment"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
-files = [
-    {file = "ubc_solar_physics-1.5.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:aeedb6e9a6246692c43fe169ba0f35f1b08d6a211a0da54a8ea13632476848b3"},
-    {file = "ubc_solar_physics-1.5.0-cp310-cp310-win_amd64.whl", hash = "sha256:c588156b5a6635be5049969853d436159648793566731f90447b0423786da894"},
-    {file = "ubc_solar_physics-1.5.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f0fe2e1bcae36b9d3b6ebbc4432b40703f4a876894ba168ed3273a008b401e87"},
-    {file = "ubc_solar_physics-1.5.0-cp311-cp311-win_amd64.whl", hash = "sha256:3d6010113aebae276f4d36fa3c1100eac2dc05f35bd8910a069cafda94f41cad"},
-    {file = "ubc_solar_physics-1.5.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:1db54cc219cb1354938a77f5cb65eb9e77381af1978e7af90ece75072c1b0dbe"},
-    {file = "ubc_solar_physics-1.5.0-cp312-cp312-win_amd64.whl", hash = "sha256:a64887a731a5f79c32aa8f297460ab731b42310fda46d11fddf4e28f7e378e3a"},
-    {file = "ubc_solar_physics-1.5.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:30053424f11911ba470f38cd48742b653457d49d5874a92318c3a9467d8aeeaf"},
-    {file = "ubc_solar_physics-1.5.0-cp313-cp313-win_amd64.whl", hash = "sha256:0a4e5bd155dd0ef3cd747c52ce15561dd126fa9c454265c6e036fec99c7b9234"},
-    {file = "ubc_solar_physics-1.5.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c26ebcc236b687ed8348bf0e5a6c71e31309669d4fb82099d436ad43186ee216"},
-    {file = "ubc_solar_physics-1.5.0-cp39-cp39-win_amd64.whl", hash = "sha256:de7fb69a4a4eb55ae89ba7df541d4598395974c830b277e051c5c52c8bd02dd8"},
-    {file = "ubc_solar_physics-1.5.0.tar.gz", hash = "sha256:cbdcca4ee161429e87ebfbcf07cf131222e52db110cebd7e5abcad787a677428"},
-]
+files = []
+develop = false
 
 [package.dependencies]
 "backports.tarfile" = "1.2.0"
 certifi = "2024.7.4"
 charset-normalizer = "3.3.2"
-dill = ">=0.3.8"
+dill = ">=0.3.9"
 filterpy = "1.4.5"
 haversine = "2.8.1"
 idna = "3.7"
@@ -4140,6 +4129,10 @@ tomli = "*"
 tqdm = "4.66.5"
 urllib3 = "2.2.2"
 zipp = "3.20.0"
+
+[package.source]
+type = "directory"
+url = "../physics"
 
 [[package]]
 name = "ujson"
@@ -4428,4 +4421,4 @@ test = ["big-O", "importlib-resources ; python_version < \"3.9\"", "jaraco.funct
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "f638cebf08e10ec96751c007c39565b1ea0e35e4feac9ece9436712d62a38738"
+content-hash = "5788cbbd82ee661953d7f48f9f5ce84c0f0d650d9fb7e78a557dbfe04029b16f"
