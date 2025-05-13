@@ -2,18 +2,28 @@
 name = "FSGP_2024_Day_1"
 start = "2024-07-16T14:00:00Z"
 stop = "2024-07-17T01:00:00Z"
+flags = ["ncm_motorsports_park", "has_spreadsheet"]
 
 [[event]]
 name = "FSGP_2024_Day_2"
 start = "2024-07-17T14:00:00Z"
 stop = "2024-07-18T01:00:00Z"
+flags = ["ncm_motorsports_park", "has_spreadsheet"]
 
 [[event]]
 name = "FSGP_2024_Day_3"
 start = "2024-07-18T14:00:00Z"
 stop = "2024-07-19T01:00:00Z"
+flags = ["ncm_motorsports_park", "has_spreadsheet"]
+
 
 [[event]]
 name = "ASC_2024_Day_1"
 start = "2024-07-20T14:00:00Z"
 stop = "2024-07-21T01:00:00Z"
+
+
+[[event]]
+name = "realtime"
+start = "2025-05-05T00:00:00Z"
+stop = "2025-05-19T00:00:00Z"
