@@ -2,12 +2,13 @@ from data_tools.schema import FileLoader
 from stage.stage import Stage
 from stage.stage_registry import stage_registry
 from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath
-from data_tools.collections import TimeSeries
+from data_tools.query import SolcastClient, SolcastPeriod, SolcastOutput
 from data_tools import Event
 from prefect import task
-import numpy as np
 import copy
 
+NCM_MOTORSPORTS_PARK_LAT = 37.00293525
+NCM_MOTORSPORTS_PARK_LON = -86.36660289
 
 class WeatherStage(Stage):
     @classmethod
@@ -47,6 +48,27 @@ class WeatherStage(Stage):
         self._event = event
 
     def extract(self) -> None:
+
+        client = SolcastClient()
+
+        all_outputs = [SolcastOutput(key) for key in SolcastOutput]
+
+        start_time = self._event.start
+        end_time = self._event.stop
+
+        if "ncm_motorsports_park" in self._event.start:
+            result = client.query(
+                NCM_MOTORSPORTS_PARK_LAT,
+                NCM_MOTORSPORTS_PARK_LON,
+                SolcastPeriod.PT5M,
+                all_outputs,
+                0,
+                start_time,
+                end_time,
+            )
+
+            breakpoint()
+
         return
 
     def transform(self) -> tuple[Result, ...]:

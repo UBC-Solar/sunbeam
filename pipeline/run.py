@@ -2,9 +2,8 @@ from data_tools import DataSource
 from prefect import flow
 from logs import SunbeamLogger
 from data_source import DataSourceFactory
-from stage import Context, PowerStage, IngressStage, EnergyStage
 from pipeline.configure import build_config, build_stage_graph
-from stage.efficiency_stage import EfficiencyStage
+from stage import Context, IngressStage, EnergyStage, PowerStage, WeatherStage, EfficiencyStage
 
 logger = SunbeamLogger("sunbeam")
 
@@ -46,11 +45,17 @@ def run_sunbeam(git_target="pipeline"):
             ingress_outputs[event_name]["VoltageofLeast"],
             pack_power
         )
+
         efficiency_stage: EfficiencyStage = EfficiencyStage(event_name)
         efficiency_5min, efficiency_1h, efficiency_lap_distance = EfficiencyStage.run(
             efficiency_stage,
             ingress_outputs[event_name]["VehicleVelocity"],
             motor_power
+        )
+
+        weather_stage: WeatherStage = WeatherStage(event_name)
+        _ = WeatherStage.run(
+            weather_stage,
         )
 
 
