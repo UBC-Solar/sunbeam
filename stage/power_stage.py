@@ -62,7 +62,6 @@ class PowerStage(Stage):
         :param event: the event currently being processed
         """
         super().__init__()
-        breakpoint()
         self._event = event
 
     def extract(self,
@@ -95,7 +94,6 @@ class PowerStage(Stage):
             # the linear function -2x + 1 maps 1 to -1 and 0 to 1,
             # resulting in a number that represents the sign/direction of the current
             motor_current_sign = motor_current_direction * -2 + 1
-            breakpoint()
             motor_current, motor_voltage, motor_current_sign = TimeSeries.align(
                 motor_current, motor_voltage, motor_current_sign
             )

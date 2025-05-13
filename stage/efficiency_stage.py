@@ -72,7 +72,6 @@ class EfficiencyStage(Stage):
         :param event: the event currently being processed
         """
         super().__init__()
-        breakpoint()
         self._event = event
 
     def extract(self, vehicle_velocity_loader: FileLoader, motor_power_loader: FileLoader) -> tuple[Result, Result]:

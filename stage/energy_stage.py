@@ -64,7 +64,6 @@ class EnergyStage(Stage):
         :param event: the event currently being processed
         """
         super().__init__()
-        breakpoint()
         self._event = event
 
     def extract(self, voltage_of_least_loader: FileLoader, pack_power_loader: FileLoader) -> tuple[Result, Result]:
