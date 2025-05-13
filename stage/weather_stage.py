@@ -44,7 +44,6 @@ class WeatherStage(Stage):
         :param event: the event currently being processed
         """
         super().__init__()
-
         self._event = event
 
     def extract(self) -> None:

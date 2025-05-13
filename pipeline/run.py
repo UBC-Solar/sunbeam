@@ -29,7 +29,7 @@ def run_sunbeam(git_target="pipeline"):
     for event in events:
         event_name = event.name
 
-        power_stage: PowerStage = PowerStage(event_name)
+        power_stage: PowerStage = PowerStage(event)
         pack_power, motor_power = PowerStage.run(
             power_stage,
             ingress_outputs[event_name]["TotalPackVoltage"],
@@ -39,21 +39,21 @@ def run_sunbeam(git_target="pipeline"):
             ingress_outputs[event_name]["BatteryCurrentDirection"],
         )
 
-        energy_stage: EnergyStage = EnergyStage(event_name)
+        energy_stage: EnergyStage = EnergyStage(event)
         integrated_pack_power, energy_vol_extrapolated, energy_from_integrated_power = EnergyStage.run(
             energy_stage,
             ingress_outputs[event_name]["VoltageofLeast"],
             pack_power
         )
 
-        efficiency_stage: EfficiencyStage = EfficiencyStage(event_name)
+        efficiency_stage: EfficiencyStage = EfficiencyStage(event)
         efficiency_5min, efficiency_1h, efficiency_lap_distance = EfficiencyStage.run(
             efficiency_stage,
             ingress_outputs[event_name]["VehicleVelocity"],
             motor_power
         )
 
-        weather_stage: WeatherStage = WeatherStage(event_name)
+        weather_stage: WeatherStage = WeatherStage(event)
         _ = WeatherStage.run(
             weather_stage,
         )
