@@ -102,8 +102,8 @@ class IngressStage(Stage):
             return event.name, target.name, Result.Ok(queried_data)
 
         except UnwrappedError as e:
-            # self.logger.error(f"Failed to find cached time series data for {target.name} for {event.name}: "
-            #                   f"{traceback.format_exc()}")
+            self.logger.error(f"Failed to find cached time series data for {target.name} for {event.name}: "
+                              f"{traceback.format_exc()}")
 
             return event.name, target.name, Result.Err(e)
 
