@@ -99,7 +99,12 @@ class IngressStage(Stage):
                 stop=event.stop_as_iso_str
             ).unwrap()
 
-            return event.name, target.name, Result.Ok(queried_data)
+            return event.name, target.name, Result.Ok({
+                "data": queried_data,
+                "units": target.units,
+                "period": 1 / target.frequency,
+                "description": target.description
+            })
 
         except UnwrappedError as e:
             self.logger.error(f"Failed to find cached time series data for {target.name} for {event.name}: "
@@ -203,7 +208,6 @@ class IngressStage(Stage):
                     # If not, try to process the data
                     try:
                         target = result.unwrap()
-
                         data = target["data"]
                         units = target["units"]
                         period = target["period"]
@@ -246,7 +250,6 @@ class IngressStage(Stage):
 
     def _load_and_store(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> Dict[str, Dict[str, FileLoader]]:
         result_dict: Dict[str, Dict[str, FileLoader]] = {}
-
         for event_name, event_items in processed_time_series_data.items():
             result_dict[event_name] = {}
 
