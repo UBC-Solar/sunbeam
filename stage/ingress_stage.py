@@ -61,6 +61,7 @@ class IngressStage(Stage):
 
             case DataSourceType.InfluxDB:
                 self._ingress_data_source = InfluxDBDataSource(config)
+                self._ingress_origin = self.context.title
 
                 self._extract_method = self._extract_influxdb
                 self._transform_method = self._transform_influxdb
@@ -87,14 +88,23 @@ class IngressStage(Stage):
 
     def _fetch_from_influxdb(self, event, target):
         try:
-            queried_data: Result = self._ingress_data_source.get(CanonicalPath(
-                origin=self._ingress_origin,
-                source=self.get_stage_name(),
-                event=event.name,
-                name=target.field
-            )).unwrap()
+            queried_data = self._ingress_data_source.get(
+                CanonicalPath(
+                    origin=target.bucket,
+                    source=target.car,
+                    event=target.measurement,
+                    name=target.field
+                ),
+                start=event.start_as_iso_str,
+                stop=event.stop_as_iso_str
+            ).unwrap()
 
-            return event.name, target.name, Result.Ok(queried_data)
+            return event.name, target.name, Result.Ok({
+                "data": queried_data,
+                "units": target.units,
+                "period": 1 / target.frequency,
+                "description": target.description
+            })
 
         except UnwrappedError as e:
             self.logger.error(f"Failed to find cached time series data for {target.name} for {event.name}: "
@@ -107,13 +117,20 @@ class IngressStage(Stage):
 
         for event in events:
             extracted_time_series_data[event.name] = {}
+            for target in targets:
+                try:
+                    queried_data: Result = self._ingress_data_source.get(CanonicalPath(
+                        origin=self._ingress_origin,
+                        source=self.get_stage_name(),
+                        event=event.name,
+                        name=target.field
+                    )).unwrap()
 
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                futures = {executor.submit(self._fetch_data, event, target): target for target in targets}
-
-            for future in concurrent.futures.as_completed(futures):
-                event_name, target_name, result = future.result()
-                extracted_time_series_data[event_name][target_name] = result
+                    extracted_time_series_data[event.name][target.name] = Result.Ok(queried_data)
+                except UnwrappedError as e:
+                    extracted_time_series_data[event.name][target.name] = Result.Err(e)
+                    self.logger.error(f"Failed to find cached time series data for {target.name} for {event.name}: "
+                                      f"{traceback.format_exc()}")
 
         return (extracted_time_series_data,)
 
@@ -165,32 +182,12 @@ class IngressStage(Stage):
         for event in events:
             extracted_time_series_data[event.name] = {}
 
-            for target in targets:
-                try:
-                    queried_data = self._ingress_data_source.get(
-                        CanonicalPath(
-                            origin=target.bucket,
-                            source=target.car,
-                            event=target.measurement,
-                            name=target.field
-                        ),
-                        start=event.start_as_iso_str,
-                        stop=event.stop_as_iso_str
-                    ).unwrap()
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = {executor.submit(self._fetch_from_influxdb, event, target): target for target in targets}
 
-                    extracted_time_series_data[event.name][target.name] = Result.Ok({
-                        "data": queried_data,
-                        "units": target.units,
-                        "period": 1 / target.frequency,
-                        "description": target.description
-                    })
-
-                    self.logger.info(f"Successfully extracted time series data for {target.name} for {event.name}!")
-
-                except UnwrappedError as e:
-                    extracted_time_series_data[event.name][target.name] = Result.Err(e)
-                    self.logger.error(f"Failed to extract time series data for {target.name} for {event.name}: "
-                                      f"{traceback.format_exc()}")
+            for future in concurrent.futures.as_completed(futures):
+                event_name, target_name, result = future.result()
+                extracted_time_series_data[event_name][target_name] = result
 
         return (extracted_time_series_data,)
 
@@ -211,7 +208,6 @@ class IngressStage(Stage):
                     # If not, try to process the data
                     try:
                         target = result.unwrap()
-
                         data = target["data"]
                         units = target["units"]
                         period = target["period"]
@@ -254,7 +250,6 @@ class IngressStage(Stage):
 
     def _load_and_store(self, processed_time_series_data: Dict[str, Dict[str, Result]]) -> Dict[str, Dict[str, FileLoader]]:
         result_dict: Dict[str, Dict[str, FileLoader]] = {}
-
         for event_name, event_items in processed_time_series_data.items():
             result_dict[event_name] = {}
 
@@ -268,8 +263,14 @@ class IngressStage(Stage):
 
                 if result:
                     existing_file = result.unwrap()
-                    existing_file.canonical_path = canonical_path
-                    result_dict[event_name][name] = self.context.data_source.store(existing_file)
+                    updated_file = File(
+                        data=existing_file.data,
+                        file_type=existing_file.file_type,
+                        canonical_path=canonical_path,
+                        metadata=existing_file.metadata,
+                        description=existing_file.description
+                    )
+                    result_dict[event_name][name] = self.context.data_source.store(updated_file)
 
                     self.logger.info(f"Successfully loaded {name} for {event_name}!")
 

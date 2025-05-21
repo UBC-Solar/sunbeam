@@ -1,5 +1,8 @@
 import logging
 import sys
+
+from prefect.exceptions import MissingContextError
+
 from logs import log_directory
 from logging import Logger
 from logging.handlers import RotatingFileHandler
@@ -24,9 +27,12 @@ class PrefectHandler(logging.Handler):
     """Custom logging handler that forwards logs to Prefect's logger."""
 
     def emit(self, record):
-        prefect_logger = get_run_logger()
-        log_method = getattr(prefect_logger, record.levelname.lower(), prefect_logger.info)
-        log_method(self.format(record))  # Log message with Prefect
+        try:
+            prefect_logger = get_run_logger()
+            log_method = getattr(prefect_logger, record.levelname.lower(), prefect_logger.info)
+            log_method(self.format(record))  # Log message with Prefect
+        except MissingContextError:
+            pass
 
 
 class SunbeamLogger(Logger):
