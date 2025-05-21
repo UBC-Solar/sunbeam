@@ -3,8 +3,6 @@ from stage.stage import Stage
 from stage.stage_registry import stage_registry
 from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath
 from data_tools.collections import TimeSeries
-from data_tools import Event
-import copy
 from prefect import task
 
 
@@ -49,20 +47,16 @@ class PowerStage(Stage):
         )
 
     @property
-    def event_name(self) -> str:
-        return self._event.name
+    def event_name(self):
+        return self._event_name
 
-    @property
-    def event(self) -> Event:
-        """Get a copy of this stage's event"""
-        return copy.deepcopy(self._event)
-
-    def __init__(self, event: Event):
+    def __init__(self, event_name: str):
         """
-        :param event: the event currently being processed
+        :param str event_name: which event is currently being processed
         """
         super().__init__()
-        self._event = event
+
+        self._event_name = event_name
 
     def extract(self,
             total_pack_voltage_loader: FileLoader,
@@ -94,6 +88,7 @@ class PowerStage(Stage):
             # the linear function -2x + 1 maps 1 to -1 and 0 to 1,
             # resulting in a number that represents the sign/direction of the current
             motor_current_sign = motor_current_direction * -2 + 1
+
             motor_current, motor_voltage, motor_current_sign = TimeSeries.align(
                 motor_current, motor_voltage, motor_current_sign
             )

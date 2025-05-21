@@ -2,8 +2,9 @@ from data_tools import DataSource
 from prefect import flow
 from logs import SunbeamLogger
 from data_source import DataSourceFactory
+from stage import Context, PowerStage, IngressStage, EnergyStage
 from pipeline.configure import build_config, build_stage_graph
-from stage import Context, IngressStage, EnergyStage, PowerStage, WeatherStage, EfficiencyStage
+from stage.efficiency_stage import EfficiencyStage
 
 logger = SunbeamLogger("sunbeam")
 
@@ -29,7 +30,7 @@ def run_sunbeam(git_target="pipeline"):
     for event in events:
         event_name = event.name
 
-        power_stage: PowerStage = PowerStage(event)
+        power_stage: PowerStage = PowerStage(event_name)
         pack_power, motor_power = PowerStage.run(
             power_stage,
             ingress_outputs[event_name]["TotalPackVoltage"],
@@ -39,23 +40,17 @@ def run_sunbeam(git_target="pipeline"):
             ingress_outputs[event_name]["BatteryCurrentDirection"],
         )
 
-        energy_stage: EnergyStage = EnergyStage(event)
+        energy_stage: EnergyStage = EnergyStage(event_name)
         integrated_pack_power, energy_vol_extrapolated, energy_from_integrated_power = EnergyStage.run(
             energy_stage,
             ingress_outputs[event_name]["VoltageofLeast"],
             pack_power
         )
-
-        efficiency_stage: EfficiencyStage = EfficiencyStage(event)
+        efficiency_stage: EfficiencyStage = EfficiencyStage(event_name)
         efficiency_5min, efficiency_1h, efficiency_lap_distance = EfficiencyStage.run(
             efficiency_stage,
             ingress_outputs[event_name]["VehicleVelocity"],
             motor_power
-        )
-
-        weather_stage: WeatherStage = WeatherStage(event)
-        _ = WeatherStage.run(
-            weather_stage,
         )
 
 

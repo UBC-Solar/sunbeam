@@ -5,9 +5,7 @@ from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalP
 from data_tools.collections import TimeSeries
 from prefect import task
 from scipy.interpolate import CubicSpline
-from data_tools import Event
 import numpy as np
-import copy
 from typing import Callable
 
 
@@ -51,20 +49,16 @@ class EnergyStage(Stage):
         return super().run(self,voltage_of_least_loader, pack_power_loader)
 
     @property
-    def event_name(self) -> str:
-        return self._event.name
+    def event_name(self):
+        return self._event_name
 
-    @property
-    def event(self) -> Event:
-        """Get a copy of this stage's event"""
-        return copy.deepcopy(self._event)
-
-    def __init__(self, event: Event):
+    def __init__(self, event_name: str):
         """
-        :param event: the event currently being processed
+        :param str event_name: which event is currently being processed
         """
         super().__init__()
-        self._event = event
+
+        self._event_name = event_name
 
     def extract(self, voltage_of_least_loader: FileLoader, pack_power_loader: FileLoader) -> tuple[Result, Result]:
         voltage_of_least_result: Result = voltage_of_least_loader()

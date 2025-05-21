@@ -3,9 +3,7 @@ from stage.stage import Stage
 from stage.stage_registry import stage_registry
 from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath
 from data_tools.collections import TimeSeries
-from data_tools import Event
 from prefect import task
-import copy
 import numpy as np
 
 MIN_AVG_METERS_PER_SEC = 2
@@ -59,20 +57,16 @@ class EfficiencyStage(Stage):
         return super().run(self, vehicle_velocity_loader, motor_power_loader)
 
     @property
-    def event_name(self) -> str:
-        return self._event.name
+    def event_name(self):
+        return self._event_name
 
-    @property
-    def event(self) -> Event:
-        """Get a copy of this stage's event"""
-        return copy.deepcopy(self._event)
-
-    def __init__(self, event: Event):
+    def __init__(self, event_name: str):
         """
-        :param event: the event currently being processed
+        :param str event_name: which event is currently being processed
         """
         super().__init__()
-        self._event = event
+
+        self._event_name = event_name
 
     def extract(self, vehicle_velocity_loader: FileLoader, motor_power_loader: FileLoader) -> tuple[Result, Result]:
         vehicle_velocity_result: Result = vehicle_velocity_loader()
