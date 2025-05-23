@@ -15,6 +15,11 @@ def _index():
     return render_template("index.html")
 
 
+@app.route("/health")
+def health():
+    return "Hello World!"
+
+
 @app.route("/list_files")
 def _list_files():
     return endpoints.list_files(time_series_collection)
