@@ -139,7 +139,7 @@ class WeatherStage(Stage):
             "start": x_axis[0],
             "stop": x_axis[-1],
             "period": (x_axis[1] - x_axis[0]).total_seconds(),
-            "length": len(x_axis),
+            "length": (x_axis[-1] - x_axis[0]).total_seconds(),
             "units": outputs[solcast_output]["units"],
         }
         ts = TimeSeries(data, meta)
