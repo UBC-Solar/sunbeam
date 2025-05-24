@@ -19,3 +19,124 @@ bucket = "CAN_log"
 frequency = 10.0
 units = "A"
 description = "The signed current flowing out of the battery (+ means drawing energy, - means storing energy)"
+
+[[target]]
+name = "MechBrakePressed"
+field = "MechBrakePressed"
+type = "TimeSeries"
+measurement = "MCB"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 10.0
+units = "A.U."
+description = "Boolean value of whether the mechanical brake is pressed, 0 is not pressed and 1 is pressed"
+
+[[target]]
+name = "VehicleVelocity"
+field = "VehicleVelocity"
+type = "TimeSeries"
+measurement = "MDI"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 5.0
+units = "m/s"
+description = "Speed of Brightside"
+
+[[target]]
+name = "BatteryCurrentDirection"
+field = "BatteryCurrentDirection"
+type = "TimeSeries"
+measurement = "MC"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 5.0
+units = "A.U."
+description = "Sign of BatteryCurrent (motor current) where 0 is positive current and 1 is negative current"
+
+[[target]]
+name = "AcceleratorPosition"
+field = "AcceleratorPosition"
+type = "TimeSeries"
+measurement = "MC"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 5.0
+units = "A.U."
+description = "Decimal percentage (0.0 – 1.0) indicating the accelerator position where 1.0 is fully pressed"
+
+[[target]]
+name = "BatteryCurrent"
+field = "BatteryCurrent"
+type = "TimeSeries"
+measurement = "MC"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 5.0
+units = "A"
+description = "The current flowing into the motor (positive means drawing energy, negative is producing energy)"
+
+[[target]]
+name = "BatteryVoltage"
+field = "BatteryVoltage"
+type = "TimeSeries"
+measurement = "MC"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 5.0
+units = "A"
+description = "The voltage experienced by the motor"
+
+[[target]]
+name = "CurrentSensor1"
+field = "CurrentSensor1"
+type = "TimeSeries"
+measurement = "AMB"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 4.0
+units = "A"
+description = "Current of array string 1"
+
+[[target]]
+name = "CurrentSensor2"
+field = "CurrentSensor2"
+type = "TimeSeries"
+measurement = "AMB"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 4.0
+units = "A"
+description = "Current of array string 2"
+
+[[target]]
+name = "VoltSensor1"
+field = "VoltSensor1"
+type = "TimeSeries"
+measurement = "AMB"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 4.0
+units = "V"
+description = "Voltage of array string 1"
+
+[[target]]
+name = "VoltSensor2"
+field = "VoltSensor2"
+type = "TimeSeries"
+measurement = "AMB"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 4.0
+units = "V"
+description = "Voltage of array string 2"
+
+[[target]]
+name = "VoltageofLeast"
+field = "VoltageofLeast"
+type = "TimeSeries"
+measurement = "BMS"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 10.0
+units = "V"
+description = "Voltage of the battery module with the lowest voltage"
