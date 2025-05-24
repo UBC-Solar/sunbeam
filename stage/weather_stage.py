@@ -68,7 +68,7 @@ outputs = {
         "units": "deg"
     }
 }
-ordered_outputs = list(outputs.keys())
+ordered_outputs = sorted(list(outputs.keys()))
 
 class WeatherStage(Stage):
     @classmethod
@@ -83,10 +83,21 @@ class WeatherStage(Stage):
     @task(name="Weather")
     def run(self) -> tuple[FileLoader, ...]:
         """
-        Run the weather stage... TODO
+        Run the weather stage. Obtains the following values from Solcast, if the event is within +- 7 days
+        of real time:
+        - AirTemperature
+        - Azimuth
+        - DHI
+        - DNI
+        - GHI
+        - PrecipitationRate
+        - WindDirection10m
+        - WindSpeed10m
+        - Zenith
 
         :param self: an instance of WeatherStage to be run
-        :returns: TODO
+        :returns: A tuple of FileLoaders with the data shown above, in alphabetical order.
+                  Data is in `TimeSeries` format, or `None` if an error was encountered during querying.
         """
         return super().run(self)
 
