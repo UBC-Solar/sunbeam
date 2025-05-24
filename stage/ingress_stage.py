@@ -36,8 +36,6 @@ class IngressStage(Stage):
         :return: a dictionary which can be indexed first by event, then by target name.
         """
         ingress_dict, = super().run(self, targets, events)
-        self.logger.error(ingress_dict)
-        self.logger.error(type(ingress_dict))
         return cast(Dict[str, Dict[str, FileLoader]], ingress_dict)
 
     def __init__(self, config: DataSourceConfig):
@@ -96,8 +94,8 @@ class IngressStage(Stage):
     def load(
             self,
             processed_time_series_data: Dict[str, Dict[str, FileLoader]]
-    ) -> tuple[Dict[str, Dict[str, FileLoader]]]:
-        return (processed_time_series_data, )
+    ) -> Dict[str, Dict[str, FileLoader]]:
+        return processed_time_series_data
 
     def _extract_transform_load_influxdb(
             self,
