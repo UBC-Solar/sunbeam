@@ -8,7 +8,6 @@ from data_tools.collections.time_series import TimeSeries
 from typing import List, Dict
 import traceback
 from prefect import task
-import concurrent.futures
 
 
 class IngressStage(Stage):
@@ -85,32 +84,6 @@ class IngressStage(Stage):
             case _:
                 raise StageError(self.get_stage_name(), f"Did not recognize {config["fs"]} as a valid Ingress "
                                                         f"stage data source!")
-
-    def _fetch_from_influxdb(self, event, target):
-        try:
-            queried_data = self._ingress_data_source.get(
-                CanonicalPath(
-                    origin=target.bucket,
-                    source=target.car,
-                    event=target.measurement,
-                    name=target.field
-                ),
-                start=event.start_as_iso_str,
-                stop=event.stop_as_iso_str
-            ).unwrap()
-
-            return event.name, target.name, Result.Ok({
-                "data": queried_data,
-                "units": target.units,
-                "period": 1 / target.frequency,
-                "description": target.description
-            })
-
-        except UnwrappedError as e:
-            self.logger.error(f"Failed to find cached time series data for {target.name} for {event.name}: "
-                              f"{traceback.format_exc()}")
-
-            return event.name, target.name, Result.Err(e)
 
     def _extract_existing(self, targets: List[TimeSeriesTarget], events: List[Event]) -> tuple[Dict[str, Dict[str, Result]]]:
         extracted_time_series_data = {}
