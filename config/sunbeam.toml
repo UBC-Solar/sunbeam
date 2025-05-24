@@ -16,7 +16,7 @@ fs_root = "fs_data"
 [stage_data_source.InfluxDBDataSource]
 
 [ingress_data_source]
-data_source_type = "InfluxDBDataSource"
+data_source_type = "MongoDBDataSource"
 
 [ingress_data_source.MongoDBDataSource]
 ingress_origin = "influxdb_cache"
