@@ -82,7 +82,7 @@ class IngressStage(Stage):
             targets: List[TimeSeriesTarget],
             events: List[Event]
     ) -> tuple[Dict[str, Dict[str, FileLoader]]]:
-        return self._extract_method(targets, events)
+        return (self._extract_method(targets, events), )
 
     def transform(
             self,
