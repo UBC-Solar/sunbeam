@@ -28,27 +28,27 @@ outputs = {
         "units": "deg"
     },
     SolcastOutput.dhi: {
-        "name": "dhi",
+        "name": "DHI",
         "description": "The diffuse irradiance received on a horizontal surface. Also referred to as Diffuse Sky Radiation. The diffuse component is irradiance that is scattered by the atmosphere.",
         "units": ""
     },
     SolcastOutput.dni: {
-        "name": "dni",
+        "name": "DNI",
         "description": "Irradiance received from the direction of the sun (10th percentile clearness). Also referred to as beam radiation.",
         "units": ""
     },
     SolcastOutput.ghi: {
-        "name": "ghi",
+        "name": "GHI",
         "description": "Total irradiance on a horizontal surface. The sum of direct and diffuse irradiance components received on a horizontal surface.",
         "units": ""
     },
     SolcastOutput.air_temperature: {
-        "name": "air_temperature",
+        "name": "AirTemperature",
         "description": "The air temperature at 2 meters above surface level.",
         "units": ""
     },
     SolcastOutput.precipitation_rate: {
-        "name": "precipitation_rate",
+        "name": "PrecipitationRate",
         "description": "Precipitation rate. An estimate of the average precipitation rate during the selected period - not an accumulated value.",
         "units": ""
     },
