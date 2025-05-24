@@ -124,7 +124,7 @@ class IngressStage(Stage):
             self,
             targets: List[TimeSeriesTarget],
             events: List[Event]
-    ) -> Dict[str, Dict[str, FileLoader]]:
+    ) -> tuple[Dict[str, Dict[str, FileLoader]]]:
         """
         Extract raw data and marshall it for use in the data pipeline.
 
@@ -140,7 +140,7 @@ class IngressStage(Stage):
                 result = self._fetch_from_existing(event, target)
                 result_dict[event.name][target.name] = self._load_timeseries(result, event.name, target.name)
 
-        return result_dict
+        return (result_dict, )
 
     def _fetch_from_existing(self, event, target):
         try:
