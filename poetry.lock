@@ -3701,13 +3701,13 @@ devenv = ["check-manifest", "pytest (>=4.3)", "pytest-cov", "pytest-mock (>=3.3)
 
 [[package]]
 name = "ubc-solar-data-tools"
-version = "1.8.0"
+version = "1.9.0"
 description = "UBC Solar's data analysis and querying tools"
 optional = false
 python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "ubc_solar_data_tools-1.8.0.tar.gz", hash = "sha256:c1422c1aa053e7257f21d091d6eabb5e7a00a12725167d5022a8949dccc499b2"},
+    {file = "ubc_solar_data_tools-1.9.0.tar.gz", hash = "sha256:1ecd9fba0f7b4beab464b2121611d9562ff051f1d241201c0fa763ac921222b8"},
 ]
 
 [package.dependencies]
@@ -3996,4 +3996,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "5b6d51cedc4494743ce343e77ef341a09b21ad84d8aef56ef057dc80fc19bce0"
+content-hash = "39acd6f0e21be942d0a05fda2952679f7dc5cbd51438af7838482aa2850efdea"
