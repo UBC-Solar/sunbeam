@@ -35,7 +35,8 @@ class IngressStage(Stage):
         :param events: a list of n Event models specifying how the raw data should be temporally partitioned
         :return: a dictionary which can be indexed first by event, then by target name.
         """
-        ingress_dict, = super().run(self, targets, events)
+        result = super().run(self, targets, events)
+        ingress_dict, = result
         return cast(Dict[str, Dict[str, FileLoader]], ingress_dict)
 
     def __init__(self, config: DataSourceConfig):
