@@ -36,6 +36,8 @@ class IngressStage(Stage):
         :return: a dictionary which can be indexed first by event, then by target name.
         """
         ingress_dict, = super().run(self, targets, events)
+        print(ingress_dict)
+        print(type(ingress_dict))
         return cast(Dict[str, Dict[str, FileLoader]], ingress_dict)
 
     def __init__(self, config: DataSourceConfig):
