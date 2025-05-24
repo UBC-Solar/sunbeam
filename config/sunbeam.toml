@@ -29,5 +29,5 @@ fs_root = "fs_data"
 
 [ingress_data_source.InfluxDBDataSource]
 start = "2024-07-01T01:00:00Z"
-stop = "2024-08-30T01:00:00Z"
+stop = "2025-08-30T01:00:00Z"
 url = "http://influxdb.telemetry.ubcsolar.com"
