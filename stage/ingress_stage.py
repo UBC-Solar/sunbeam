@@ -81,26 +81,26 @@ class IngressStage(Stage):
             self,
             targets: List[TimeSeriesTarget],
             events: List[Event]
-    ) -> tuple[Dict[str, Dict[str, FileLoader]]]:
+    ) -> Dict[str, Dict[str, FileLoader]]:
         return self._extract_method(targets, events)
 
     def transform(
             self,
             extracted_time_series_data: Dict[str, Dict[str, FileLoader]]
-    ) -> tuple[Dict[str, Dict[str, FileLoader]]]:
-        return (extracted_time_series_data, )
+    ) -> Dict[str, Dict[str, FileLoader]]:
+        return extracted_time_series_data
 
     def load(
             self,
             processed_time_series_data: Dict[str, Dict[str, FileLoader]]
-    ) -> tuple[Dict[str, Dict[str, FileLoader]]]:
-        return (processed_time_series_data, )
+    ) -> Dict[str, Dict[str, FileLoader]]:
+        return processed_time_series_data
 
     def _extract_transform_load_influxdb(
             self,
             targets: List[TimeSeriesTarget],
             events: List[Event]
-    ) -> tuple[Dict[str, Dict[str, FileLoader]]]:
+    ) -> Dict[str, Dict[str, FileLoader]]:
         """
         Extract raw data and marshall it for use in the data pipeline.
 
@@ -117,13 +117,13 @@ class IngressStage(Stage):
                 result_transform = self._transform_into_timeseries(result_extract, event.name, target.name)
                 result_dict[event.name][target.name] = self._load_timeseries(result_transform, event.name, target.name)
 
-        return (result_dict, )
+        return result_dict
 
     def _extract_transform_load_existing(
             self,
             targets: List[TimeSeriesTarget],
             events: List[Event]
-    ) -> tuple[Dict[str, Dict[str, FileLoader]]]:
+    ) -> Dict[str, Dict[str, FileLoader]]:
         """
         Extract raw data and marshall it for use in the data pipeline.
 
@@ -139,7 +139,7 @@ class IngressStage(Stage):
                 result = self._fetch_from_existing(event, target)
                 result_dict[event.name][target.name] = self._load_timeseries(result, event.name, target.name)
 
-        return (result_dict, )
+        return result_dict
 
     def _fetch_from_existing(self, event, target):
         try:
