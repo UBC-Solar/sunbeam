@@ -8,6 +8,7 @@ from data_tools.collections.time_series import TimeSeries
 from typing import List, Dict, cast
 import traceback
 from prefect import task
+import os
 
 
 class IngressStage(Stage):
@@ -183,6 +184,7 @@ class IngressStage(Stage):
 
         except UnwrappedError as e:
             result = Result.Err(e)
+            self.logger.error(os.getenv("INFLUX_TOKEN"))
             self.logger.error(f"Failed to extract time series data for {target.name} for {event.name}: "
                               f"{traceback.format_exc()}")
 
