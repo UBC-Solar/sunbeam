@@ -3,7 +3,11 @@ from data_tools.query import DBClient
 from data_tools.utils import parse_iso_datetime
 from datetime import datetime
 from config import InfluxDBDataSourceConfig
+from dotenv import load_dotenv
 import os
+
+
+load_dotenv()
 
 
 class InfluxDBDataSource(DataSource):
