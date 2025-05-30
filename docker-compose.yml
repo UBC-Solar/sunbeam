@@ -47,7 +47,7 @@ services:
 #    env_file: "./pipeline/.env"
     # Note: the last command blocks (so insert any additonal commands before the last one!)
     command: > 
-      sh -c "ln -s config/.env . && 
+      sh -c "ln -sfn config/.env . && 
              export $(cat .env | xargs) && 
              poetry run prefect work-pool create --type process default-work-pool --overwrite &&
              poetry run prefect worker start --pool default-work-pool"
