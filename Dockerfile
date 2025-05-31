@@ -8,10 +8,8 @@ WORKDIR /app
 
 COPY  ./pyproject.toml .
 
-COPY ./poetry.lock .
+COPY ./uv.lock .
 
-ENV POETRY_VERSION 1.8.3
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-RUN pip install poetry==$POETRY_VERSION
-
-RUN poetry install
+RUN uv sync --locked --extra external

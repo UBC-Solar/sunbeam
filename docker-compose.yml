@@ -49,8 +49,8 @@ services:
     command: > 
       sh -c "ln -s config/.env . && 
              export $(cat .env | xargs) && 
-             poetry run prefect work-pool create --type process default-work-pool --overwrite &&
-             poetry run prefect worker start --pool default-work-pool"
+             uv run prefect work-pool create --type process default-work-pool --overwrite &&
+             uv run prefect worker start --pool default-work-pool"
 
   postgres:
     image: postgres:13
@@ -95,7 +95,7 @@ services:
         condition: service_healthy
 
     command: >
-      sh -c "poetry run python external.py" 
+      sh -c "uv run python external.py" 
 
   redis:
     image: redis:alpine
