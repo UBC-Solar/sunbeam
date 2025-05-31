@@ -1,14 +1,14 @@
 from data_tools.schema import FileLoader
-from data_tools import Event
 from stage.stage import Stage
 from stage.stage_registry import stage_registry
 from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath
 from data_tools.collections import TimeSeries
 from prefect import task
 from scipy.interpolate import CubicSpline
+from data_tools import Event
 import numpy as np
-from typing import Callable
 import copy
+from typing import Callable
 
 
 # lookup table mapping cell voltage to cell energy, derived from SANYO NCR18650GA datasheet 2A discharge curve.
@@ -61,7 +61,7 @@ class EnergyStage(Stage):
 
     @property
     def event_name(self) -> str:
-        return self._event_name
+        return self._event.name
 
     @property
     def event(self) -> Event:
@@ -73,9 +73,7 @@ class EnergyStage(Stage):
         :param event: the event currently being processed
         """
         super().__init__()
-
         self._event = event
-        self._event_name = event.name
 
     def extract(self, voltage_of_least_loader: FileLoader, pack_power_loader: FileLoader) -> tuple[Result, Result]:
         voltage_of_least_result: Result = voltage_of_least_loader()

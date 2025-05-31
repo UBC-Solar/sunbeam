@@ -45,8 +45,14 @@ class MongoDBDataSource(DataSource):
                 if file.data is not None:
                     serialized_object = dill.dumps(file.data)
 
-                    self._time_series_collection.insert_one(
-                        {
+                    self._time_series_collection.replace_one(
+                        filter={
+                            "origin": file.canonical_path.origin,
+                            "source": file.canonical_path.source,
+                            "event": file.canonical_path.event,
+                            "name": file.canonical_path.name
+                        },
+                        replacement={
                             "origin": file.canonical_path.origin,
                             "source": file.canonical_path.source,
                             "event": file.canonical_path.event,
@@ -55,7 +61,8 @@ class MongoDBDataSource(DataSource):
                             "metadata": file.metadata if file.metadata is not None else {},
                             "description": file.description if file.description is not None else "",
                             "filetype": str(file.file_type)
-                        }
+                        },
+                        upsert=True  # Insert if it doesn't exist, otherwise replace
                     )
 
                 return FileLoader(lambda x: self.get(x), file.canonical_path)

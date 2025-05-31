@@ -2,10 +2,9 @@ from data_tools import DataSource
 from prefect import flow
 from logs import SunbeamLogger
 from data_source import DataSourceFactory
-from stage import Context, PowerStage, IngressStage, EnergyStage
 from pipeline.configure import build_config, build_stage_graph
-from stage.efficiency_stage import EfficiencyStage
-from stage.localization_stage import LocalizationStage
+from stage import (Context, IngressStage, EnergyStage, PowerStage,
+                   WeatherStage, EfficiencyStage, LocalizationStage)
 
 logger = SunbeamLogger("sunbeam")
 
@@ -48,7 +47,8 @@ def run_sunbeam(git_target="pipeline"):
         )
 
         localization_stage: LocalizationStage = LocalizationStage(event)
-        lap_index_integrated_speed, lap_index_spreadsheet, track_distance_spreadsheet, track_index_spreadsheet = LocalizationStage.run(
+        (lap_index_integrated_speed, lap_index_spreadsheet,
+         track_distance_spreadsheet, track_index_spreadsheet) = LocalizationStage.run(
             localization_stage,
             ingress_outputs[event.name]["VehicleVelocity"]
         )
@@ -59,6 +59,12 @@ def run_sunbeam(git_target="pipeline"):
             ingress_outputs[event.name]["VehicleVelocity"],
             motor_power,
             lap_index_integrated_speed
+        )
+
+        weather_stage: WeatherStage = WeatherStage(event)
+        (air_temperature, azimuth, dhi, dni, ghi, precipitation_rate,
+         wind_direction_10m, wind_speed_10m, zenith) = WeatherStage.run(
+            weather_stage,
         )
 
 
