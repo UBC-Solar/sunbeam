@@ -1,21 +1,28 @@
 import matplotlib.pyplot as plt
 import dill
-import os
-from data_tools.collections import TimeSeries
+import pathlib
 
 if __name__ == '__main__':
 
-    things_to_plot = [
-        'dni.bin', 'ghi.bin', 'dhi.bin',
-    ]
+    event_name = "FSGP_2024_Day_2"
 
-    data = []
-    for thing in things_to_plot:
-        with open(os.path.join(os.getcwd(), 'fs_data', 'pipeline', 'realtime', 'weather', thing), 'rb') as f:
-            data.append(dill.load(f).data)
+    stage_dir = "localization"
+    file_name = "TrackIndexSpreadsheet.bin"
+    path_to_bin = pathlib.Path("../fs_data/pipeline") / event_name / stage_dir / file_name
 
-    for thing, ts in zip(things_to_plot, data):
-        plt.plot(ts.datetime_x_axis, ts, label=thing)
-    plt.legend()
-    plt.title(r'Solcast GHI, DHI, and DNI. GHI $\approx$ $\text{DHI + DNI} \cos(\theta)$')
+    stage_dir2 = "localization"
+    file_name2 = "LapIndexSpreadsheet.bin"
+    path_to_bin2 = pathlib.Path("../fs_data/pipeline") / event_name / stage_dir2 / file_name2
+
+    with open(path_to_bin, 'rb') as f:
+        data = dill.load(f).data
+    with open(path_to_bin2, 'rb') as f:
+        data2 = dill.load(f).data
+
+    data, data2 = data.align(data, data2)
+
+    plt.plot(data.x_axis, data, label="track index")
+    plt.plot(data2.x_axis, data2, label="lap index")
+    plt.xlabel("Time")
+    plt.ylabel("")
     plt.show()
