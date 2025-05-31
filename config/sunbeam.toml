@@ -6,7 +6,7 @@ stages_to_run = [
 ]
 
 [stage_data_source]
-data_source_type = "FSDataSource"
+data_source_type = "MongoDBDataSource"
 
 [stage_data_source.FSDataSource]
 fs_root = "fs_data"
@@ -16,10 +16,10 @@ fs_root = "fs_data"
 [stage_data_source.InfluxDBDataSource]
 
 [ingress_data_source]
-data_source_type = "SunbeamDataSource"
+data_source_type = "MongoDBDataSource"
 
 [ingress_data_source.MongoDBDataSource]
-ingress_origin = "dev-fix_influxdb_ingress"
+ingress_origin = "influxdb_cache"
 
 [ingress_data_source.SunbeamDataSource]
 api_url = "api.sunbeam.ubcsolar.com"
