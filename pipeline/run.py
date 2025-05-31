@@ -47,8 +47,8 @@ def run_sunbeam(git_target="pipeline"):
         )
 
         localization_stage: LocalizationStage = LocalizationStage(event)
-        (lap_index_integrated_speed, lap_index_spreadsheet,
-         track_distance_spreadsheet, track_index_spreadsheet) = LocalizationStage.run(
+        (lap_index, track_index, lap_index_integrated_speed,
+         lap_index_spreadsheet, track_distance_spreadsheet, track_index_spreadsheet) = LocalizationStage.run(
             localization_stage,
             ingress_outputs[event.name]["VehicleVelocity"]
         )
@@ -58,7 +58,7 @@ def run_sunbeam(git_target="pipeline"):
             efficiency_stage,
             ingress_outputs[event.name]["VehicleVelocity"],
             motor_power,
-            lap_index_integrated_speed
+            lap_index
         )
 
         weather_stage: WeatherStage = WeatherStage(event)

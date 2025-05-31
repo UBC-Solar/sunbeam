@@ -49,7 +49,7 @@ class EfficiencyStage(Stage):
     def run(self,
             vehicle_velocity_loader: FileLoader,
             motor_power_loader: FileLoader,
-            lap_index_integrated_speed_loader: FileLoader) -> tuple[FileLoader, ...]:
+            lap_index_loader: FileLoader) -> tuple[FileLoader, ...]:
         """
         Run the efficiency stage, which computes motor energy used per unit distance. Values are computed over various
         time slices.
@@ -57,10 +57,10 @@ class EfficiencyStage(Stage):
         :param self: an instance of EfficiencyStage to be run
         :param FileLoader vehicle_velocity_loader: loader to VehicleVelocity from Ingress
         :param FileLoader motor_power_loader: loader to Motor Power from PowerStage
-        :param FileLoader lap_index_integrated_speed_loader: loader to LapIndexIntegratedSpeed from LocalizationStage
+        :param FileLoader lap_index_loader: loader to the best available lap index data from LocalizationStage
         :returns: Efficiency5Minute, Efficiency1Hour, EfficiencyLapDistance (FileLoaders pointing to TimeSeries)
         """
-        return super().run(self, vehicle_velocity_loader, motor_power_loader, lap_index_integrated_speed_loader)
+        return super().run(self, vehicle_velocity_loader, motor_power_loader, lap_index_loader)
 
     @property
     def event_name(self) -> str:
@@ -81,12 +81,12 @@ class EfficiencyStage(Stage):
     def extract(self,
                 vehicle_velocity_loader: FileLoader,
                 motor_power_loader: FileLoader,
-                lap_index_integrated_speed_loader: FileLoader) -> tuple[Result, Result, Result]:
+                lap_index_loader: FileLoader) -> tuple[Result, Result, Result]:
         vehicle_velocity_result: Result = vehicle_velocity_loader()
         motor_power_result: Result = motor_power_loader()
-        lap_index_integrated_speed_result: Result = lap_index_integrated_speed_loader()
+        lap_index_result: Result = lap_index_loader()
 
-        return vehicle_velocity_result, motor_power_result, lap_index_integrated_speed_result
+        return vehicle_velocity_result, motor_power_result, lap_index_result
 
     @staticmethod
     def get_periodic_efficiency(
@@ -179,7 +179,7 @@ class EfficiencyStage(Stage):
 
         return np.array(efficiency_lap_distance)
 
-    def transform(self, vehicle_velocity_result, motor_power_result, lap_index_integrated_speed_result) -> tuple[Result, Result, Result]:
+    def transform(self, vehicle_velocity_result, motor_power_result, lap_index_result) -> tuple[Result, Result, Result]:
         try:
             vehicle_velocity_ts: TimeSeries = vehicle_velocity_result.unwrap().data
             motor_power_ts: TimeSeries = motor_power_result.unwrap().data
@@ -205,14 +205,14 @@ class EfficiencyStage(Stage):
             efficiency_1h_result = Result.Ok(efficiency_1h)
 
             try:
-                lap_index_integrated_speed = lap_index_integrated_speed_result.unwrap().data
-                lap_index_integrated_speed_aligned, vehicle_velocity_aligned, motor_power_aligned = TimeSeries.align(
-                    lap_index_integrated_speed, vehicle_velocity_ts, motor_power_ts)
+                lap_index = lap_index_result.unwrap().data
+                lap_index_aligned, vehicle_velocity_aligned, motor_power_aligned = TimeSeries.align(
+                    lap_index, vehicle_velocity_ts, motor_power_ts)
 
                 efficiency_lap_distance: np.ndarray = self.get_lap_dist_efficiency(
                     vehicle_velocity_aligned,
                     motor_power_aligned,
-                    lap_index_integrated_speed_aligned
+                    lap_index_aligned
                 )
                 efficiency_lap_distance_result = Result.Ok(efficiency_lap_distance)
             except UnwrappedError as e:

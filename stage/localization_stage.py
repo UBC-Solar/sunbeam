@@ -339,18 +339,23 @@ class LocalizationStage(Stage):
         Run the localization stage, which computes various metrics relating to the car's location in a track race.
 
         Outputs will be FileLoaders pointing to None for non-track events, or if the prerequisite data is unavailable.
-        1. LapIndexIntegratedSpeed
+        1. LapIndex
+            The best available LapIndex data for the event. Prioritizes LapIndexSpreadsheet > LapIndexIntegratedSpeed.
+        2. TrackIndex
+            The best available TrackIndex data for the event. Currently only TrackIndexSpreadsheet is available, but GPS
+            TrackIndex is coming soon.
+        3. LapIndexIntegratedSpeed
             Do not use this unless it is the only option. Integrates speed and tiles by track length to approximate
             the lap index we are on at any given time. Lap index is the integer number of laps we have completed
             around the track (starting at zero).
-        2. LapIndexSpreadsheet
+        4. LapIndexSpreadsheet
             Uses data from the FSGP timing spreadsheet (via FSGPDayLaps) to determine lap index.
             Lap index is the integer number of laps we have completed around the track
             at any given time (starting at zero).
-        3. TrackDistanceSpreadsheet
+        5. TrackDistanceSpreadsheet
             Uses data from the FSGP timing spreadsheet (via FSGPDayLaps) to determine lap splits, then
             integrates speed over the current lap to determine distance travelled along the track.
-        4. TrackIndexSpreadsheet
+        6. TrackIndexSpreadsheet
             Integrates speed within a lap to determine the car's coordinate within the track. We use a list of
             lat/lon pairs to represent a track's indices, and round to the nearest one. References the FSGP timing
             spreadsheet (via FSGPDayLaps) for lap start/stop times.
@@ -455,7 +460,7 @@ class LocalizationStage(Stage):
         track_index_ts.units = "Track Index"
         return track_distance_ts, track_index_ts
 
-    def transform(self, vehicle_velocity_result) -> tuple[Result, Result, Result, Result]:
+    def transform(self, vehicle_velocity_result) -> tuple[Result, ...]:
         try:
             vehicle_velocity_ts: TimeSeries = vehicle_velocity_result.unwrap().data
             lap_index_integrated_speed_result = self._get_lap_index_integrated_speed(vehicle_velocity_ts)
@@ -472,83 +477,80 @@ class LocalizationStage(Stage):
             lap_index_spreadsheet_result = Result.Err(RuntimeError("Failed to process LapIndexSpreadsheet!"))
             track_distance_spreadsheet_result = Result.Err(RuntimeError("Failed to process TrackDistanceSpreadsheet!"))
             track_index_spreadsheet_result = Result.Err(RuntimeError("Failed to process TrackIndexSpreadsheet!"))
-        return (lap_index_integrated_speed_result, lap_index_spreadsheet_result,
-                track_distance_spreadsheet_result, track_index_spreadsheet_result)
+
+        # determine the best lap and track index available
+        if lap_index_spreadsheet_result:
+            lap_index_result = lap_index_spreadsheet_result
+        else:
+            lap_index_result = lap_index_integrated_speed_result
+        track_index_result = track_index_spreadsheet_result
+
+        return (lap_index_result, track_index_result, lap_index_integrated_speed_result,
+                lap_index_spreadsheet_result, track_distance_spreadsheet_result, track_index_spreadsheet_result)
 
     def load(self,
+             lap_index_result,
+             track_index_result,
              lap_index_integrated_speed_result,
              lap_index_spreadsheet_result,
              track_distance_spreadsheet_result,
-             track_index_spreadsheet_result) -> tuple[FileLoader, FileLoader, FileLoader, FileLoader]:
+             track_index_spreadsheet_result) -> tuple[FileLoader, ...]:
 
-        lap_index_integrated_speed_file = File(
-            canonical_path=CanonicalPath(
-                origin=self.context.title,
-                event=self.event_name,
-                source=self.get_stage_name(),
-                name="LapIndexIntegratedSpeed",
-            ),
-            file_type=FileType.TimeSeries,
-            data=lap_index_integrated_speed_result.unwrap() if lap_index_integrated_speed_result else None,
-            description="Estimate of the FSGP lap index in this event as a function of time. "
-                        "Value is estimated by integrating VehicleVelocity and tiling the result over the FSGP lap "
-                        f"length of {NCM_LAP_LEN_M} meters."
-        )
+        file_details = {
+            "LapIndex": {
+                "data": lap_index_result.unwrap() if lap_index_result else None,
+                "description": "The best available LapIndex data for the event. "
+                               "Prioritizes LapIndexSpreadsheet > LapIndexIntegratedSpeed."
+            },
+            "TrackIndex": {
+                "data": track_index_result.unwrap() if track_index_result else None,
+                "description": "The best available TrackIndex data for the event. Currently only TrackIndexSpreadsheet "
+                               "is available, but GPS TrackIndex is coming soon."
+            },
+            "LapIndexIntegratedSpeed": {
+                "data": lap_index_integrated_speed_result.unwrap() if lap_index_integrated_speed_result else None,
+                "description": f"Estimate of the FSGP lap index in this event as a function of time. "
+                               f"Value is estimated by integrating VehicleVelocity and tiling the result over the FSGP lap "
+                               f"length of {NCM_LAP_LEN_M} meters."
+            },
+            "LapIndexSpreadsheet": {
+                "data": lap_index_spreadsheet_result.unwrap() if lap_index_spreadsheet_result else None,
+                "description": "Uses data from the FSGP timing spreadsheet (via FSGPDayLaps) to determine lap index."
+                               "Lap index is the integer number of laps we have completed around the track"
+                               "at any given time (starting at zero)."
+            },
+            "TrackDistanceSpreadsheet": {
+                "data": track_distance_spreadsheet_result.unwrap() if track_distance_spreadsheet_result else None,
+                "description": "Uses data from the FSGP timing spreadsheet (via FSGPDayLaps) to determine lap splits, then "
+                               "integrates speed over the current lap to determine distance travelled along the track."
+            },
+            "TrackIndexSpreadsheet": {
+                "data": track_index_spreadsheet_result.unwrap() if track_index_spreadsheet_result else None,
+                "description": "Uses data from the FSGP timing spreadsheet (via FSGPDayLaps) to determine lap splits, then "
+                               "integrates speed over the current lap to determine track index."
+            },
+        }
 
-        lap_index_spreadsheet_file = File(
-            canonical_path=CanonicalPath(
-                origin=self.context.title,
-                event=self.event_name,
-                source=self.get_stage_name(),
-                name="LapIndexSpreadsheet",
-            ),
-            file_type=FileType.TimeSeries,
-            data=lap_index_spreadsheet_result.unwrap() if lap_index_spreadsheet_result else None,
-            description="Uses data from the FSGP timing spreadsheet (via FSGPDayLaps) to determine lap index."
-                        "Lap index is the integer number of laps we have completed around the track"
-                        "at any given time (starting at zero)."
-        )
+        file_loaders = []
 
-        track_distance_spreadsheet_file = File(
-            canonical_path=CanonicalPath(
-                origin=self.context.title,
-                event=self.event_name,
-                source=self.get_stage_name(),
-                name="TrackDistanceSpreadsheet",
-            ),
-            file_type=FileType.TimeSeries,
-            data=track_distance_spreadsheet_result.unwrap() if track_distance_spreadsheet_result else None,
-            description="Uses data from the FSGP timing spreadsheet (via FSGPDayLaps) to determine lap splits, then "
-                        "integrates speed over the current lap to determine distance travelled along the track."
-        )
+        for name, details in file_details.items():
+            file = File(
+                canonical_path=CanonicalPath(
+                    origin=self.context.title,
+                    event=self.event_name,
+                    source=self.get_stage_name(),
+                    name=name,
+                ),
+                file_type=FileType.TimeSeries,
+                data=details["data"],
+                description=details["description"]
+            )
 
-        track_index_spreadsheet_file = File(
-            canonical_path=CanonicalPath(
-                origin=self.context.title,
-                event=self.event_name,
-                source=self.get_stage_name(),
-                name="TrackIndexSpreadsheet",
-            ),
-            file_type=FileType.TimeSeries,
-            data=track_index_spreadsheet_result.unwrap() if track_index_spreadsheet_result else None,
-            description="Uses data from the FSGP timing spreadsheet (via FSGPDayLaps) to determine lap splits, then "
-                        "integrates speed over the current lap to determine track index."
-        )
+            loader = self.context.data_source.store(file)
+            self.logger.info(f"Successfully loaded {name}!")
+            file_loaders.append(loader)
 
-        lap_index_integrated_speed_loader = self.context.data_source.store(lap_index_integrated_speed_file)
-        self.logger.info(f"Successfully loaded LapIndexIntegratedSpeed!")
-
-        lap_index_spreadsheet_loader = self.context.data_source.store(lap_index_spreadsheet_file)
-        self.logger.info(f"Successfully loaded LapIndexSpreadsheet!")
-
-        track_distance_spreadsheet_loader = self.context.data_source.store(track_distance_spreadsheet_file)
-        self.logger.info(f"Successfully loaded TrackDistanceSpreadsheet!")
-
-        track_index_spreadsheet_loader = self.context.data_source.store(track_index_spreadsheet_file)
-        self.logger.info(f"Successfully loaded TrackIndexSpreadsheet!")
-
-        return (lap_index_integrated_speed_loader, lap_index_spreadsheet_loader,
-                track_distance_spreadsheet_loader, track_index_spreadsheet_loader)
+        return tuple(file_loaders)
 
 
 stage_registry.register_stage(LocalizationStage.get_stage_name(), LocalizationStage)
