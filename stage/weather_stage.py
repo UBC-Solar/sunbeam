@@ -14,7 +14,7 @@ from numpy.typing import NDArray
 NCM_MOTORSPORTS_PARK_LAT = 37.00293525
 NCM_MOTORSPORTS_PARK_LON = -86.36660289
 
-outputs = {
+weather_outputs = {
     SolcastOutput.wind_speed_10m: {
         "name": "WindSpeed10m",
         "description": "Wind speed at 10m above ground level.",
@@ -68,7 +68,7 @@ outputs = {
         "units": "deg"
     }
 }
-ordered_outputs = sorted(list(outputs.keys()))
+weather_output_order = sorted(list(weather_outputs.keys()))
 
 class WeatherStage(Stage):
     @classmethod
@@ -118,7 +118,7 @@ class WeatherStage(Stage):
         self._event = event
 
     def extract(self) -> tuple[NDArray, ...] | None:
-        """Get a tuple of ndarrays corresponding to the requested outputs"""
+        """Get a tuple of ndarrays corresponding to the requested weather_outputs"""
 
         client = SolcastClient()
 
@@ -130,7 +130,7 @@ class WeatherStage(Stage):
                 NCM_MOTORSPORTS_PARK_LAT,
                 NCM_MOTORSPORTS_PARK_LON,
                 SolcastPeriod.PT5M,
-                ordered_outputs,
+                weather_output_order,
                 0,
                 start_time,
                 end_time,
@@ -138,7 +138,7 @@ class WeatherStage(Stage):
             )
         except ValueError as e:
             self.logger.error(f"Failed to query weather for {self.event_name}! \n {e}")
-            query_outputs: tuple[NDArray | None, ...]  = tuple([None for _ in ordered_outputs])
+            query_outputs: tuple[NDArray | None, ...]  = tuple([None for _ in weather_output_order])
 
         return query_outputs
 
@@ -151,20 +151,20 @@ class WeatherStage(Stage):
             "stop": x_axis[-1],
             "period": (x_axis[1] - x_axis[0]).total_seconds(),
             "length": (x_axis[-1] - x_axis[0]).total_seconds(),
-            "units": outputs[solcast_output]["units"],
+            "units": weather_outputs[solcast_output]["units"],
         }
         ts = TimeSeries(data, meta)
         return ts
 
 
     def transform(self, *query_outputs) -> tuple[TimeSeries | None, ...]:
-        """Transform the ndarrays into Results pointing to Timeseries"""
+        """Transform the ndarrays Timeseries"""
 
         x_axis: np.ndarray[datetime.datetime] = query_outputs[0]
         output_arrays = query_outputs[1:]
 
         results = tuple([self.wrap_queried_data(x_axis, solcast_output, arr)
-                   for arr, solcast_output in zip(output_arrays, ordered_outputs)])
+                         for arr, solcast_output in zip(output_arrays, weather_output_order)])
 
         return results
 
@@ -177,14 +177,14 @@ class WeatherStage(Stage):
                 origin=self.context.title,
                 event=self.event_name,
                 source=WeatherStage.get_stage_name(),
-                name=outputs[solcast_output]["name"],
+                name=weather_outputs[solcast_output]["name"],
             ),
             file_type=FileType.TimeSeries,
             data=ts_data,
-            description=outputs[solcast_output]["description"]
+            description=weather_outputs[solcast_output]["description"]
         )
         loader = self.context.data_source.store(file)
-        self.logger.info(f"Successfully loaded {outputs[solcast_output]["name"]}!")
+        self.logger.info(f"Successfully loaded {weather_outputs[solcast_output]["name"]}!")
 
         return loader
 
@@ -195,7 +195,7 @@ class WeatherStage(Stage):
         Returns a tuple of FileLoaders, alphabetically ordered by name.
         """
         return tuple([self.get_fileloader(ts_data, solcast_output)
-                      for ts_data, solcast_output in zip(query_results, ordered_outputs)])
+                      for ts_data, solcast_output in zip(query_results, weather_output_order)])
 
 
 stage_registry.register_stage(WeatherStage.get_stage_name(), WeatherStage)
