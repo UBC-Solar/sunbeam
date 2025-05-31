@@ -190,6 +190,10 @@ class WeatherStage(Stage):
 
 
     def load(self, *query_results) -> tuple[FileLoader, ...]:
+        """Takes in a tuple of Timeseries objects, and loads them to the data source.
+
+        Returns a tuple of FileLoaders, alphabetically ordered by name.
+        """
         return tuple([self.get_fileloader(ts_data, solcast_output)
                       for ts_data, solcast_output in zip(query_results, ordered_outputs)])
 
