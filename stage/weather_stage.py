@@ -138,8 +138,8 @@ class WeatherStage(Stage):
             )
         except ValueError as e:
             self.logger.error(f"Failed to query weather for {self.event_name}! \n {e}")
-            query_outputs: tuple[NDArray | None, ...]  = tuple([None for _ in weather_output_order])
-
+            # return None for the time axis and all the output arrays
+            query_outputs: tuple[NDArray | None, ...]  = tuple([None] + [None for _ in weather_output_order])
         return query_outputs
 
     def wrap_queried_data(self,
@@ -165,7 +165,6 @@ class WeatherStage(Stage):
 
         results = tuple([self.wrap_queried_data(x_axis, solcast_output, arr)
                          for arr, solcast_output in zip(output_arrays, weather_output_order)])
-
         return results
 
 
