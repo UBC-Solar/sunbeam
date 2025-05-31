@@ -8,3 +8,14 @@ bucket = "CAN_test"
 frequency = 1.0
 units = "V"
 description = "Voltage of array string 2"
+
+[[target]]
+name = "TotalPackVoltage"
+field = "TotalPackVoltage"
+type = "TimeSeries"
+measurement = "BMS"
+frequency = 1.0
+units = "V"
+car = "Brightside"
+bucket = "CAN_log"
+description = "Voltage of the battery"
