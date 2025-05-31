@@ -95,6 +95,10 @@ class EnergyStage(Stage):
                 kalman_filter_config_data = self.stage_data[self.event_name]["kalman_filter_config"]
                 kalman_filter_config_data.update({"battery_model_config": battery_model_config_result.unwrap()})
 
+                kalman_filter_config_data["state_covariance_matrix"] = np.array(kalman_filter_config_data["state_covariance_matrix"])
+                kalman_filter_config_data["process_noise_matrix"] = np.array(kalman_filter_config_data["process_noise_matrix"])
+                kalman_filter_config_data["measurement_noise_vector"] = np.array([kalman_filter_config_data["measurement_noise_vector"]])
+
                 kalman_filter_config_result = Result.Ok(KalmanFilterConfig(**kalman_filter_config_data))
 
             except KeyError:
