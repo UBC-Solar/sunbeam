@@ -70,6 +70,7 @@ outputs = {
 }
 ordered_outputs = sorted(list(outputs.keys()))
 
+
 class WeatherStage(Stage):
     @classmethod
     def get_stage_name(cls):
@@ -138,7 +139,7 @@ class WeatherStage(Stage):
             )
         except ValueError as e:
             self.logger.error(f"Failed to query weather for {self.event_name}! \n {e}")
-            query_outputs: tuple[NDArray | None, ...]  = tuple([None for _ in ordered_outputs])
+            query_outputs: tuple[NDArray | None, ...] = tuple([None for _ in ordered_outputs])
 
         return query_outputs
 
@@ -156,7 +157,6 @@ class WeatherStage(Stage):
         ts = TimeSeries(data, meta)
         return ts
 
-
     def transform(self, *query_outputs) -> tuple[TimeSeries | None, ...]:
         """Transform the ndarrays into Results pointing to Timeseries"""
 
@@ -164,10 +164,9 @@ class WeatherStage(Stage):
         output_arrays = query_outputs[1:]
 
         results = tuple([self.wrap_queried_data(x_axis, solcast_output, arr)
-                   for arr, solcast_output in zip(output_arrays, ordered_outputs)])
+                         for arr, solcast_output in zip(output_arrays, ordered_outputs)])
 
         return results
-
 
     def get_fileloader(self, ts_data, solcast_output):
         """Create a fileloader for a timeseries of solcast data"""
@@ -187,7 +186,6 @@ class WeatherStage(Stage):
         self.logger.info(f"Successfully loaded {outputs[solcast_output]["name"]}!")
 
         return loader
-
 
     def load(self, *query_results) -> tuple[FileLoader, ...]:
         return tuple([self.get_fileloader(ts_data, solcast_output)
