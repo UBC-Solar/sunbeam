@@ -12,7 +12,6 @@ If you want to run Sunbeam locally (not through Docker), you'll need,
 * Python >=3.12 [^2]
 * Poetry >=1.8.3 [^3]
 
-
 ## Installation
 
 First, clone the repository from GitHub into a new directory, and enter into the new `sunbeam/` directory.
@@ -71,6 +70,10 @@ You should be able to run the entrypoint,
 ```bash
 poetry run python3 pipeline/run.py
 ```
+
+## Contributing
+
+As Sunbeam uses branches functionally as deployable data pipelines, it is important to differentiate between branches that are intended to be deployed, and branches that are used for development. As such, branches used for development should be prefixed by `dev-` before continuing in snake case such as `dev-fix_influxdb_ingress`.
 
 ## Appendix
 
