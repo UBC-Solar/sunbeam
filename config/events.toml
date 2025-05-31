@@ -17,3 +17,8 @@ stop = "2024-07-19T01:00:00Z"
 name = "ASC_2024_Day_1"
 start = "2024-07-20T14:00:00Z"
 stop = "2024-07-21T01:00:00Z"
+
+[[event]]
+name = "April_6_Testing"
+start = "2025-04-06T00:00:00Z"
+stop = "2024-04-08T00:00:00Z"
