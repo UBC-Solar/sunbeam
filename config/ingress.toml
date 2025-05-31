@@ -17,5 +17,5 @@ measurement = "BMS"
 frequency = 1.0
 units = "V"
 car = "Brightside"
-bucket = "CAN_log"
+bucket = "CAN_test"
 description = "Voltage of the battery"
