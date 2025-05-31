@@ -4,6 +4,7 @@ from logs import SunbeamLogger
 from data_source import DataSourceFactory
 from pipeline.configure import build_config, build_stage_graph
 from stage import Context, IngressStage, EnergyStage, PowerStage, WeatherStage, EfficiencyStage
+from stage.weather_stage import weather_output_order
 
 logger = SunbeamLogger("sunbeam")
 
@@ -54,7 +55,8 @@ def run_sunbeam(git_target="pipeline"):
         )
 
         weather_stage: WeatherStage = WeatherStage(event)
-        _ = WeatherStage.run(
+        (air_temperature, azimuth, dhi, dni, ghi, precipitation_rate,
+         wind_direction_10m, wind_speed_10m, zenith) = WeatherStage.run(
             weather_stage,
         )
 
