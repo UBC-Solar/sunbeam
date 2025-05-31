@@ -22,7 +22,7 @@ data_source_type = "SunbeamDataSource"
 ingress_origin = "dev-fix_influxdb_ingress"
 
 [ingress_data_source.SunbeamDataSource]
-api_url = "localhost:8080"
+api_url = "api.sunbeam.ubcsolar.com"
 
 [ingress_data_source.FSDataSource]
 fs_root = "fs_data"
