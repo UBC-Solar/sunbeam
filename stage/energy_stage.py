@@ -254,9 +254,21 @@ class EnergyStage(Stage):
 
             total_pack_voltage, pack_current = TimeSeries.align(total_pack_voltage, pack_current)
 
-            # If we can't get initial state, grab it using the first voltage measurement
-            initial_state = initial_state_result.unwrap()
-            initial_soc = initial_state["state"]["initial_soc"]
+            # If we can't get initial state, grab it using the first voltage measurement using
+            # the assumption that when the car starts up the battery will be pretty relaxed,
+            # so Uoc is approximated by the terminal voltage
+            if initial_state_result:
+                Uoc_from_SOC = battery_model_config.get_Uoc
+                initial_soc = binary_search_inverse(
+                    Uoc_from_SOC,
+                    total_pack_voltage[0],
+                    a=0.0, b=1.1,  # 0.0 < SOC < 1.1, since we may be underestimating battery health
+                    max_iter=50
+                )
+
+            else:
+                initial_state = initial_state_result.unwrap()
+                initial_soc = initial_state["state"]["initial_soc"]
 
             battery_model = EquivalentCircuitBatteryModel(battery_model_config, initial_soc)
             unfiltered_soc = Result.Ok(battery_model.update_array(pack_current.period, current_array=-pack_current))
@@ -393,6 +405,46 @@ class EnergyStage(Stage):
             unfiltered_soc_loader,
             soc_loader
         )
+
+
+def binary_search_inverse(
+    f: Callable[[float], float],
+    target: float,
+    a: float = 0.0,
+    b: float = 1.0,
+    rel_tol: float =1e-3,
+    max_iter: int = 50
+):
+    """
+    Solve f(x) = target for x ∈ [a,b], assuming f is strictly decreasing.
+    Stop when |f(mid) - target| / |target| <= rel_tol or after max_iter.
+    Uses a binary search.
+    """
+    fa = f(a)
+    fb = f(b)
+    if not (fb >= target >= fa):
+        raise ValueError("Bracket [a, b] does not contain target because "
+                         "f(a), f(b) are not on opposite sides of target.")
+
+    low, high = a, b
+    for i in range(max_iter):
+        mid = 0.5 * (low + high)
+        fmid = f(mid)
+
+        # Check relative error in y
+        if abs(fmid - target) <= rel_tol * abs(target):
+            return mid
+
+        # Because f is decreasing: f(low) > f(high).
+        # If f(mid) > target, mid is "too low" -> move low up.
+        if fmid < target:
+            low = mid
+        else:
+            high = mid
+
+    # If we exit loop, return the midpoint anyway
+    return 0.5 * (low + high)
+
 
 
 stage_registry.register_stage(EnergyStage.get_stage_name(), EnergyStage)
