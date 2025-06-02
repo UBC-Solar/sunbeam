@@ -1962,6 +1962,7 @@ dependencies = [
 [package.optional-dependencies]
 external = [
     { name = "bokeh" },
+    { name = "docker" },
     { name = "flask", extra = ["async"] },
     { name = "redis" },
 ]
@@ -1973,6 +1974,7 @@ test = [
 requires-dist = [
     { name = "bokeh", marker = "extra == 'external'", specifier = ">=3.6.2,<4.0" },
     { name = "dill", specifier = ">=0.3.9,<1.0" },
+    { name = "docker", marker = "extra == 'external'", specifier = ">=7.1.0" },
     { name = "flask", extras = ["async"], marker = "extra == 'external'", specifier = ">=3.0.3,<4.0" },
     { name = "networkx", specifier = ">=3.4.2,<4.0" },
     { name = "prefect", specifier = ">=2.20.2,<3.0" },
