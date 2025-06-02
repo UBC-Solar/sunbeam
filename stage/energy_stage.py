@@ -6,6 +6,7 @@ from data_tools.collections import TimeSeries
 from prefect import task
 from scipy.interpolate import CubicSpline
 import numpy as np
+from numpy.typing import NDArray
 from typing import Callable
 from physics.models.battery import BatteryModelConfig, KalmanFilterConfig, EquivalentCircuitBatteryModel, \
     FilteredBatteryModel
@@ -271,7 +272,8 @@ class EnergyStage(Stage):
                 initial_soc = initial_state["state"]["initial_soc"]
 
             battery_model = EquivalentCircuitBatteryModel(battery_model_config, initial_soc)
-            unfiltered_soc = Result.Ok(battery_model.update_array(pack_current.period, current_array=-pack_current))
+            unfiltered_soc_array, _ = battery_model.update_array(pack_current.period, current_array=-pack_current)
+            unfiltered_soc = Result.Ok(into_soc_timeseries(unfiltered_soc_array, pack_current))
 
             # To compute filtered SOC, we also need kalman_filter_config
             try:
@@ -280,14 +282,16 @@ class EnergyStage(Stage):
 
                 SOC_array = np.zeros_like(pack_current)
                 dt = total_pack_voltage.period
+
                 self.logger.info("Computing filtered SOC...")
+
                 for i, (voltage, current) in enumerate(zip(total_pack_voltage, pack_current)):
                     filtered_battery_model.predict_then_update(voltage, current, dt)
 
                     SOC_array[i] = filtered_battery_model.SOC
 
                 self.logger.info(f"Finished computing filtered SOC! Final SOC: {SOC_array[-1]:.3f}")
-                soc = Result.Ok(SOC_array)
+                soc = Result.Ok(into_soc_timeseries(SOC_array, pack_current))
 
             except UnwrappedError as e:
                 error_reason = f"Failed to compute filtered SOC! \n {e}"
@@ -407,6 +411,14 @@ class EnergyStage(Stage):
         )
 
 
+def into_soc_timeseries(values: NDArray, reference: TimeSeries) -> TimeSeries:
+    values_ts = reference.promote(values)
+    values_ts.units = ""
+    values_ts.meta["field"] = "SOC"
+
+    return values_ts
+
+
 def binary_search_inverse(
     f: Callable[[float], float],
     target: float,
@@ -444,7 +456,6 @@ def binary_search_inverse(
 
     # If we exit loop, return the midpoint anyway
     return 0.5 * (low + high)
-
 
 
 stage_registry.register_stage(EnergyStage.get_stage_name(), EnergyStage)
