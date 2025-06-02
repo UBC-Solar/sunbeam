@@ -86,3 +86,6 @@ As Sunbeam uses branches functionally as deployable data pipelines, it is import
 [^4]: use `docker --version` to verify version
 
 [^5]: use `docker compose version` to verify version
+
+
+May need to run "sudo ln -s "$HOME/.docker/run/docker.sock" /var/run/docker.sock"
