@@ -1,7 +1,7 @@
 from data_tools.schema import FileLoader
 from stage.stage import Stage
 from stage.stage_registry import stage_registry
-from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath
+from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath, Event
 from data_tools.collections import TimeSeries
 from prefect import task
 
@@ -48,22 +48,24 @@ class PowerStage(Stage):
 
     @property
     def event_name(self):
-        return self._event_name
+        return self._event.name
 
-    def __init__(self, event_name: str):
+    def __init__(self, event: Event):
         """
-        :param str event_name: which event is currently being processed
+        :param Event event: which event is currently being processed
         """
         super().__init__()
 
-        self._event_name = event_name
+        self._event = event
 
-    def extract(self,
+    def extract(
+            self,
             total_pack_voltage_loader: FileLoader,
             pack_current_loader: FileLoader,
             motor_voltage_loader: FileLoader,
             motor_current_loader: FileLoader,
-            motor_current_direction_loader: FileLoader) -> tuple[Result, Result, Result, Result, Result]:
+            motor_current_direction_loader: FileLoader
+    ) -> tuple[Result, Result, Result, Result, Result]:
         total_pack_voltage_result: Result = total_pack_voltage_loader()
         pack_current_result: Result = pack_current_loader()
         motor_voltage_result: Result = motor_voltage_loader()

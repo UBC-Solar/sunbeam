@@ -1,7 +1,7 @@
 from data_tools.schema import FileLoader
 from stage.stage import Stage
 from stage.stage_registry import stage_registry
-from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath
+from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath, Event
 from data_tools.collections import TimeSeries
 from prefect import task
 import numpy as np
@@ -62,20 +62,22 @@ class EfficiencyStage(Stage):
 
     @property
     def event_name(self):
-        return self._event_name
+        return self._event.name
 
-    def __init__(self, event_name: str):
+    def __init__(self, event: Event):
         """
-        :param str event_name: which event is currently being processed
+        :param Event event: which event is currently being processed
         """
         super().__init__()
 
-        self._event_name = event_name
+        self._event = event
 
-    def extract(self,
-                vehicle_velocity_loader: FileLoader,
-                motor_power_loader: FileLoader,
-                lap_index_loader: FileLoader) -> tuple[Result, Result, Result]:
+    def extract(
+            self,
+            vehicle_velocity_loader: FileLoader,
+            motor_power_loader: FileLoader,
+            lap_index_loader: FileLoader
+    ) -> tuple[Result, Result, Result]:
         vehicle_velocity_result: Result = vehicle_velocity_loader()
         motor_power_result: Result = motor_power_loader()
         lap_index_result: Result = lap_index_loader()
