@@ -2,9 +2,9 @@ from data_tools import DataSource
 from prefect import flow
 from logs import SunbeamLogger
 from data_source import DataSourceFactory
-from stage import Context, PowerStage, IngressStage, EnergyStage
 from pipeline.configure import build_config, build_stage_graph
-from stage.efficiency_stage import EfficiencyStage
+from stage import (Context, IngressStage, EnergyStage, PowerStage,
+                   WeatherStage, EfficiencyStage, LocalizationStage)
 
 logger = SunbeamLogger("sunbeam")
 
@@ -28,31 +28,45 @@ def run_sunbeam(git_target="pipeline"):
 
     # We will process each event separately.
     for event in events:
-        event_name = event.name
 
-        power_stage: PowerStage = PowerStage(event_name)
+        power_stage: PowerStage = PowerStage(event)
         pack_power, motor_power = PowerStage.run(
             power_stage,
-            ingress_outputs[event_name]["TotalPackVoltage"],
-            ingress_outputs[event_name]["PackCurrent"],
-            ingress_outputs[event_name]["BatteryVoltage"],
-            ingress_outputs[event_name]["BatteryCurrent"],
-            ingress_outputs[event_name]["BatteryCurrentDirection"],
+            ingress_outputs[event.name]["TotalPackVoltage"],
+            ingress_outputs[event.name]["PackCurrent"],
+            ingress_outputs[event.name]["BatteryVoltage"],
+            ingress_outputs[event.name]["BatteryCurrent"],
+            ingress_outputs[event.name]["BatteryCurrentDirection"],
         )
 
-        energy_stage: EnergyStage = EnergyStage(event_name)
-        integrated_pack_power, energy_vol_extrapolated, energy_from_integrated_power, unfiltered_soc, soc = EnergyStage.run(
+        energy_stage: EnergyStage = EnergyStage(event)
+        integrated_pack_power, energy_vol_extrapolated, energy_from_integrated_power = EnergyStage.run(
             energy_stage,
-            ingress_outputs[event_name]["VoltageofLeast"],
+            ingress_outputs[event.name]["VoltageofLeast"],
             pack_power,
-            ingress_outputs[event_name]["TotalPackVoltage"],
-            ingress_outputs[event_name]["PackCurrent"]
+            ingress_outputs[event.name]["TotalPackVoltage"],
+            ingress_outputs[event.name]["PackCurrent"]
         )
-        efficiency_stage: EfficiencyStage = EfficiencyStage(event_name)
+
+        localization_stage: LocalizationStage = LocalizationStage(event)
+        (lap_index, track_index, lap_index_integrated_speed,
+         lap_index_spreadsheet, track_distance_spreadsheet, track_index_spreadsheet) = LocalizationStage.run(
+            localization_stage,
+            ingress_outputs[event.name]["VehicleVelocity"]
+        )
+
+        efficiency_stage: EfficiencyStage = EfficiencyStage(event)
         efficiency_5min, efficiency_1h, efficiency_lap_distance = EfficiencyStage.run(
             efficiency_stage,
-            ingress_outputs[event_name]["VehicleVelocity"],
-            motor_power
+            ingress_outputs[event.name]["VehicleVelocity"],
+            motor_power,
+            lap_index
+        )
+
+        weather_stage: WeatherStage = WeatherStage(event)
+        (air_temperature, azimuth, dhi, dni, ghi, precipitation_rate,
+         wind_direction_10m, wind_speed_10m, zenith) = WeatherStage.run(
+            weather_stage,
         )
 
 
