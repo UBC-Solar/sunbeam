@@ -257,7 +257,7 @@ class EnergyStage(Stage):
             # If we can't get initial state, grab it using the first voltage measurement using
             # the assumption that when the car starts up the battery will be pretty relaxed,
             # so Uoc is approximated by the terminal voltage
-            if initial_state_result:
+            if not initial_state_result:
                 Uoc_from_SOC = battery_model_config.get_Uoc
                 initial_soc = binary_search_inverse(
                     Uoc_from_SOC,
