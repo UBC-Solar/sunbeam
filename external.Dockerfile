@@ -6,12 +6,14 @@ RUN apt-get update && apt-get install -y git && \
 
 WORKDIR /app
 
-COPY --from=root ./pyproject.toml .
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-COPY --from=root ./uv.lock .
+COPY  ./pyproject.toml .
+
+COPY  ./uv.lock .
+
+RUN uv sync --locked --extra external --no-install-project
 
 COPY . .
-
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 RUN uv sync --locked --extra external

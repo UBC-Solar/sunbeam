@@ -34,7 +34,10 @@ services:
     volumes:
       - ./fs_data:/app/fs_data
       - ./config:/app/config
-    build: .
+      - /var/run/docker.sock:/var/run/docker.sock
+    build:
+      context: .
+      dockerfile: ./Dockerfile
 
     depends_on:
       prefect-server:
@@ -49,8 +52,8 @@ services:
     command: > 
       sh -c "ln -s config/.env . && 
              export $(cat .env | xargs) && 
-             uv run prefect work-pool create --type process default-work-pool --overwrite &&
-             uv run prefect worker start --pool default-work-pool"
+             uv run prefect work-pool create --type docker docker-work-pool --overwrite &&
+             uv run prefect worker start --pool docker-work-pool"
 
   postgres:
     image: postgres:13
@@ -77,10 +80,8 @@ services:
   external_api:
     image: sunbeam-external-api:latest
     build:
-      context: ./external
-      dockerfile: ./Dockerfile
-      additional_contexts:
-        - root=.
+      context: .
+      dockerfile: external.Dockerfile
 
     networks:
       - prefect-network
@@ -95,20 +96,7 @@ services:
         condition: service_healthy
 
     command: >
-      sh -c "uv run python external.py" 
-
-  redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
-    networks:
-      - prefect-network
-    volumes:
-      - type: bind
-        source: ./db/redis-data
-        target: /data
-    command: ["redis-server", "--appendonly", "yes"]
-
+      sh -c "uv run python external/external.py" 
 
 networks:
   prefect-network:
