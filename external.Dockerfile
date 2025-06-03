@@ -1,8 +1,11 @@
 FROM python:3.12-slim
 
 # Prefect uses Git to acquire the pipeline from GitHub, so we need to install Git
-RUN apt-get update && apt-get install -y git && \
-    apt-get clean && rm -rf /var/lib/apt/lists/* \
+RUN apt-get update &&  \
+    apt-get install -y git && \
+    apt-get install -y --no-install-recommends docker.io && \
+    apt-get clean &&  \
+    rm -rf /var/lib/apt/lists/* \
 
 WORKDIR /app
 

@@ -25,3 +25,7 @@ RUN git clone --branch "$BRANCH" --single-branch "$REPO_URL" . && rm -rf sunbeam
 
 # Sync the project
 RUN uv sync --locked --compile-bytecode --no-editable --no-install-project
+
+RUN pip install --no-cache-dir \
+      prefect==3.0.0 \
+      prefect-docker

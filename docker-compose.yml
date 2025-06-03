@@ -1,12 +1,14 @@
 services:
   prefect-server:
-    image: prefecthq/prefect:2.20-python3.12
+    image: prefecthq/prefect:3-python3.12
     ports:
       - "4200:4200"
     networks:
       - prefect-network
     environment:
       - PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://prefect:admin@postgres:5432/prefect
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: echo "ready"
       interval: 5s
@@ -50,10 +52,13 @@ services:
 #    env_file: "./pipeline/.env"
     # Note: the last command blocks (so insert any additonal commands before the last one!)
     command: > 
-      sh -c "ln -s config/.env . && 
+      sh -c "ln -sfn config/.env . &&
+             docker --version &&
+             docker ps && 
              export $(cat .env | xargs) && 
-             uv run prefect work-pool create --type docker docker-work-pool --overwrite &&
-             uv run prefect worker start --pool docker-work-pool"
+             python -c 'import docker; print(docker.__version__)' &&
+             prefect work-pool create --type docker docker-work-pool --overwrite &&
+             prefect worker start --pool docker-work-pool"
 
   postgres:
     image: postgres:13
@@ -82,6 +87,8 @@ services:
     build:
       context: .
       dockerfile: external.Dockerfile
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
     networks:
       - prefect-network

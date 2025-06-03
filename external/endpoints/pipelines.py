@@ -1,6 +1,6 @@
 import sys
 import os
-
+import docker
 sys.path.insert(0, os.getcwd())
 
 import prefect.client.schemas.responses
@@ -58,16 +58,19 @@ def commission_pipeline(git_target):
     if git_target in commissioned_pipelines:
         return f"Pipeline {git_target} already commissioned!", 400
 
+    # client = docker.from_env(from_env)
+    # image = client.images.get(f"run-sunbeam:{git_target}")
     run_sunbeam.deploy(
         name=f"pipeline-{git_target}",
         work_pool_name="docker-work-pool",
         image=DockerImage(
             name="run-sunbeam",
             tag=f"{git_target}",
-            dockerfile="/Users/joshuariefman/Solar/sunbeam/compiled.Dockerfile"
+            dockerfile="compiled.Dockerfile"
         ),
         parameters={"git_target": git_target},
-        push=False
+        push=False,
+        build=False
     )
 
     async def run_deployment_by_name(deployment_name):
