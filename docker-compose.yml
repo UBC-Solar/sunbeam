@@ -120,7 +120,7 @@ services:
         condition: service_healthy
 
     command: >
-      sh -c "uv run python external/external.py" 
+      sh -c "uv run ls && uv run python external/external.py" 
 
 networks:
   prefect-network:

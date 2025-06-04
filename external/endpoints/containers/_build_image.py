@@ -17,7 +17,7 @@ def build_run_sunbeam_image(
     print(f"Building image at {path} → tag '{tag}' …")
 
     image, logs = client.images.build(
-        path="/Users/joshuariefman/Solar/sunbeam",
+        path="/",
         dockerfile="compiled.Dockerfile",
         tag=tag,
         buildargs=build_args or {},

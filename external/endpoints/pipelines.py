@@ -7,6 +7,9 @@ from prefect import flow
 from prefect import exceptions as prefect_exceptions
 from prefect_github import GitHubRepository
 from prefect.client.orchestration import get_client
+import docker
+import datetime
+import sys
 import asyncio
 import re
 
@@ -17,6 +20,37 @@ PIPELINE_NAME_PATTERN = r"pipeline-(.+)"
 
 logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
 logger = logging.getLogger()
+
+
+def build_run_sunbeam_image(
+    path: str,
+    tag: str = "run-sunbeam:latest",
+    build_args: dict[str,str] | None = None,
+):
+    """
+    Builds a Docker image from `path` (where your Dockerfile lives),
+    tags it with `tag`, and optionally passes build-args.
+    """
+    client = docker.from_env()
+
+    print(f"Building image at {path} → tag '{tag}' …")
+
+    image, logs = client.images.build(
+        path="/build/",
+        dockerfile="compiled.Dockerfile",
+        tag=tag,
+        buildargs=build_args or {},
+        pull=False,       # do not pull base images from remote
+        rm=True,          # remove intermediate containers
+        forcerm=True,     # always remove intermediate containers
+    )
+
+    for chunk in logs:
+        if "stream" in chunk:
+            sys.stdout.write(chunk["stream"])
+
+    print(f"Successfully built image: {image.id[:12]}")
+    return image
 
 
 def decommission_pipeline(collection, git_target):
@@ -50,37 +84,24 @@ def commission_pipeline(git_target, use_docker=False):
     if git_target in commissioned_pipelines:
         return f"Pipeline {git_target} already commissioned!", 400
 
-    if use_docker:
-        run_sunbeam.deploy(
-            name=f"pipeline-{git_target}",
-            work_pool_name="docker-work-pool",
-            image=DockerImage(
-                name="run-sunbeam",
-                tag=f"{git_target}",
-                dockerfile="compiled.Dockerfile"
-            ),
-            parameters={"git_target": git_target},
-            push=False,
-            build=False
-        )
+    build_run_sunbeam_image(
+        path="/compiled.Dockerfile",
+        tag=f"run-sunbeam:{git_target}",
+        build_args={"BRANCH": git_target, "CACHE_DATE": datetime.datetime.now().strftime("%Y-%m-%d")}
+    )
 
-    else:
-        repo_block = GitHubRepository(
-            repository_url=SOURCE_REPO,
-            reference=git_target
-        )
-        repo_block.save(name=f"source", overwrite=True)
-
-        flow.from_source(
-            source=repo_block,
-            entrypoint="pipeline/run.py:run_sunbeam"
-        ).deploy(
-            name=f"pipeline-{git_target}",
-            work_pool_name="process-work-pool",
-            parameters={
-                "git_target": git_target
-            }
-        )
+    run_sunbeam.deploy(
+        name=f"pipeline-{git_target}",
+        work_pool_name="docker-work-pool",
+        image=DockerImage(
+            name="run-sunbeam",
+            tag=f"{git_target}",
+            dockerfile="compiled.Dockerfile"
+        ),
+        parameters={"git_target": git_target},
+        push=False,
+        build=False
+    )
 
     async def run_deployment_by_name(deployment_name):
         async with get_client() as prefect_client:

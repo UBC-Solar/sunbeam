@@ -6,14 +6,12 @@ RUN apt-get update && apt-get install -y git && \
 
 WORKDIR /app
 
+COPY "./default-process.json" .
+
 COPY  ./pyproject.toml .
 
-COPY ./poetry.lock .
+COPY ./uv.lock .
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-
-COPY  ./pyproject.toml .
-
-COPY  ./uv.lock .
 
 RUN uv sync --locked --no-install-project

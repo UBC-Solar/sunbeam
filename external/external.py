@@ -1,7 +1,12 @@
+import sys
+import pathlib
+
+__ROOT__ = pathlib.Path(__file__).parent.resolve().parent.absolute()
+sys.path.insert(0, str(__ROOT__))
+
 from flask import Flask, render_template, request, Response, jsonify
 import endpoints
 import pymongo
-
 
 _client = pymongo.MongoClient("mongodb://mongodb:27017/")
 _db = _client.sunbeam_db
@@ -45,7 +50,10 @@ def _pipeline():
 def _commission_pipeline():
     if request.method == 'POST':
         git_target = request.form.get('git_target')
-        use_docker = request.form.get('use_docker')
+        try:
+            use_docker = request.form.get('use_docker')
+        except KeyError:
+            use_docker = False
 
         return endpoints.commission_pipeline(git_target, use_docker)
 

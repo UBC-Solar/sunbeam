@@ -16,3 +16,16 @@ COPY  ./pyproject.toml .
 COPY  ./uv.lock .
 
 RUN uv sync --locked --extra external --no-install-project
+
+COPY ./external ./external
+COPY ./logs ./logs
+COPY ./pipeline ./pipeline
+COPY ./stage ./stage
+COPY ./config ./config
+COPY ./data_source ./data_source
+
+RUN mkdir build
+
+COPY ./compiled.Dockerfile ./build/Dockerfile
+
+RUN ls
