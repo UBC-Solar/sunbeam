@@ -9,5 +9,3 @@ db/
 **/*.log
 **/*.bin
 **/__pycache__/
-
-**/*.json
