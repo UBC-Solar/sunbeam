@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-ARG BRANCH=main
+ARG BRANCH=dev-make_docker_flows
 ARG REPO_URL=https://github.com/UBC-Solar/sunbeam.git
 
 # Install Git
@@ -17,9 +17,8 @@ WORKDIR /app
 # Force‐checkout the branch specified at build time, then immediately delete .git (to keep the image smaller).
 RUN git clone --branch "$BRANCH" --single-branch "$REPO_URL" . && rm -rf sunbeam/.git
 
-# Sync the project
-ENV UV_SYSTEM_PYTHON=1
-RUN uv sync --locked --compile-bytecode --no-editable --no-install-project --system
+# Set the project environment to the system Python.
+ENV UV_PROJECT_ENVIRONMENT=/usr/local
 
-
-RUN pip list
+# Sync the project.
+RUN uv sync --locked --compile-bytecode --no-editable --no-install-project
