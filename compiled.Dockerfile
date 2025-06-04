@@ -17,16 +17,9 @@ WORKDIR /app
 # Force‐checkout the branch specified at build time, then immediately delete .git (to keep the image smaller).
 RUN git clone --branch "$BRANCH" --single-branch "$REPO_URL" . && rm -rf sunbeam/.git
 
-## Install dependencies
-#RUN --mount=type=cache,target=/root/.cache/uv \
-#    --mount=type=bind,source=uv.lock,target=uv.lock \
-#    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-#    uv sync --locked --no-install-project --no-editable
-
 # Sync the project
-RUN uv sync --locked --compile-bytecode --no-editable --no-install-project
+ENV UV_SYSTEM_PYTHON=1
+RUN uv sync --locked --compile-bytecode --no-editable --no-install-project --system
 
-RUN pip install --no-cache-dir \
-      prefect==3.4.4 \
-      prefect-docker==0.6.6 \
-      pydantic==2.11.5
+
+RUN pip list
