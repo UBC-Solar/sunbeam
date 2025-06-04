@@ -45,8 +45,9 @@ def _pipeline():
 def _commission_pipeline():
     if request.method == 'POST':
         git_target = request.form.get('git_target')
+        use_docker = request.form.get('use_docker')
 
-        return endpoints.commission_pipeline(git_target)
+        return endpoints.commission_pipeline(git_target, use_docker)
 
     else:
         return render_template('commission.html')

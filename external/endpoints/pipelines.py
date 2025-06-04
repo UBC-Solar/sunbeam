@@ -1,9 +1,11 @@
-
 import prefect.client.schemas.responses
-import logging
-from prefect import exceptions as prefect_exceptions
 from prefect.docker import DockerImage
 from pipeline import run_sunbeam
+import prefect.client.schemas.responses
+import logging
+from prefect import flow
+from prefect import exceptions as prefect_exceptions
+from prefect_github import GitHubRepository
 from prefect.client.orchestration import get_client
 import asyncio
 import re
@@ -43,23 +45,42 @@ def decommission_pipeline(collection, git_target):
     return f"Decommissioned {git_target}!", 200
 
 
-def commission_pipeline(git_target):
+def commission_pipeline(git_target, use_docker=False):
     commissioned_pipelines = get_deployments()
     if git_target in commissioned_pipelines:
         return f"Pipeline {git_target} already commissioned!", 400
 
-    run_sunbeam.deploy(
-        name=f"pipeline-{git_target}",
-        work_pool_name="docker-work-pool",
-        image=DockerImage(
-            name="run-sunbeam",
-            tag=f"{git_target}",
-            dockerfile="compiled.Dockerfile"
-        ),
-        parameters={"git_target": git_target},
-        push=False,
-        build=False
-    )
+    if use_docker:
+        run_sunbeam.deploy(
+            name=f"pipeline-{git_target}",
+            work_pool_name="docker-work-pool",
+            image=DockerImage(
+                name="run-sunbeam",
+                tag=f"{git_target}",
+                dockerfile="compiled.Dockerfile"
+            ),
+            parameters={"git_target": git_target},
+            push=False,
+            build=False
+        )
+
+    else:
+        repo_block = GitHubRepository(
+            repository_url=SOURCE_REPO,
+            reference=git_target
+        )
+        repo_block.save(name=f"source", overwrite=True)
+
+        flow.from_source(
+            source=repo_block,
+            entrypoint="pipeline/run.py:run_sunbeam"
+        ).deploy(
+            name=f"pipeline-{git_target}",
+            work_pool_name="process-work-pool",
+            parameters={
+                "git_target": git_target
+            }
+        )
 
     async def run_deployment_by_name(deployment_name):
         async with get_client() as prefect_client:

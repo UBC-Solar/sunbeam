@@ -31,15 +31,13 @@ services:
         source: ./db/mongo_data
         target: /data/db
 
-  prefect-agent:
-    image: sunbeam-prefect-agent:latest
+  process-worker:
+    image: sunbeam-docker-worker:latest
     volumes:
       - ./fs_data:/app/fs_data
-      - ./config:/app/config
-      - /var/run/docker.sock:/var/run/docker.sock
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./process_worker.Dockerfile
 
     depends_on:
       prefect-server:
@@ -49,13 +47,32 @@ services:
     environment:
       - PREFECT_API_URL=http://172.17.0.1:4200/api
       - PREFECT_API_DATABASE_CONNECTION_URL="postgresql+asyncpg://prefect:yourpassword@postgres:5432/prefect"
-#    env_file: "./pipeline/.env"
     # Note: the last command blocks (so insert any additonal commands before the last one!)
     command: > 
-      sh -c "ln -sfn config/.env ./env &&
-             docker --version &&
+      sh -c "prefect work-pool create --type process process-work-pool --overwrite --base-job-template default-process.json &&
+             prefect worker start --pool process-work-pool"
+
+
+  docker-worker:
+    image: sunbeam-docker-worker:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    build:
+      context: .
+      dockerfile: ./docker_worker.Dockerfile
+
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    networks:
+      - prefect-network
+    environment:
+      - PREFECT_API_URL=http://172.17.0.1:4200/api
+      - PREFECT_API_DATABASE_CONNECTION_URL="postgresql+asyncpg://prefect:yourpassword@postgres:5432/prefect"
+    # Note: the last command blocks (so insert any additonal commands before the last one!)
+    command: > 
+      sh -c "docker --version &&
              docker ps && 
-             export $(cat .env | xargs) && 
              python -c 'import docker; print(docker.__version__)' &&
              prefect work-pool create --type docker docker-work-pool --overwrite --base-job-template default-docker.json &&
              prefect worker start --pool docker-work-pool"
