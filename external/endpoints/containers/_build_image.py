@@ -1,3 +1,4 @@
+from datetime import datetime
 import docker
 import sys
 
@@ -41,5 +42,5 @@ if __name__ == "__main__":
     build_run_sunbeam_image(
         path=context_path,
         tag=f"run-sunbeam:{branch_name}",
-        build_args={"BRANCH": branch_name},
+        build_args={"BRANCH": branch_name, "CACHE_DATE": datetime.now().strftime("%Y-%m-%d")},
     )

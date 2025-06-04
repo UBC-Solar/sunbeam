@@ -52,7 +52,7 @@ services:
 #    env_file: "./pipeline/.env"
     # Note: the last command blocks (so insert any additonal commands before the last one!)
     command: > 
-      sh -c "ln -sfn config/.env . &&
+      sh -c "ln -sfn config/.env ./env &&
              docker --version &&
              docker ps && 
              export $(cat .env | xargs) && 

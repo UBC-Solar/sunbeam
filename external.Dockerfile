@@ -16,7 +16,3 @@ COPY  ./pyproject.toml .
 COPY  ./uv.lock .
 
 RUN uv sync --locked --extra external --no-install-project
-
-COPY . .
-
-RUN uv sync --locked --extra external

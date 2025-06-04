@@ -5,8 +5,11 @@ from data_source import DataSourceFactory
 from pipeline.configure import build_config, build_stage_graph
 from stage import Context, IngressStage, EnergyStage, PowerStage, WeatherStage, EfficiencyStage
 from stage.weather_stage import weather_output_order
-
+from dotenv import load_dotenv
 logger = SunbeamLogger("sunbeam")
+
+
+load_dotenv()
 
 
 @flow(log_prints=True)

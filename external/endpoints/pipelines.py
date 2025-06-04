@@ -1,24 +1,15 @@
-import sys
-import os
-import docker
-sys.path.insert(0, os.getcwd())
 
 import prefect.client.schemas.responses
-
 import logging
 from prefect import exceptions as prefect_exceptions
 from prefect.docker import DockerImage
-print(os.listdir("."))
 from pipeline import run_sunbeam
 from prefect.client.orchestration import get_client
 import asyncio
-
 import re
 
 
 SOURCE_REPO = "https://github.com/UBC-Solar/sunbeam.git"
-
-
 PIPELINE_NAME_PATTERN = r"pipeline-(.+)"
 
 
@@ -57,8 +48,6 @@ def commission_pipeline(git_target):
     if git_target in commissioned_pipelines:
         return f"Pipeline {git_target} already commissioned!", 400
 
-    # client = docker.from_env(from_env)
-    # image = client.images.get(f"run-sunbeam:{git_target}")
     run_sunbeam.deploy(
         name=f"pipeline-{git_target}",
         work_pool_name="docker-work-pool",
