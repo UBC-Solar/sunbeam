@@ -77,50 +77,50 @@ def _list_commissioned_pipelines():
     return endpoints.list_commissioned_pipelines()
 
 
-@app.route('/cache/get')
-def _get_value():
-    key = request.args.get('key')
-    if key is None:
-        return "Must set the `key` parameter to query cache!", 400
-
-    value = endpoints.get_cache_by_key(key)
-    return Response(value, content_type='application/octet-stream') if value else (f"No item with key {key} exists!", 406)
-
-
-@app.route('/cache/set')
-def _set_value():
-    key = request.args.get('key')
-    if key is None:
-        return "Must set the `key` parameter to set cache!", 400
-
-    value = request.args.get('value')
-    if value is None:
-        return "Must set the `value` parameter to set cache!", 400
-
-    return endpoints.set_cache_by_key(key, value), 201
+# @app.route('/cache/get')
+# def _get_value():
+#     key = request.args.get('key')
+#     if key is None:
+#         return "Must set the `key` parameter to query cache!", 400
+#
+#     value = endpoints.get_cache_by_key(key)
+#     return Response(value, content_type='application/octet-stream') if value else (f"No item with key {key} exists!", 406)
 
 
-@app.route('/cache/exists')
-def _check_exists():
-    key = request.args.get('key')
-    if key is None:
-        return "Must set the `key` parameter to query cache!", 400
+# @app.route('/cache/set')
+# def _set_value():
+#     key = request.args.get('key')
+#     if key is None:
+#         return "Must set the `key` parameter to set cache!", 400
+#
+#     value = request.args.get('value')
+#     if value is None:
+#         return "Must set the `value` parameter to set cache!", 400
+#
+#     return endpoints.set_cache_by_key(key, value), 201
+#
 
-    return endpoints.check_cache_by_key(key), 200
+# @app.route('/cache/exists')
+# def _check_exists():
+#     key = request.args.get('key')
+#     if key is None:
+#         return "Must set the `key` parameter to query cache!", 400
+#
+#     return endpoints.check_cache_by_key(key), 200
 
 
-@app.route('/cache/delete')
-def _delete_key():
-    key = request.args.get('key')
-    if key is None:
-        return "Must set the `key` parameter to delete from cache!", 400
+# @app.route('/cache/delete')
+# def _delete_key():
+#     key = request.args.get('key')
+#     if key is None:
+#         return "Must set the `key` parameter to delete from cache!", 400
+#
+#     return endpoints.delete_cache_by_key(key), 200
 
-    return endpoints.delete_cache_by_key(key), 200
 
-
-@app.route('/cache/keys')
-def _cache_keys():
-    return endpoints.get_cache_keys(), 200
+# @app.route('/cache/keys')
+# def _cache_keys():
+#     return endpoints.get_cache_keys(), 200
 
 
 @app.route('/files/distinct', methods=['POST', 'GET'])

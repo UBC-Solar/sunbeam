@@ -57,7 +57,7 @@ services:
              docker ps && 
              export $(cat .env | xargs) && 
              python -c 'import docker; print(docker.__version__)' &&
-             prefect work-pool create --type docker docker-work-pool --overwrite &&
+             prefect work-pool create --type docker docker-work-pool --overwrite --base-job-template default-docker.json &&
              prefect worker start --pool docker-work-pool"
 
   postgres:

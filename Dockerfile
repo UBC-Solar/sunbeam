@@ -6,10 +6,12 @@ USER root
 RUN apt-get update &&  \
     apt-get install -y --no-install-recommends docker.io && \
     apt-get clean &&  \
-    rm -rf /var/lib/apt/lists/* \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-RUN pip install prefect==3.4.4 docker prefect-docker
+COPY "./default-docker.json" .
+
+RUN pip install prefect==3.4.4 docker==7.1.0 prefect-docker==0.6.6
 
 CMD ["sh"]

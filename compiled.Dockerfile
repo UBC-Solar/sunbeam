@@ -27,5 +27,6 @@ RUN git clone --branch "$BRANCH" --single-branch "$REPO_URL" . && rm -rf sunbeam
 RUN uv sync --locked --compile-bytecode --no-editable --no-install-project
 
 RUN pip install --no-cache-dir \
-      prefect==3.0.0 \
-      prefect-docker
+      prefect==3.4.4 \
+      prefect-docker==0.6.6 \
+      pydantic==2.11.5

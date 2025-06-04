@@ -5,7 +5,6 @@ sys.path.insert(0, os.getcwd())
 
 import prefect.client.schemas.responses
 
-
 import logging
 from prefect import exceptions as prefect_exceptions
 from prefect.docker import DockerImage

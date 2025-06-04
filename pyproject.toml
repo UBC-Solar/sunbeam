@@ -17,13 +17,13 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Data Processing"
 ]
 dependencies = [
-  "pydantic>=2.8.2,<3.0",
   "toml>=0.10.2,<1.0",
-  "prefect>=3.3",
-  "prefect-github",
+  "prefect==3.4.4",
+  "prefect-docker==0.6.6",
+  "prefect-github==0.3.1",
   "python-dotenv",
+  "docker>=7.1.0",
   "pymongo>=4.8.0,<5.0",
-#  "tqdm>=4.66.5,<5.0",
   "ubc-solar-data-tools>=1.9.0,<2.0",
   "dill>=0.3.9,<1.0",
   "networkx>=3.4.2,<4.0"
@@ -32,9 +32,7 @@ dependencies = [
 [project.optional-dependencies]
 external = [
   "flask[async]>=3.0.3,<4.0",
-  "bokeh>=3.6.2,<4.0",
-  "redis>=5.2.1,<6.0",
-  "docker>=7.1.0"
+  "bokeh>=3.6.2,<4.0"
 ]
 test = [
   "pytest>=8.3.3,<9.0"

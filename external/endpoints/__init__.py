@@ -10,13 +10,13 @@ from .files import (
 )
 
 
-from .cache import (
-    get_cache_by_key,
-    set_cache_by_key,
-    check_cache_by_key,
-    delete_cache_by_key,
-    get_cache_keys
-)
+# from .cache import (
+#     get_cache_by_key,
+#     set_cache_by_key,
+#     check_cache_by_key,
+#     delete_cache_by_key,
+#     get_cache_keys
+# )
 
 
 __all__ = [
@@ -25,7 +25,7 @@ __all__ = [
     "list_commissioned_pipelines",
     "list_files",
     "get_file",
-    "get_cache_by_key",
-    "set_cache_by_key",
-    "get_cache_keys"
+    # "get_cache_by_key",
+    # "set_cache_by_key",
+    # "get_cache_keys"
 ]
