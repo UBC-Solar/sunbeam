@@ -37,7 +37,7 @@ def build_run_sunbeam_image(
 
     image, logs = client.images.build(
         path="/build/",
-        dockerfile="compiled.Dockerfile",
+        dockerfile="Dockerfile",
         tag=tag,
         buildargs=build_args or {},
         pull=False,       # do not pull base images from remote
