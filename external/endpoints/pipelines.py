@@ -23,8 +23,8 @@ logger = logging.getLogger()
 
 
 def build_run_sunbeam_image(
-    path: str,
     tag: str = "run-sunbeam:latest",
+    dockerfile: str = "compiled.Dockerfile",
     build_args: dict[str,str] | None = None,
 ):
     """
@@ -33,11 +33,9 @@ def build_run_sunbeam_image(
     """
     client = docker.from_env()
 
-    print(f"Building image at {path} → tag '{tag}' …")
-
     image, logs = client.images.build(
         path="/build/",
-        dockerfile="Dockerfile",
+        dockerfile=f"{dockerfile}",
         tag=tag,
         buildargs=build_args or {},
         pull=False,       # do not pull base images from remote
@@ -79,13 +77,15 @@ def decommission_pipeline(collection, git_target):
     return f"Decommissioned {git_target}!", 200
 
 
-def commission_pipeline(git_target, use_docker=False):
+def commission_pipeline(git_target, build_local=False):
     commissioned_pipelines = get_deployments()
     if git_target in commissioned_pipelines:
         return f"Pipeline {git_target} already commissioned!", 400
 
+    dockerfile_name = "local.Dockerfile" if build_local else "compiled.Dockerfile"
+
     build_run_sunbeam_image(
-        path="/compiled.Dockerfile",
+        dockerfile=dockerfile_name,
         tag=f"run-sunbeam:{git_target}",
         build_args={"BRANCH": git_target, "CACHE_DATE": datetime.datetime.now().strftime("%Y-%m-%d")}
     )

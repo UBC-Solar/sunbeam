@@ -18,14 +18,24 @@ COPY  ./uv.lock .
 RUN uv sync --locked --extra external --no-install-project
 
 COPY ./external ./external
-COPY ./logs ./logs
 COPY ./pipeline ./pipeline
-COPY ./stage ./stage
-COPY ./config ./config
-COPY ./data_source ./data_source
 
 RUN mkdir build
 
-COPY ./compiled.Dockerfile ./build/Dockerfile
+COPY ./logs ./build/logs
+COPY ./pipeline ./build/pipeline
+COPY ./stage ./build/stage
+COPY ./config ./build/config
+COPY ./data_source ./build/data_source
+COPY ./compiled.Dockerfile ./build/compiled.Dockerfile
+COPY ./local.Dockerfile ./build/local.Dockerfile
+COPY  ./pyproject.toml ./build/pyproject.toml
+COPY  ./uv.lock ./build/uv.lock
 
-RUN ls
+#RUN ln -s ./logs ./build/logs
+#RUN ln -s ./pipeline ./build/pipeline
+#RUN ln -s ./stage ./build/stage
+#RUN ln -s ./config ./build/config
+#RUN ln -s ./data_source ./build/data_source
+#RUN ln -s ./pyproject.toml ./build/pyproject.toml
+#RUN ln -s ./uv.lock ./build/uv.lock

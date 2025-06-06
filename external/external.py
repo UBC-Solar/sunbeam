@@ -3,6 +3,7 @@ import pathlib
 
 __ROOT__ = pathlib.Path(__file__).parent.resolve().parent.absolute()
 sys.path.insert(0, str(__ROOT__))
+sys.path.insert(1, str(__ROOT__ / "build"))
 
 from flask import Flask, render_template, request, Response, jsonify
 import endpoints
@@ -50,12 +51,11 @@ def _pipeline():
 def _commission_pipeline():
     if request.method == 'POST':
         git_target = request.form.get('git_target')
-        try:
-            use_docker = request.form.get('use_docker')
-        except KeyError:
-            use_docker = False
 
-        return endpoints.commission_pipeline(git_target, use_docker)
+        raw = request.form.get("build_local")
+        build_local = True if raw == "true" else False
+
+        return endpoints.commission_pipeline(git_target, build_local)
 
     else:
         return render_template('commission.html')
@@ -66,8 +66,11 @@ def _recommission_pipeline():
     if request.method == 'POST':
         git_target = request.form.get('git_target')
 
+        raw = request.form.get("build_local")
+        build_local = True if raw == "true" else False
+
         endpoints.decommission_pipeline(time_series_collection, git_target)
-        endpoints.commission_pipeline(git_target)
+        endpoints.commission_pipeline(git_target, build_local)
 
         return f"Recommissioned {git_target}!"
 
