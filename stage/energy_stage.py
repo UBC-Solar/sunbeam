@@ -117,7 +117,6 @@ class EnergyStage(Stage):
 
         return integrated_pack_power, energy_vol_extrapolated, energy_from_integrated_power
 
-
     def load(self, integrated_pack_power, energy_vol_extrapolated, energy_from_integrated_power) -> tuple[FileLoader, FileLoader, FileLoader]:
         integrated_pack_power_file = File(
             canonical_path=CanonicalPath(
@@ -170,6 +169,48 @@ class EnergyStage(Stage):
 
         energy_from_integrated_power_loader = self.context.data_source.store(energy_from_integrated_power_file)
         self.logger.info(f"Successfully loaded EnergyFromIntegratedPower!")
+
+        return integrated_pack_power_loader, energy_vol_extrapolated_loader, energy_from_integrated_power_loader
+
+    def skip_stage(self):
+        self.logger.error(f"{self.get_stage_name()} is being skipped!")
+
+        integrated_pack_power_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=EnergyStage.get_stage_name(),
+                name="IntegratedPackPower",
+            ),
+            file_type=FileType.TimeSeries,
+            data=None,
+        )
+
+        energy_vol_extrapolated_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=EnergyStage.get_stage_name(),
+                name="EnergyVOLExtrapolated",
+            ),
+            file_type=FileType.TimeSeries,
+            data=None
+        )
+
+        energy_from_integrated_power_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=EnergyStage.get_stage_name(),
+                name="EnergyFromIntegratedPower",
+            ),
+            file_type=FileType.TimeSeries,
+            data=None,
+        )
+
+        integrated_pack_power_loader = self.context.data_source.store(integrated_pack_power_file)
+        energy_vol_extrapolated_loader = self.context.data_source.store(energy_vol_extrapolated_file)
+        energy_from_integrated_power_loader = self.context.data_source.store(energy_from_integrated_power_file)
 
         return integrated_pack_power_loader, energy_vol_extrapolated_loader, energy_from_integrated_power_loader
 

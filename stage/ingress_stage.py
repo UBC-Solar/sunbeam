@@ -8,8 +8,38 @@ from data_tools.collections.time_series import TimeSeries
 from typing import List, Dict, cast
 import traceback
 from prefect import task
-from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
-from typing import Dict, Tuple, Any
+
+
+class IngressDict(dict):
+    def __init__(self, origin: str):
+        super().__init__()
+
+        self.origin = origin
+
+    def __getitem__(self, item):
+        try:
+            super().__getitem__(item)
+
+        except KeyError:
+            return EventDataDict(self.origin, item)
+
+
+class EventDataDict(dict):
+    def __init__(self, origin: str, event: str):
+        super().__init__()
+
+        self.event = event
+        self.origin = origin
+
+    def __getitem__(self, item):
+        try:
+            super().__getitem__(item)
+
+        except KeyError:
+            return FileLoader(
+                lambda x: Result.Err(RuntimeError(f"Did not extract {self.origin}/{self.event}/ingress/{item}!")),
+                CanonicalPath(self.origin, "ingress", self.event, item)
+            )
 
 
 class IngressStage(Stage):
@@ -17,6 +47,7 @@ class IngressStage(Stage):
     Ingest raw time series data from InfluxDB and marshal it for use in the data pipeline, or load pre-existing data
     from a local filesystem.
     """
+
     @classmethod
     def get_stage_name(cls):
         return "ingress"
@@ -27,7 +58,12 @@ class IngressStage(Stage):
 
     @staticmethod
     @task(name="Ingress")
-    def run(self, targets: List[TimeSeriesTarget], events: List[Event]) -> Dict[str, Dict[str, FileLoader]]:
+    def run(
+            self,
+            targets: List[TimeSeriesTarget],
+            events: List[Event],
+            ingress_to_skip: List[str]
+    ) -> Dict[str, Dict[str, FileLoader]]:
         """
         Ingest raw time series data from InfluxDB and marshal it for use in the data pipeline, or load pre-existing data
         from a local filesystem.
@@ -35,9 +71,10 @@ class IngressStage(Stage):
         :param self: an instance of IngressStage to be run
         :param targets: a list of m TimeSeriesTarget models which will be queried
         :param events: a list of n Event models specifying how the raw data should be temporally partitioned
+        :param ingress_to_skip: A list of TimeSeriesTarget to skip extracting
         :return: a dictionary which can be indexed first by event, then by target name.
         """
-        ingress_dict, = super().run(self, targets, events)
+        ingress_dict, = super().run(self, targets, events, ingress_to_skip)
         return cast(Dict[str, Dict[str, FileLoader]], ingress_dict)
 
     def __init__(self, config: DataSourceConfig):
@@ -83,9 +120,10 @@ class IngressStage(Stage):
     def extract(
             self,
             targets: List[TimeSeriesTarget],
-            events: List[Event]
+            events: List[Event],
+            ingress_to_skip: List[str]
     ) -> tuple[Dict[str, Dict[str, FileLoader]]]:
-        return (self._extract_method(targets, events), )
+        return (self._extract_method(targets, events, ingress_to_skip), )
 
     def transform(
             self,
@@ -102,7 +140,8 @@ class IngressStage(Stage):
     def _extract_transform_load_influxdb(
             self,
             targets: List[TimeSeriesTarget],
-            events: List[Event]
+            events: List[Event],
+            ingress_to_skip: List[str]
     ) -> tuple[Dict[str, Dict[str, FileLoader]]]:
         """
         Extract raw data and marshall it for use in the data pipeline.
@@ -110,33 +149,28 @@ class IngressStage(Stage):
         :param events: the events that the raw time series data will be divided up into
         :param targets: the targets that will be acquired from InfluxDB
         """
-        result_dict: Dict[str, Dict[str, FileLoader]] = {event.name: {} for event in events}
+        result_dict: Dict[str, Dict[str, FileLoader]] = IngressDict(self._ingress_origin)
 
-        with ProcessPoolExecutor(max_workers=10) as executor:
-            future_to_key: Dict[Any, Tuple[str, str]] = {}
+        for event in events:
+            result_dict[event.name] = EventDataDict(self._ingress_origin, event.name)
 
-            for event in events:
-                for target in targets:
-                    fut = executor.submit(self._process_one, event, target)
-                    future_to_key[fut] = (event.name, target.name)
+            for target in targets:
+                if target.name not in ingress_to_skip:
+                    result_extract = self._fetch_from_influxdb(event, target)
+                    result_transform = self._transform_into_timeseries(result_extract, event.name, target.name)
 
-            for fut in as_completed(future_to_key):
-                ev_name, tgt_name, loader = fut.result()
-                result_dict[ev_name][tgt_name] = loader
+                else:
+                    result_transform = None
 
-        return (result_dict,)
+                result_dict[event.name][target.name] = self._load_timeseries(result_transform, event.name, target.name)
 
-    def _process_one(self, event, target) -> Tuple[str, str, FileLoader]:
-        extracted = self._fetch_from_influxdb(event, target)
-        timeseries = self._transform_into_timeseries(extracted, event.name, target.name)
-        loader = self._load_timeseries(timeseries, event.name, target.name)
-
-        return event.name, target.name, loader
+        return (result_dict, )
 
     def _extract_transform_load_existing(
             self,
             targets: List[TimeSeriesTarget],
-            events: List[Event]
+            events: List[Event],
+            ingress_to_skip: List[str]
     ) -> tuple[Dict[str, Dict[str, FileLoader]]]:
         """
         Extract raw data and marshall it for use in the data pipeline.
@@ -144,10 +178,10 @@ class IngressStage(Stage):
         :param events: the events that the raw time series data will be divided up into
         :param targets: the targets that will be acquired from InfluxDB
         """
-        result_dict: Dict[str, Dict[str, FileLoader]] = {}
+        result_dict: Dict[str, Dict[str, FileLoader]] = IngressDict(self._ingress_origin)
 
         for event in events:
-            result_dict[event.name] = {}
+            result_dict[event.name] = EventDataDict(self._ingress_origin, event.name)
 
             for target in targets:
                 result = self._fetch_from_existing(event, target)
@@ -192,12 +226,12 @@ class IngressStage(Stage):
                 "description": target.description
             })
 
-            # self.logger.info(f"Successfully extracted time series data for {target.name} for {event.name}!")
+            self.logger.info(f"Successfully extracted time series data for {target.name} for {event.name}!")
 
         except UnwrappedError as e:
             result = Result.Err(e)
-            # self.logger.error(f"Failed to extract time series data for {target.name} for {event.name}: "
-            #                   f"{traceback.format_exc()}")
+            self.logger.error(f"Failed to extract time series data for {target.name} for {event.name}: "
+                              f"{traceback.format_exc()}")
 
         return result
 
@@ -233,12 +267,12 @@ class IngressStage(Stage):
 
                 time_series_result = Result.Ok(file)
 
-                # self.logger.info(f"Successfully processed time series data {name}.")
+                self.logger.info(f"Successfully processed time series data {name}.")
 
             # Oops, wrap the error
             except Exception as e:
                 time_series_result = Result.Err(e)
-                # self.logger.error(f"Failed to process time series data {name}: {traceback.format_exc()}")
+                self.logger.error(f"Failed to process time series data {name}: {traceback.format_exc()}")
 
         # If we're going to get an error, forward it along
         else:
@@ -265,7 +299,7 @@ class IngressStage(Stage):
             )
             file_loader = self.context.data_source.store(updated_file)
 
-            # self.logger.info(f"Successfully loaded {name} for {event_name}!")
+            self.logger.info(f"Successfully loaded {name} for {event_name}!")
 
         else:
             file_loader = self.context.data_source.store(
@@ -276,9 +310,12 @@ class IngressStage(Stage):
                 )
             )
 
-            # self.logger.info(f"Failed to load {name} for {event_name}!")
+            self.logger.info(f"Failed to load {name} for {event_name}!")
 
         return file_loader
+
+    def skip_stage(self):
+        pass
 
 
 stage_registry.register_stage(IngressStage.get_stage_name(), IngressStage)

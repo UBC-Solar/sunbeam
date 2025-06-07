@@ -15,18 +15,19 @@ class SingletonMeta(type):
 class Context(metaclass=SingletonMeta):
     """Singleton class that holds global context information for Sunbeam."""
 
-    def __init__(self, title: str, data_source: DataSource, stages_to_run: List[str]):
+    def __init__(self, title: str, data_source: DataSource, stages_to_skip: List[str]):
         """
         Initialize the global ``Context``.
         :param title: the title of the current Sunbeam pipeline that is running
         :param data_source: the ``DataSource`` for stages to acquire and store data
-        :param stages_to_run: the list of stages that should be run (any others will be skipped)
+        :param stages_to_skip: the list of stages that should be skipped (any others will be ran)
         """
         if not hasattr(self, "_initialized"):  # Ensures __init__ runs only once
             self._title = title
             self._data_source = data_source
-            self._stages_to_run = stages_to_run
+            self._stages_to_skip = stages_to_skip
             self._initialized = True
+
         else:
             raise RuntimeError("Context has already been initialized!")
 
@@ -45,11 +46,11 @@ class Context(metaclass=SingletonMeta):
         return self._data_source
 
     @property
-    def stages_to_run(self) -> List[str]:
+    def stages_to_skip(self) -> List[str]:
         """
-        The list of stages that should be run (any others will be skipped)
+        The list of stages that should be skipped (any others will be ran)
         """
-        return self._stages_to_run
+        return self._stages_to_skip
 
     @classmethod
     def is_initialized(cls) -> bool:

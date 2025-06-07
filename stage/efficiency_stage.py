@@ -278,5 +278,45 @@ class EfficiencyStage(Stage):
 
         return efficiency_5min_loader, efficiency_1h_loader, efficiency_lap_distance_loader
 
+    def skip_stage(self):
+        efficiency_5min_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=self.get_stage_name(),
+                name="Efficiency5Minute",
+            ),
+            file_type=FileType.TimeSeries,
+            data=None,
+        )
+
+        efficiency_1h_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=self.get_stage_name(),
+                name="Efficiency1Hour",
+            ),
+            file_type=FileType.TimeSeries,
+            data=None,
+        )
+
+        efficiency_lap_distance_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=self.get_stage_name(),
+                name="EfficiencyLapDistance",
+            ),
+            file_type=FileType.TimeSeries,
+            data=None,
+        )
+
+        efficiency_5min_loader = self.context.data_source.store(efficiency_5min_file)
+        efficiency_1h_loader = self.context.data_source.store(efficiency_1h_file)
+        efficiency_lap_distance_loader = self.context.data_source.store(efficiency_lap_distance_file)
+
+        return efficiency_5min_loader, efficiency_1h_loader, efficiency_lap_distance_loader
+
 
 stage_registry.register_stage(EfficiencyStage.get_stage_name(), EfficiencyStage)

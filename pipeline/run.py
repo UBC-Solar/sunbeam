@@ -13,7 +13,13 @@ load_dotenv()
 
 
 @flow(log_prints=True)
-def run_sunbeam(git_target="pipeline"):
+def run_sunbeam(git_target="pipeline", ingress_to_skip=None, stages_to_skip=None):
+    if stages_to_skip is None:
+        stages_to_skip = []
+
+    if ingress_to_skip is None:
+        ingress_to_skip = []
+
     sunbeam_config, data_source_config, ingress_config, targets, events = build_config()
 
     stages_to_run = sunbeam_config.stages_to_run
@@ -27,7 +33,7 @@ def run_sunbeam(git_target="pipeline"):
 
     ingress_stage: IngressStage = IngressStage(ingress_config)
 
-    ingress_outputs: dict = IngressStage.run(ingress_stage, targets, events)
+    ingress_outputs: dict = IngressStage.run(ingress_stage, targets, events, ingress_to_skip)
 
     # We will process each event separately.
     for event in events:
