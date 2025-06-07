@@ -22,14 +22,8 @@ def run_sunbeam(git_target="pipeline", ingress_to_skip=None, stages_to_skip=None
 
     sunbeam_config, data_source_config, ingress_config, targets, events = build_config()
 
-    stages_to_run = sunbeam_config.stages_to_run
-
-    required_stages = build_stage_graph(stages_to_run)
-
-    logger.info(f"Executing stages in order: {" -> ".join(required_stages)}")
-
     data_source: DataSource = DataSourceFactory.build(data_source_config.data_source_type, data_source_config)
-    context: Context = Context(git_target, data_source, required_stages)  # Set the global context
+    context: Context = Context(git_target, data_source, stages_to_skip)  # Set the global context
 
     ingress_stage: IngressStage = IngressStage(ingress_config)
 

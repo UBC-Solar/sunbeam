@@ -160,6 +160,7 @@ class IngressStage(Stage):
                     result_transform = self._transform_into_timeseries(result_extract, event.name, target.name)
 
                 else:
+                    self.logger.error(f"Skipping {target.name}!")
                     result_transform = None
 
                 result_dict[event.name][target.name] = self._load_timeseries(result_transform, event.name, target.name)
@@ -315,7 +316,8 @@ class IngressStage(Stage):
         return file_loader
 
     def skip_stage(self):
-        pass
+        self.logger.error(f"{self.get_stage_name()} is being skipped!")
 
+        return (IngressDict(self._ingress_origin), )
 
 stage_registry.register_stage(IngressStage.get_stage_name(), IngressStage)
