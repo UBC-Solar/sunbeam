@@ -8,6 +8,8 @@ from data_tools.collections.time_series import TimeSeries
 from typing import List, Dict, cast
 import traceback
 from prefect import task
+from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
+from typing import Dict, Tuple, Any
 
 
 class IngressStage(Stage):
@@ -108,17 +110,28 @@ class IngressStage(Stage):
         :param events: the events that the raw time series data will be divided up into
         :param targets: the targets that will be acquired from InfluxDB
         """
-        result_dict: Dict[str, Dict[str, FileLoader]] = {}
+        result_dict: Dict[str, Dict[str, FileLoader]] = {event.name: {} for event in events}
 
-        for event in events:
-            result_dict[event.name] = {}
+        with ProcessPoolExecutor(max_workers=10) as executor:
+            future_to_key: Dict[Any, Tuple[str, str]] = {}
 
-            for target in targets:
-                result_extract = self._fetch_from_influxdb(event, target)
-                result_transform = self._transform_into_timeseries(result_extract, event.name, target.name)
-                result_dict[event.name][target.name] = self._load_timeseries(result_transform, event.name, target.name)
+            for event in events:
+                for target in targets:
+                    fut = executor.submit(self._process_one, event, target)
+                    future_to_key[fut] = (event.name, target.name)
 
-        return (result_dict, )
+            for fut in as_completed(future_to_key):
+                ev_name, tgt_name, loader = fut.result()
+                result_dict[ev_name][tgt_name] = loader
+
+        return (result_dict,)
+
+    def _process_one(self, event, target) -> Tuple[str, str, FileLoader]:
+        extracted = self._fetch_from_influxdb(event, target)
+        timeseries = self._transform_into_timeseries(extracted, event.name, target.name)
+        loader = self._load_timeseries(timeseries, event.name, target.name)
+
+        return event.name, target.name, loader
 
     def _extract_transform_load_existing(
             self,
@@ -179,12 +192,12 @@ class IngressStage(Stage):
                 "description": target.description
             })
 
-            self.logger.info(f"Successfully extracted time series data for {target.name} for {event.name}!")
+            # self.logger.info(f"Successfully extracted time series data for {target.name} for {event.name}!")
 
         except UnwrappedError as e:
             result = Result.Err(e)
-            self.logger.error(f"Failed to extract time series data for {target.name} for {event.name}: "
-                              f"{traceback.format_exc()}")
+            # self.logger.error(f"Failed to extract time series data for {target.name} for {event.name}: "
+            #                   f"{traceback.format_exc()}")
 
         return result
 
@@ -220,12 +233,12 @@ class IngressStage(Stage):
 
                 time_series_result = Result.Ok(file)
 
-                self.logger.info(f"Successfully processed time series data {name}.")
+                # self.logger.info(f"Successfully processed time series data {name}.")
 
             # Oops, wrap the error
             except Exception as e:
                 time_series_result = Result.Err(e)
-                self.logger.error(f"Failed to process time series data {name}: {traceback.format_exc()}")
+                # self.logger.error(f"Failed to process time series data {name}: {traceback.format_exc()}")
 
         # If we're going to get an error, forward it along
         else:
@@ -252,7 +265,7 @@ class IngressStage(Stage):
             )
             file_loader = self.context.data_source.store(updated_file)
 
-            self.logger.info(f"Successfully loaded {name} for {event_name}!")
+            # self.logger.info(f"Successfully loaded {name} for {event_name}!")
 
         else:
             file_loader = self.context.data_source.store(
@@ -263,7 +276,7 @@ class IngressStage(Stage):
                 )
             )
 
-            self.logger.info(f"Failed to load {name} for {event_name}!")
+            # self.logger.info(f"Failed to load {name} for {event_name}!")
 
         return file_loader
 
