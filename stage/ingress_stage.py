@@ -8,7 +8,7 @@ from data_tools.collections.time_series import TimeSeries
 from typing import List, Dict, cast
 import traceback
 from prefect import task
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
 from typing import Dict, Tuple, Any
 
 
@@ -112,7 +112,7 @@ class IngressStage(Stage):
         """
         result_dict: Dict[str, Dict[str, FileLoader]] = {event.name: {} for event in events}
 
-        with ThreadPoolExecutor(max_workers=10) as executor:
+        with ProcessPoolExecutor(max_workers=10) as executor:
             future_to_key: Dict[Any, Tuple[str, str]] = {}
 
             for event in events:
