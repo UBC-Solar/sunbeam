@@ -3,9 +3,7 @@ from prefect.docker import DockerImage
 from pipeline import run_sunbeam
 import prefect.client.schemas.responses
 import logging
-from prefect import flow
 from prefect import exceptions as prefect_exceptions
-from prefect_github import GitHubRepository
 from prefect.client.orchestration import get_client
 import docker
 import datetime
