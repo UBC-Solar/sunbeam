@@ -45,7 +45,16 @@ class EnergyStage(Stage):
             more accurate in the short term, but can diverge from the truth over time as systematic error is integrated.
             This value is also problematic if telemetry is missing values, as this will appear as if no power was used
             during this time.
+        4. UnfilteredSOC
+            Estimated SOC of our battery, in dimensionless units in the range [0, 1], by modeling our
+            battery as a first-order Thevenin equivalent circuit. The accuracy of this SOC estimation
+            is limited by the accuracy of the current sensor used to produce the model inputs.
 
+        5. Estimated SOC of our battery, in dimensionless units in the range [0, 1], by modeling our
+            battery as a first-order Thevenin equivalent circuit and then filtering the model predictions
+            with an Extended Kalman Filter. Uses terminal voltage measurements to correct for current
+            sensor error. Sensitive to variations in the battery state of health since testing used
+            to generate the model parameters.
 
         :param EnergyStage self: an instance of EnergyStage to be run
         :param FileLoader voltage_of_least_loader: loader to VoltageofLeast from Ingress
