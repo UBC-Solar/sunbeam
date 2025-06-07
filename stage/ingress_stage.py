@@ -8,6 +8,8 @@ from data_tools.collections.time_series import TimeSeries
 from typing import List, Dict, cast
 import traceback
 from prefect import task
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Dict, Tuple, Any
 
 
 class IngressStage(Stage):
@@ -108,17 +110,28 @@ class IngressStage(Stage):
         :param events: the events that the raw time series data will be divided up into
         :param targets: the targets that will be acquired from InfluxDB
         """
-        result_dict: Dict[str, Dict[str, FileLoader]] = {}
+        result_dict: Dict[str, Dict[str, FileLoader]] = {event.name: {} for event in events}
 
-        for event in events:
-            result_dict[event.name] = {}
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_key: Dict[Any, Tuple[str, str]] = {}
 
-            for target in targets:
-                result_extract = self._fetch_from_influxdb(event, target)
-                result_transform = self._transform_into_timeseries(result_extract, event.name, target.name)
-                result_dict[event.name][target.name] = self._load_timeseries(result_transform, event.name, target.name)
+            for event in events:
+                for target in targets:
+                    fut = executor.submit(self._process_one, event, target)
+                    future_to_key[fut] = (event.name, target.name)
 
-        return (result_dict, )
+            for fut in as_completed(future_to_key):
+                ev_name, tgt_name, loader = fut.result()
+                result_dict[ev_name][tgt_name] = loader
+
+        return (result_dict,)
+
+    def _process_one(self, event, target) -> Tuple[str, str, FileLoader]:
+        extracted = self._fetch_from_influxdb(event, target)
+        timeseries = self._transform_into_timeseries(extracted, event.name, target.name)
+        loader = self._load_timeseries(timeseries, event.name, target.name)
+
+        return event.name, target.name, loader
 
     def _extract_transform_load_existing(
             self,
