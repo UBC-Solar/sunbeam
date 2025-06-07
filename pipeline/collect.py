@@ -17,7 +17,11 @@ def collect_targets(ingress_config: dict) -> List[TimeSeriesTarget]:
     seen_names = set()
 
     for target in ingress_config["target"]:
-        target_type = FileType(target["type"])
+        try:
+            target_type = FileType(target["type"])
+        except ValueError:
+            # File type not known by data tools, keep it as a string
+            target_type = target["type"]
 
         match target_type:
             case FileType.TimeSeries:
@@ -27,6 +31,18 @@ def collect_targets(ingress_config: dict) -> List[TimeSeriesTarget]:
 
                     except KeyError:
                         logger.error(f"Missing key in target! \n {traceback.format_exc()}")
+
+                else:
+                    raise ValueError(f"Target names must be unique! {target['name']} "
+                                     f"is already the name of another target.")
+
+            case "DataFrame":
+                if not target["name"] in seen_names:
+                    # try:
+                    #     targets.append(DataFrameTarget(**target))
+                    #
+                    # except KeyError:
+                    #     logger.error(f"Missing key in target! \n {traceback.format_exc()}")
 
                 else:
                     raise ValueError(f"Target names must be unique! {target['name']} "
