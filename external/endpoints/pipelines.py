@@ -98,7 +98,11 @@ def commission_pipeline(git_target, build_local=False):
             tag=f"{git_target}",
             dockerfile="compiled.Dockerfile"
         ),
-        parameters={"git_target": git_target},
+        parameters={
+            "git_target": git_target,
+            "stages_to_skip": [],
+            "ingress_to_skip": []
+        },
         push=False,
         build=False
     )

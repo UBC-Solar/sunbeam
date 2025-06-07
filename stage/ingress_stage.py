@@ -2,7 +2,7 @@ from config import DataSourceConfig
 from stage.stage import Stage, StageError
 from data_source import InfluxDBDataSource, FSDataSource, DataSourceType, MongoDBDataSource, SunbeamDataSource
 from stage.stage_registry import stage_registry
-from data_tools.schema import File, Result, FileLoader, FileType, Event, UnwrappedError, CanonicalPath
+from data_tools.schema import File, Result, FileLoader, FileType, Event, UnwrappedError, CanonicalPath, DataSource
 from data_tools.query.influxdb_query import TimeSeriesTarget
 from data_tools.collections.time_series import TimeSeries
 from typing import List, Dict, cast
@@ -11,34 +11,44 @@ from prefect import task
 
 
 class IngressDict(dict):
-    def __init__(self, origin: str):
+    def __init__(self, origin: str, data_source: DataSource):
         super().__init__()
 
         self.origin = origin
+        self.data_source = data_source
 
     def __getitem__(self, item):
         try:
-            super().__getitem__(item)
+            return super().__getitem__(item)
 
         except KeyError:
-            return EventDataDict(self.origin, item)
+            return EventDataDict(self.origin, item, self.data_source)
 
 
 class EventDataDict(dict):
-    def __init__(self, origin: str, event: str):
+    def __init__(self, origin: str, event: str, data_source: DataSource):
         super().__init__()
 
         self.event = event
         self.origin = origin
+        self.data_source = data_source
 
     def __getitem__(self, item):
         try:
-            super().__getitem__(item)
+            return super().__getitem__(item)
 
         except KeyError:
-            return FileLoader(
-                lambda x: Result.Err(RuntimeError(f"Did not extract {self.origin}/{self.event}/ingress/{item}!")),
-                CanonicalPath(self.origin, "ingress", self.event, item)
+            return self.data_source.store(
+                File(
+                    canonical_path=CanonicalPath(
+                        origin=self.origin,
+                        source="ingress",
+                        event=self.event,
+                        name=item
+                    ),
+                    file_type=FileType.TimeSeries,
+                    data=None
+                )
             )
 
 
@@ -149,10 +159,10 @@ class IngressStage(Stage):
         :param events: the events that the raw time series data will be divided up into
         :param targets: the targets that will be acquired from InfluxDB
         """
-        result_dict: Dict[str, Dict[str, FileLoader]] = IngressDict(self._ingress_origin)
+        result_dict: Dict[str, Dict[str, FileLoader]] = IngressDict(self._ingress_origin, self.context.data_source)
 
         for event in events:
-            result_dict[event.name] = EventDataDict(self._ingress_origin, event.name)
+            result_dict[event.name] = EventDataDict(self._ingress_origin, event.name, self.context.data_source)
 
             for target in targets:
                 if target.name not in ingress_to_skip:
@@ -179,10 +189,10 @@ class IngressStage(Stage):
         :param events: the events that the raw time series data will be divided up into
         :param targets: the targets that will be acquired from InfluxDB
         """
-        result_dict: Dict[str, Dict[str, FileLoader]] = IngressDict(self._ingress_origin)
+        result_dict: Dict[str, Dict[str, FileLoader]] = IngressDict(self._ingress_origin, self.context.data_source)
 
         for event in events:
-            result_dict[event.name] = EventDataDict(self._ingress_origin, event.name)
+            result_dict[event.name] = EventDataDict(self._ingress_origin, event.name, self.context.data_source)
 
             for target in targets:
                 result = self._fetch_from_existing(event, target)
@@ -318,6 +328,7 @@ class IngressStage(Stage):
     def skip_stage(self):
         self.logger.error(f"{self.get_stage_name()} is being skipped!")
 
-        return (IngressDict(self._ingress_origin), )
+        return (IngressDict(self._ingress_origin, self.context.data_source), )
+
 
 stage_registry.register_stage(IngressStage.get_stage_name(), IngressStage)

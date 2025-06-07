@@ -35,6 +35,7 @@
         },
         "default": {
           "SOLCAST_API_KEY": "",
+          "INFLUX_ORG": "",
           "INFLUX_TOKEN": ""
         },
         "description": "Environment variables to set when starting a flow run.",
