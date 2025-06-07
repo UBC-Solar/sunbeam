@@ -11,6 +11,10 @@ from prefect import task
 
 
 class IngressDict(dict):
+    """
+    A dictionary which returns an empty dictionary to an Event if the dictionary
+    does not already contain the Event as a key, instead of raising an error.
+    """
     def __init__(self, origin: str, data_source: DataSource):
         super().__init__()
 
@@ -26,6 +30,11 @@ class IngressDict(dict):
 
 
 class EventDataDict(dict):
+    """
+    A dictionary which returns always correct FileLoader to a File even if the dictionary
+    does not already contain a reference to the File, instead of raising an error.
+    Of course, the FileLoader may not result in a valid File when invoked.
+    """
     def __init__(self, origin: str, event: str, data_source: DataSource):
         super().__init__()
 
