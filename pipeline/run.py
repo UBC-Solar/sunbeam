@@ -46,10 +46,18 @@ def run_sunbeam(git_target="pipeline", ingress_to_skip=None, stages_to_skip=None
         )
 
         energy_stage: EnergyStage = EnergyStage(event)
-        integrated_pack_power, energy_vol_extrapolated, energy_from_integrated_power = EnergyStage.run(
+        (
+            integrated_pack_power,
+            energy_vol_extrapolated,
+            energy_from_integrated_power,
+            unfiltered_soc,
+            soc
+        ) = EnergyStage.run(
             energy_stage,
             ingress_outputs[event.name]["VoltageofLeast"],
-            pack_power
+            pack_power,
+            ingress_outputs[event.name]["TotalPackVoltage"],
+            ingress_outputs[event.name]["PackCurrent"]
         )
 
         localization_stage: LocalizationStage = LocalizationStage(event)
