@@ -85,7 +85,7 @@ def commission_pipeline(git_target, build_local=False):
     build_run_sunbeam_image(
         dockerfile=dockerfile_name,
         tag=f"run-sunbeam:{git_target}",
-        build_args={"BRANCH": git_target, "CACHE_DATE": datetime.datetime.now().strftime("%Y-%m-%d")}
+        build_args={"BRANCH": git_target, "CACHE_DATE": datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")},
     )
 
     run_sunbeam.deploy(

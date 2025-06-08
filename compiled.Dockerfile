@@ -21,8 +21,6 @@ ARG CACHE_DATE
 # Force‐checkout the branch specified at build time, then immediately delete .git (to keep the image smaller).
 RUN git clone --branch "$BRANCH" --single-branch "$REPO_URL" . && rm -rf sunbeam/.git
 
-RUN cat "config/sunbeam.toml"
-
 # Set the project environment to the system Python.
 ENV UV_PROJECT_ENVIRONMENT=/usr/local
 
