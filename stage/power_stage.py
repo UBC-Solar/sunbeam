@@ -152,5 +152,36 @@ class PowerStage(Stage):
 
         return pack_power_loader, motor_power_loader
 
+    def skip_stage(self):
+        self.logger.error(f"{self.get_stage_name()} is being skipped!")
+
+        pack_power_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=PowerStage.get_stage_name(),
+                name="PackPower",
+            ),
+            file_type=FileType.TimeSeries,
+            data=None
+        )
+
+        motor_power_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=PowerStage.get_stage_name(),
+                name="MotorPower",
+            ),
+            file_type=FileType.TimeSeries,
+            data=None
+        )
+
+        pack_power_loader = self.context.data_source.store(pack_power_file)
+        motor_power_loader = self.context.data_source.store(motor_power_file)
+
+        return pack_power_loader, motor_power_loader
+
+
 
 stage_registry.register_stage(PowerStage.get_stage_name(), PowerStage)
