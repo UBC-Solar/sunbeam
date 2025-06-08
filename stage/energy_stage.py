@@ -428,6 +428,76 @@ class EnergyStage(Stage):
             soc_loader
         )
 
+    def skip_stage(self):
+        integrated_pack_power_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=EnergyStage.get_stage_name(),
+                name="IntegratedPackPower",
+            ),
+            file_type=FileType.TimeSeries,
+            data=None,
+        )
+
+        energy_vol_extrapolated_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=EnergyStage.get_stage_name(),
+                name="EnergyVOLExtrapolated",
+            ),
+            file_type=FileType.TimeSeries,
+            data=None,
+        )
+
+        energy_from_integrated_power_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=EnergyStage.get_stage_name(),
+                name="EnergyFromIntegratedPower",
+            ),
+            file_type=FileType.TimeSeries,
+            data=None,
+        )
+
+        unfiltered_soc_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=EnergyStage.get_stage_name(),
+                name="UnfilteredSOC",
+            ),
+            file_type=FileType.TimeSeries,
+            data=None,
+        )
+
+        soc_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=EnergyStage.get_stage_name(),
+                name="SOC",
+            ),
+            file_type=FileType.TimeSeries,
+            data=None,
+        )
+
+        integrated_pack_power_loader = self.context.data_source.store(integrated_pack_power_file)
+        energy_vol_extrapolated_loader = self.context.data_source.store(energy_vol_extrapolated_file)
+        energy_from_integrated_power_loader = self.context.data_source.store(energy_from_integrated_power_file)
+        unfiltered_soc_loader = self.context.data_source.store(unfiltered_soc_file)
+        soc_loader = self.context.data_source.store(soc_file)
+
+        return (
+            integrated_pack_power_loader,
+            energy_vol_extrapolated_loader,
+            energy_from_integrated_power_loader,
+            unfiltered_soc_loader,
+            soc_loader
+        )
+
 
 def into_soc_timeseries(values: NDArray, reference: TimeSeries) -> TimeSeries:
     values_ts = reference.promote(values)

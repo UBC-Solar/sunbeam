@@ -1,36 +1,43 @@
-[tool.poetry]
+[build-system]
+requires = ["setuptools<75", "setuptools-scm<8.2.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
 name = "sunbeam"
 version = "0.1.0"
 description = "UBC Solar's data pipeline: logic, distribution, storage, and infrastructure"
-authors = ["UBC Solar Strategy <strategy@ubcsolar.com>"]
 readme = "README.md"
-package-mode = false
+requires-python = ">=3.12,<4.0"
+authors = [
+  { name = "UBC Solar Strategy", email = "strategy@ubcsolar.com" }
+]
+keywords = ["data", "pipeline", "UBC", "solar"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Data Processing"
+]
+dependencies = [
+  "toml>=0.10.2,<1.0",
+  "prefect==3.4.4",
+  "prefect-docker==0.6.6",
+  "prefect-github==0.3.1",
+  "python-dotenv",
+  "docker>=7.1.0",
+  "pymongo>=4.8.0,<5.0",
+  "ubc-solar-data-tools>=1.9.0,<2.0",
+  "dill>=0.3.9,<1.0",
+  "networkx>=3.4.2,<4.0",
+  "ubc-solar-physics>=1.7.10"
+]
 
-[tool.poetry.dependencies]
-python = "^3.12"
-pydantic = "^2.8.2"
-toml = "^0.10.2"
-prefect = "^2.20.2"
-prefect-github = "^0.2.7"
-python-dotenv = "^1.0.1"
-pymongo = "^4.8.0"
-tqdm = "^4.66.5"
-ubc-solar-data-tools = "^1.9.0"
-dill = "^0.3.9"
-networkx = "^3.4.2"
-ubc-solar-physics = "^1.7.0"
+[project.optional-dependencies]
+external = [
+  "flask[async]>=3.0.3,<4.0",
+  "bokeh>=3.6.2,<4.0"
+]
+test = [
+  "pytest>=8.3.3,<9.0"
+]
 
-[tool.poetry.group.external.dependencies]
-flask = {version = "^3.0.3", extras = ["async"]}
-bokeh = "^3.6.2"
-redis = "^5.2.1"
-
-[tool.poetry.group.external]
-optional = true
-
-[tool.poetry.group.test.dependencies]
-pytest = "^8.3.3"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.setuptools]
+packages = []

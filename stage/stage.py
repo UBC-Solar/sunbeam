@@ -139,17 +139,25 @@ class Stage(ABC, metaclass=StageMeta):
 
     @staticmethod
     @abstractmethod
-    def run(self, *args) -> tuple[FileLoader, ...]:
-        # Here, we are annotating the stage functions at runtime as a Prefect task, then calling them
-        extract = task(self.extract, name=f"{self.get_stage_name()} Extract")(*args)
-        transform = task(self.transform, name=f"{self.get_stage_name()} Transform")(*extract)
-        load = task(self.load, name=f"{self.get_stage_name()} Load")(*transform)
+    def run(self: "Stage", *args) -> tuple[FileLoader, ...]:
+        if not self.get_stage_name() in self._context.stages_to_skip:
+            # Here, we are annotating the stage functions at runtime as a Prefect task, then calling them
+            extract = task(self.extract, name=f"{self.get_stage_name()} Extract")(*args)
+            transform = task(self.transform, name=f"{self.get_stage_name()} Transform")(*extract)
+            load = task(self.load, name=f"{self.get_stage_name()} Load")(*transform)
 
-        return load
+            return load
+
+        else:
+            return self.skip_stage()
 
     @staticmethod
     @abstractmethod
     def dependencies():
+        raise NotImplementedError
+
+    @abstractmethod
+    def skip_stage(self):
         raise NotImplementedError
 
     @classmethod
