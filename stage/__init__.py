@@ -22,6 +22,3 @@ __all__ = [
     "EfficiencyStage",
     "LocalizationStage",
 ]
-
-
-
