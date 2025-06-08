@@ -1,12 +1,14 @@
 services:
   prefect-server:
-    image: prefecthq/prefect:2.20-python3.12
+    image: prefecthq/prefect:3-python3.12
     ports:
       - "4200:4200"
     networks:
       - prefect-network
     environment:
       - PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://prefect:admin@postgres:5432/prefect
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: echo "ready"
       interval: 5s
@@ -29,12 +31,13 @@ services:
         source: ./db/mongo_data
         target: /data/db
 
-  prefect-agent:
-    image: sunbeam-prefect-agent:latest
+  process-worker:
+    image: sunbeam-docker-worker:latest
     volumes:
       - ./fs_data:/app/fs_data
-      - ./config:/app/config
-    build: .
+    build:
+      context: .
+      dockerfile: ./process_worker.Dockerfile
 
     depends_on:
       prefect-server:
@@ -44,13 +47,35 @@ services:
     environment:
       - PREFECT_API_URL=http://172.17.0.1:4200/api
       - PREFECT_API_DATABASE_CONNECTION_URL="postgresql+asyncpg://prefect:yourpassword@postgres:5432/prefect"
-#    env_file: "./pipeline/.env"
     # Note: the last command blocks (so insert any additonal commands before the last one!)
     command: > 
-      sh -c "ln -sfn config/.env . && 
-             export $(cat .env | xargs) && 
-             poetry run prefect work-pool create --type process default-work-pool --overwrite &&
-             poetry run prefect worker start --pool default-work-pool"
+      sh -c "prefect work-pool create --type process process-work-pool --overwrite --base-job-template default-process.json &&
+             prefect worker start --pool process-work-pool"
+
+
+  docker-worker:
+    image: sunbeam-docker-worker:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    build:
+      context: .
+      dockerfile: ./docker_worker.Dockerfile
+
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    networks:
+      - prefect-network
+    environment:
+      - PREFECT_API_URL=http://172.17.0.1:4200/api
+      - PREFECT_API_DATABASE_CONNECTION_URL="postgresql+asyncpg://prefect:yourpassword@postgres:5432/prefect"
+    # Note: the last command blocks (so insert any additonal commands before the last one!)
+    command: > 
+      sh -c "docker --version &&
+             docker ps && 
+             python -c 'import docker; print(docker.__version__)' &&
+             prefect work-pool create --type docker docker-work-pool --overwrite --base-job-template default-docker.json &&
+             prefect worker start --pool docker-work-pool"
 
   postgres:
     image: postgres:13
@@ -77,10 +102,10 @@ services:
   external_api:
     image: sunbeam-external-api:latest
     build:
-      context: ./external
-      dockerfile: ./Dockerfile
-      additional_contexts:
-        - root=.
+      context: .
+      dockerfile: external.Dockerfile
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
     networks:
       - prefect-network
@@ -95,20 +120,7 @@ services:
         condition: service_healthy
 
     command: >
-      sh -c "poetry run python external.py" 
-
-  redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
-    networks:
-      - prefect-network
-    volumes:
-      - type: bind
-        source: ./db/redis-data
-        target: /data
-    command: ["redis-server", "--appendonly", "yes"]
-
+      sh -c "uv run ls && uv run python external/external.py" 
 
 networks:
   prefect-network:

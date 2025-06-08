@@ -39,6 +39,15 @@ class EnergyStage(Stage):
         1. EnergyVOLExtrapolated
             Battery energy estimated using VoltageofLeast & SANYO NCR18650GA datasheet 2A discharge curve.
             See https://github.com/UBC-Solar/data_analysis/blob/main/soc_analysis/datasheet_voltage_soc/charge_voltage_energy.ipynb for details.
+        2. IntegratedPackPower
+            The integral of pack power in watt-hours. Starts at zero for each event.
+        3. EnergyFromIntegratedPower
+            Estimated energy in the battery in watt-hours. The starting value is given by the startingvalue of
+            EnergyVOLExtrapolated, then IntegratedPackPower is subtracted from this. This technique of determining
+            battery energy is equivalent to 'coulomb counting'. Values may be smoother than EnergyVOLExtrapolated and
+            more accurate in the short term, but can diverge from the truth over time as systematic error is integrated.
+            This value is also problematic if telemetry is missing values, as this will appear as if no power was used
+            during this time.
 
 
         :param EnergyStage self: an instance of EnergyStage to be run
@@ -111,7 +120,6 @@ class EnergyStage(Stage):
 
         return integrated_pack_power, energy_vol_extrapolated, energy_from_integrated_power
 
-
     def load(self, integrated_pack_power, energy_vol_extrapolated, energy_from_integrated_power) -> tuple[FileLoader, FileLoader, FileLoader]:
         integrated_pack_power_file = File(
             canonical_path=CanonicalPath(
@@ -164,6 +172,48 @@ class EnergyStage(Stage):
 
         energy_from_integrated_power_loader = self.context.data_source.store(energy_from_integrated_power_file)
         self.logger.info(f"Successfully loaded EnergyFromIntegratedPower!")
+
+        return integrated_pack_power_loader, energy_vol_extrapolated_loader, energy_from_integrated_power_loader
+
+    def skip_stage(self):
+        self.logger.error(f"{self.get_stage_name()} is being skipped!")
+
+        integrated_pack_power_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=EnergyStage.get_stage_name(),
+                name="IntegratedPackPower",
+            ),
+            file_type=FileType.TimeSeries,
+            data=None,
+        )
+
+        energy_vol_extrapolated_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=EnergyStage.get_stage_name(),
+                name="EnergyVOLExtrapolated",
+            ),
+            file_type=FileType.TimeSeries,
+            data=None
+        )
+
+        energy_from_integrated_power_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=EnergyStage.get_stage_name(),
+                name="EnergyFromIntegratedPower",
+            ),
+            file_type=FileType.TimeSeries,
+            data=None,
+        )
+
+        integrated_pack_power_loader = self.context.data_source.store(integrated_pack_power_file)
+        energy_vol_extrapolated_loader = self.context.data_source.store(energy_vol_extrapolated_file)
+        energy_from_integrated_power_loader = self.context.data_source.store(energy_from_integrated_power_file)
 
         return integrated_pack_power_loader, energy_vol_extrapolated_loader, energy_from_integrated_power_loader
 
