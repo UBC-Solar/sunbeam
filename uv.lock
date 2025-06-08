@@ -2205,7 +2205,7 @@ requires-dist = [
     { name = "python-dotenv" },
     { name = "toml", specifier = ">=0.10.2,<1.0" },
     { name = "ubc-solar-data-tools", specifier = ">=1.9.0,<2.0" },
-    { name = "ubc-solar-physics", specifier = ">=1.7.0" },
+    { name = "ubc-solar-physics", specifier = ">=1.7.3" },
 ]
 provides-extras = ["external", "test"]
 
@@ -2367,7 +2367,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/38/38/f45a6385e9f2e7013
 
 [[package]]
 name = "ubc-solar-physics"
-version = "1.7.1"
+version = "1.7.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "backports-tarfile" },
@@ -2406,12 +2406,14 @@ dependencies = [
     { name = "urllib3" },
     { name = "zipp" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/70/ad/b3dc231bcbf19410e2c9964fd8ac9e2af7f1e648a567376d20645045b502/ubc_solar_physics-1.7.1.tar.gz", hash = "sha256:5668c141ab4ab9e8437549e1a50c3956a2d18d7172d42516a226556c55063e64", size = 22459196, upload-time = "2025-05-31T21:41:35.605Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b3/4c/9dcec9fd08418a84168aafac7108c3b7053a7bfcbd3b5e2deba2cb438f34/ubc_solar_physics-1.7.3.tar.gz", hash = "sha256:d8fda285358cb887acaa2e4f870b8a002afd7c8f3cc20e3b2477ea80a0fa271c", size = 22459223, upload-time = "2025-06-08T04:14:25.875Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8c/a4/0ccdb65bac02c38ee27d65decf9a903d0cd10665b81a813655284e3b9fe9/ubc_solar_physics-1.7.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ff6acdc434fe6ef392caca94fe47d78369840d3c66bc22f84159abe4b291d05c", size = 380317, upload-time = "2025-05-31T21:43:29.875Z" },
-    { url = "https://files.pythonhosted.org/packages/53/d1/e0012442dbc547ec6fd0892e1ed0894b7df67e84db534914feeea6605c1b/ubc_solar_physics-1.7.1-cp312-cp312-win_amd64.whl", hash = "sha256:cac17235fecf2b643cbe7115bfa2a1f3a51056152bbf3aa700c8375fc205ed32", size = 225252, upload-time = "2025-05-31T21:47:46.053Z" },
-    { url = "https://files.pythonhosted.org/packages/25/d4/39345fa51347b9f6a894cf4457118956e73708a75f21069c351e1b590e5f/ubc_solar_physics-1.7.1-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:20d5bff42231c23b814a480a12abd49f819928e2a89d3ab708a3ee81c479830a", size = 380317, upload-time = "2025-05-31T21:43:31.387Z" },
-    { url = "https://files.pythonhosted.org/packages/c7/95/6389d11c5f27be9a78d637763fae4d1eb2b0a5ca530e3baa038a0bb2df29/ubc_solar_physics-1.7.1-cp313-cp313-win_amd64.whl", hash = "sha256:52bfc3d2a3f45732cae71bf425feb93ff490c765645ffa1b3fb56b21c0a5b10d", size = 225259, upload-time = "2025-05-31T21:47:47.839Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/ef/cd7050e53f58ef63e5b5f55687634ba367078e3affea7de7933365deffcd/ubc_solar_physics-1.7.3-cp312-cp312-macosx_10_12_x86_64.whl", hash = "sha256:2795086858391667ae3c6d9947dada15bbe2ee825254434cdb0e939aa27e77c1", size = 340117, upload-time = "2025-06-08T04:16:56.469Z" },
+    { url = "https://files.pythonhosted.org/packages/cd/81/3c3d8a2ca712b739593ea1ff587a322b1ee6a9d4f68503aee299166379e5/ubc_solar_physics-1.7.3-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:4fdc113a17d72fe1d920c4f604254d45463c9f86dae6d5a35f5cbcadc3ced73f", size = 331907, upload-time = "2025-06-08T04:16:57.838Z" },
+    { url = "https://files.pythonhosted.org/packages/31/8d/0b901b3162b29cd1ac59d518016f6903eac1a0058cdef0cb0d3db0c5172a/ubc_solar_physics-1.7.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8dc4fa2b4a47e8b2daebb1ad67d2d42a4eee687d20b8677fab67be823f5a595e", size = 380141, upload-time = "2025-06-08T04:16:24.215Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/d1/78a362dce1ac35c41dac94764711d8c7c71ff041c1f146d4e16964f06951/ubc_solar_physics-1.7.3-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:92f55865d0d04ce17155d8b13cce00e1fcc7ced53880e9243547c37852414887", size = 340114, upload-time = "2025-06-08T04:16:58.788Z" },
+    { url = "https://files.pythonhosted.org/packages/3d/f8/e35d47f5bfcb3377f621ed4051304c6f72ebf3fe00048be4aca0d2e363cc/ubc_solar_physics-1.7.3-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:b1989ae82bf8e508374143a384eed5f65150654e67fe752bdc8133659cc5853c", size = 331905, upload-time = "2025-06-08T04:17:00.295Z" },
+    { url = "https://files.pythonhosted.org/packages/58/d1/894fec38eb97caad44e9ff55738e215f77109b68393692de10ca1fbe2a47/ubc_solar_physics-1.7.3-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:22405b3d46a8deafd1ce141958093250ac8d6e0909e26ebc6607e79f02e45e27", size = 380143, upload-time = "2025-06-08T04:16:25.705Z" },
 ]
 
 [[package]]
