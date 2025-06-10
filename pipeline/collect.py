@@ -1,5 +1,4 @@
 import pathlib
-
 from data_tools import Event, FileType
 import toml as tomllib
 from typing import List, Union
@@ -7,10 +6,24 @@ import traceback
 from logs import SunbeamLogger
 from data_tools.query.influxdb_query import TimeSeriesTarget
 from config import config_directory
+from pydantic import BaseModel, Field
 
 
 logger = SunbeamLogger("sunbeam")
 
+
+class DataFrameTarget(BaseModel):
+    """
+    Encapsulates the data required to query a specific dataframe from InfluxDB.
+    """
+    name: str
+    field: str
+    measurement: str
+    units: str
+    car: str
+    bucket: str
+    frequency: float = Field(gt=0)
+    description: str = Field(default_factory=str)
 
 def collect_targets(ingress_config: dict) -> List[TimeSeriesTarget]:
     targets = []
@@ -38,11 +51,11 @@ def collect_targets(ingress_config: dict) -> List[TimeSeriesTarget]:
 
             case "DataFrame":
                 if not target["name"] in seen_names:
-                    # try:
-                    #     targets.append(DataFrameTarget(**target))
-                    #
-                    # except KeyError:
-                    #     logger.error(f"Missing key in target! \n {traceback.format_exc()}")
+                    try:
+                        targets.append(DataFrameTarget(**target))
+
+                    except KeyError:
+                        logger.error(f"Missing key in target! \n {traceback.format_exc()}")
 
                 else:
                     raise ValueError(f"Target names must be unique! {target['name']} "
