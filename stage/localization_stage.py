@@ -309,12 +309,28 @@ reverse_coords = np.array([
     [ 37.00098578, -86.36874579],
     [ 37.00107373, -86.36854755]
 ])
-coords = reverse_coords[::-1]
+abs_coords = np.abs(reverse_coords[::-1])
+
+# TEMP.  -- TODO REMOVE
+abs_coords = np.abs(np.array([
+    [49.254444, -123.243889],  # 0
+    [49.254444, -123.243611],  # 1
+    [49.254722, -123.243889],  # 2
+    [49.254722, -123.243889],  # 3
+    [49.255000, -123.243889],  # 4
+    [49.255000, -123.244167],  # 5
+    [49.255278, -123.244444],  # 6
+    [49.255000, -123.244444],  # 7
+    [49.255000, -123.244167],  # 8
+    [49.254444, -123.243889],  # 9
+    [49.254444, -123.243889],  # 10
+]))
+
 route_data = {
-    "path" : coords,
-    "elevations" : np.zeros(len(coords)),
-    "time_zones" : np.zeros(len(coords)),
-    "num_unique_coords" : (len(coords) - 1) }
+    "path" : abs_coords,
+    "elevations" : np.zeros(len(abs_coords)),
+    "time_zones" : np.zeros(len(abs_coords)),
+    "num_unique_coords" : (len(abs_coords) - 1) }
 
 # Create a GIS object
 starting_coords = [37.00107373, -86.36854755]
@@ -328,18 +344,12 @@ fsgp_lap_days = {
 
 # create a box with 0.01deg lat/lon padding around track
 # 1deg is ~100km (pi/180 * earth radius)
-# padding_deg = 0.01  # ~1km
-# min_latitude = np.min(coords[:, 0] - padding_deg)
-# max_latitude = np.max(coords[:, 0] + padding_deg)
-# min_longitude = np.min(coords[:, 1] - padding_deg)
-# max_longitude = np.max(coords[:, 1] + padding_deg)
+padding_deg = 0.1  # ~10km
+min_latitude = np.min(abs_coords[:, 0] - padding_deg)
+max_latitude = np.max(abs_coords[:, 0] + padding_deg)
+min_longitude = np.min(abs_coords[:, 1] - padding_deg)
+max_longitude = np.max(abs_coords[:, 1] + padding_deg)
 
-# TEMP.  -- TODO REMOVE
-coords = []
-min_latitude = 123.2
-max_latitude = 123.4
-min_longitude = 49.2
-max_longitude = 49.4
 
 class LocalizationStage(Stage):
     @classmethod
@@ -430,8 +440,11 @@ class LocalizationStage(Stage):
             gps_longitude_result = Result.Err(RuntimeError("Failed to process GPSLongitude!"))
             track_index_gps_result = Result.Err(RuntimeError("Failed to process TrackIndexGPS!"))
         else:
-            gps_latitude_df = gps_latitude_df_result.unwrap().data
-            gps_longitude_df = gps_longitude_df_result.unwrap().data
+            # !!!! FIX THE INVERTED VALUES !!!! - FIXME
+            gps_latitude_df = gps_longitude_df_result.unwrap().data.rename(
+                columns={'GPSLongitude': 'GPSLatitude'})
+            gps_longitude_df = gps_latitude_df_result.unwrap().data.rename(
+                columns={'GPSLatitude': 'GPSLongitude'})
 
             valid_latitude = np.logical_and(
                 gps_latitude_df.GPSLatitude > min_latitude,
@@ -444,7 +457,6 @@ class LocalizationStage(Stage):
             filtered_gps_indices = np.logical_and(valid_latitude, valid_longitude)
             filtered_gps_latitude_df = gps_latitude_df.loc[filtered_gps_indices]
             filtered_gps_longitude_df = gps_longitude_df.loc[filtered_gps_indices]
-
 
             gps_latitude_ts = TimeSeries.from_query_dataframe(
                 filtered_gps_latitude_df, 0.25, "GPSLatitude", "deg")
@@ -582,12 +594,12 @@ class LocalizationStage(Stage):
         Note: Telemetry GPS data removes the sign for lat/lon (e.g Vancouver is -123.1deg but gets 123.1deg).
               This should be fine since we will not be travelling across 0deg (equator / prime meridian).
         """
-        # coords has dimension (n_track_indices, 2), where the second dimension is lat/lon
+        # abs_coords has dimension (n_track_indices, 2), where the second dimension is lat/lon
         # lat and lon have dimension (t)
 
         # Broadcast subtract to create a matrix with dimension (t, n_track_indices)
-        lat_diffs = np.abs(coords[:, 0])[None, :] - lat[:, None]
-        lon_diffs = np.abs(coords[:, 1])[None, :] - lon[:, None]
+        lat_diffs = abs_coords[:, 0][None, :] - lat[:, None]
+        lon_diffs = abs_coords[:, 1][None, :] - lon[:, None]
 
         # Create a matrix with dimension (t, n_track_indices) with cartesian distance values,
         # then take the minimum index along axis 1 to get the closest index.
