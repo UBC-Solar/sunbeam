@@ -122,6 +122,7 @@ class IngressStage(Stage):
                     result_transform = self._wrap_dataframe(result_extract, event.name, target.name)
                 else:
                     self.logger.error(f"Unexpected target type {type(target)}")
+                    result_transform = Result.Err(ValueError(f"Unexpected target type {type(target)}"))
                 result_dict[event.name][target.name] = self._load_file(result_transform, event.name, target.name)
 
         return (result_dict, )
