@@ -106,6 +106,7 @@ services:
       dockerfile: external.Dockerfile
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - .:/build
 
     networks:
       - prefect-network

@@ -22,12 +22,3 @@ COPY ./pipeline ./pipeline
 
 RUN mkdir build
 
-COPY ./logs ./build/logs
-COPY ./pipeline ./build/pipeline
-COPY ./stage ./build/stage
-COPY ./config ./build/config
-COPY ./data_source ./build/data_source
-COPY ./compiled.Dockerfile ./build/compiled.Dockerfile
-COPY ./local.Dockerfile ./build/local.Dockerfile
-COPY  ./pyproject.toml ./build/pyproject.toml
-COPY  ./uv.lock ./build/uv.lock
