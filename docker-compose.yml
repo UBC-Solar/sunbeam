@@ -49,8 +49,7 @@ services:
       - PREFECT_API_DATABASE_CONNECTION_URL="postgresql+asyncpg://prefect:yourpassword@postgres:5432/prefect"
     # Note: the last command blocks (so insert any additonal commands before the last one!)
     command: > 
-      sh -c "prefect work-pool create --type process process-work-pool --overwrite --base-job-template default-process.json &&
-             prefect worker start --pool process-work-pool"
+      sh -c "prefect worker start --pool process-work-pool --type process --base-job-template default-process.json"
 
 
   docker-worker:
@@ -74,8 +73,7 @@ services:
       sh -c "docker --version &&
              docker ps && 
              python -c 'import docker; print(docker.__version__)' &&
-             prefect work-pool create --type docker docker-work-pool --overwrite --base-job-template default-docker.json &&
-             prefect worker start --pool docker-work-pool"
+             prefect worker start --pool docker-work-pool --type docker --base-job-template default-docker.json"
 
   postgres:
     image: postgres:13
@@ -106,6 +104,7 @@ services:
       dockerfile: external.Dockerfile
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - .:/build
 
     networks:
       - prefect-network
