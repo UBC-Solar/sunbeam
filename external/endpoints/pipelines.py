@@ -39,11 +39,8 @@ def build_run_sunbeam_image(
         pull=False,       # do not pull base images from remote
         rm=True,          # remove intermediate containers
         forcerm=True,     # always remove intermediate containers
+        cache_from=[tag]
     )
-
-    for chunk in logs:
-        if "stream" in chunk:
-            sys.stdout.write(chunk["stream"])
 
     print(f"Successfully built image: {image.id[:12]}")
     return image
@@ -63,7 +60,7 @@ def decommission_pipeline(collection, git_target):
                 deployment = await prefect_client.read_deployment_by_name(f"run-sunbeam/pipeline-{deployment_name}")
                 assert isinstance(deployment, prefect.client.schemas.responses.DeploymentResponse)
 
-                print(f"Decomissioning {deployment_name}")
+                print(f"Decomissioning {deployment_name}!")
 
                 await prefect_client.delete_deployment(deployment.id)
 
@@ -85,7 +82,7 @@ def commission_pipeline(git_target, build_local=False):
     build_run_sunbeam_image(
         dockerfile=dockerfile_name,
         tag=f"run-sunbeam:{git_target}",
-        build_args={"BRANCH": git_target, "CACHE_DATE": datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")},
+        build_args={"BRANCH": git_target, "CACHE_DATE": datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}
     )
 
     run_sunbeam.deploy(
