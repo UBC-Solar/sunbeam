@@ -288,8 +288,6 @@ class EfficiencyStage(Stage):
         return efficiency_5min_loader, efficiency_1h_loader, efficiency_lap_distance_loader
 
     def skip_stage(self):
-        self.logger.error(f"{self.get_stage_name()} is being skipped!")
-
         efficiency_5min_file = File(
             canonical_path=CanonicalPath(
                 origin=self.context.title,
@@ -319,7 +317,7 @@ class EfficiencyStage(Stage):
                 source=self.get_stage_name(),
                 name="EfficiencyLapDistance",
             ),
-            file_type=FileType.TimeSeries,  # actually an ndarray but this is not yet supported
+            file_type=FileType.TimeSeries,
             data=None,
         )
 

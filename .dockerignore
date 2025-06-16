@@ -1,0 +1,8 @@
+db/
+tests
+Makefile
+*.png
+fs_data
+.venv
+.github
+docs

@@ -183,5 +183,4 @@ class PowerStage(Stage):
         return pack_power_loader, motor_power_loader
 
 
-
 stage_registry.register_stage(PowerStage.get_stage_name(), PowerStage)
