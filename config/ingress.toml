@@ -42,6 +42,17 @@ frequency = 5.0
 units = "m/s"
 description = "Speed of Brightside"
 
+[[target]]
+name = "MotorRotatingSpeed"
+field = "MotorRotatingSpeed"
+type = "TimeSeries"
+measurement = "MC"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 5.0
+units = "km/h"
+description = "Speed of Brightside"
+
 #[[target]]
 #name = "BatteryCurrentDirection"
 #field = "BatteryCurrentDirection"

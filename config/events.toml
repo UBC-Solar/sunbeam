@@ -23,5 +23,5 @@
 #
 [[event]]
 name = "realtime"
-start = "2025-06-07T00:00:00Z"
-stop = "2025-06-09T00:00:00Z"
+start = "2025-06-08T17:00:00Z"  # 10AM YVR
+stop = "2025-06-08T23:00:00Z"  # 4PM YVR
