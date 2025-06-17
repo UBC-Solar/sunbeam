@@ -53,7 +53,6 @@ class CleanupStage(Stage):
         return vehicle_velocity_result, motor_rotating_speed_result
 
     def transform(self, vehicle_velocity_result, motor_rotating_speed_result) -> tuple[Result]:
-
         if not vehicle_velocity_result and not motor_rotating_speed_result:
             speed_mps_result = Result.Err(RuntimeError("Failed to process SpeedMPS!"))
             return speed_mps_result
