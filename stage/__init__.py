@@ -7,6 +7,7 @@ from .power_stage import PowerStage
 from .weather_stage import WeatherStage
 from .efficiency_stage import EfficiencyStage
 from .localization_stage import LocalizationStage
+from .cleanup_stage import CleanupStage
 
 __all__ = [
     "IngressStage",
@@ -21,6 +22,7 @@ __all__ = [
     "WeatherStage",
     "EfficiencyStage",
     "LocalizationStage",
+    "CleanupStage",
 ]
 
 

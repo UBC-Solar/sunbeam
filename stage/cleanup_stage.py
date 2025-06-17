@@ -50,7 +50,7 @@ class CleanupStage(Stage):
         vehicle_velocity_result: Result = vehicle_velocity_loader()
         motor_rotating_speed_result: Result = motor_rotating_speed_loader()
 
-        return (vehicle_velocity_result, motor_rotating_speed_result)
+        return vehicle_velocity_result, motor_rotating_speed_result
 
     def transform(self, vehicle_velocity_result, motor_rotating_speed_result) -> tuple[Result]:
 
@@ -65,7 +65,7 @@ class CleanupStage(Stage):
             speed_mps_ts = motor_rotating_speed_ts / 3.6
         speed_mps_ts.units = "m/s"
         speed_mps_ts.name = "SpeedMPS"
-        return Result.Ok(speed_mps_ts)
+        return Result.Ok(speed_mps_ts),
 
     def load(self, speed_mps_result) -> tuple[FileLoader]:
         speed_mps_file = File(

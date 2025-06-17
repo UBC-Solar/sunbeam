@@ -4,7 +4,7 @@ from logs import SunbeamLogger
 from data_source import DataSourceFactory
 from pipeline.configure import build_config, build_stage_graph
 from stage import (Context, IngressStage, EnergyStage, PowerStage,
-                   WeatherStage, EfficiencyStage, LocalizationStage)
+                   WeatherStage, EfficiencyStage, LocalizationStage, CleanupStage)
 
 logger = SunbeamLogger("sunbeam")
 
@@ -29,6 +29,13 @@ def run_sunbeam(git_target="pipeline"):
     # We will process each event separately.
     for event in events:
 
+        cleanup_stage: CleanupStage = CleanupStage(event)
+        speed_mps, = CleanupStage.run(
+            cleanup_stage,
+            ingress_outputs[event.name]["VehicleVelocity"],
+            ingress_outputs[event.name]["MotorRotatingSpeed"],
+        )
+
         # power_stage: PowerStage = PowerStage(event)
         # pack_power, motor_power = PowerStage.run(
         #     power_stage,
@@ -52,17 +59,17 @@ def run_sunbeam(git_target="pipeline"):
             localization_stage,
             ingress_outputs[event.name]["GPSLatitude"],
             ingress_outputs[event.name]["GPSLongitude"],
-            ingress_outputs[event.name]["VehicleVelocity"]
+            speed_mps,
         )
 
         # efficiency_stage: EfficiencyStage = EfficiencyStage(event)
         # efficiency_5min, efficiency_1h, efficiency_lap_distance = EfficiencyStage.run(
         #     efficiency_stage,
-        #     ingress_outputs[event.name]["VehicleVelocity"],
+        #     speed_mps,
         #     motor_power,
         #     lap_index
         # )
-        #
+
         # weather_stage: WeatherStage = WeatherStage(event)
         # (air_temperature, azimuth, dhi, dni, ghi, precipitation_rate,
         #  wind_direction_10m, wind_speed_10m, zenith) = WeatherStage.run(
