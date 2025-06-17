@@ -554,5 +554,58 @@ class LocalizationStage(Stage):
 
         return tuple(file_loaders)
 
+    def skip_stage(self):
+        file_details = {
+            "LapIndex": {
+                "description": "The best available LapIndex data for the event. "
+                               "Prioritizes LapIndexSpreadsheet > LapIndexIntegratedSpeed."
+            },
+            "TrackIndex": {
+                "description": "The best available TrackIndex data for the event. Currently only TrackIndexSpreadsheet "
+                               "is available, but GPS TrackIndex is coming soon."
+            },
+            "LapIndexIntegratedSpeed": {
+                "description": f"Estimate of the FSGP lap index in this event as a function of time. "
+                               f"Value is estimated by integrating VehicleVelocity and tiling the result over the "
+                               f"FSGP lap"
+                               f"length of {NCM_LAP_LEN_M} meters."
+            },
+            "LapIndexSpreadsheet": {
+                "description": "Uses data from the FSGP timing spreadsheet (via FSGPDayLaps) to determine lap index."
+                               "Lap index is the integer number of laps we have completed around the track at any "
+                               "given time (starting at zero)."
+            },
+            "TrackDistanceSpreadsheet": {
+                "description": "Uses data from the FSGP timing spreadsheet (via FSGPDayLaps) to determine lap splits, "
+                               "then integrates speed over the current lap to determine distance travelled along the "
+                               "track."
+            },
+            "TrackIndexSpreadsheet": {
+                "description": "Uses data from the FSGP timing spreadsheet (via FSGPDayLaps) to determine lap splits, "
+                               "then integrates speed over the current lap to determine track index."
+            },
+        }
+
+        file_loaders = []
+
+        for name, details in file_details.items():
+            file = File(
+                canonical_path=CanonicalPath(
+                    origin=self.context.title,
+                    event=self.event_name,
+                    source=self.get_stage_name(),
+                    name=name,
+                ),
+                file_type=FileType.TimeSeries,
+                data=None,
+                description=details["description"]
+            )
+
+            loader = self.context.data_source.store(file)
+            self.logger.info(f"Successfully loaded {name}!")
+            file_loaders.append(loader)
+
+        return tuple(file_loaders)
+
 
 stage_registry.register_stage(LocalizationStage.get_stage_name(), LocalizationStage)
