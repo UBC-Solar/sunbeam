@@ -189,7 +189,7 @@ class IngressStage(Stage):
                     self.logger.error(f"Skipping {target.name}!")
                     result_transform = None
 
-                result_dict[event.name][target.name] = self._load_timeseries(result_transform, event.name, target.name)
+                result_dict[event.name][target.name] = self._load_file(result_transform, event.name, target.name)
 
         return (result_dict, )
 
@@ -281,7 +281,7 @@ class IngressStage(Stage):
                     name=name
                 ),
                 description=target["description"],
-                file_type=FileType.Any,
+                file_type=FileType.TimeSeries,
                 data=dataframe
             )
 
@@ -366,7 +366,7 @@ class IngressStage(Stage):
                 File(
                     data=None,
                     canonical_path=canonical_path,
-                    file_type=FileType.Any
+                    file_type=FileType.TimeSeries
                 )
             )
 
