@@ -61,9 +61,11 @@ def run_sunbeam(git_target="pipeline", ingress_to_skip=None, stages_to_skip=None
         )
 
         localization_stage: LocalizationStage = LocalizationStage(event)
-        (lap_index, track_index, lap_index_integrated_speed,
-         lap_index_spreadsheet, track_distance_spreadsheet, track_index_spreadsheet) = LocalizationStage.run(
+        (lap_index, track_index, lap_index_integrated_speed, lap_index_spreadsheet, track_distance_spreadsheet,
+         track_index_spreadsheet, gps_latitude, gps_longitude, track_index_gps) = LocalizationStage.run(
             localization_stage,
+            ingress_outputs[event.name]["GPSLatitude"],
+            ingress_outputs[event.name]["GPSLongitude"],
             ingress_outputs[event.name]["VehicleVelocity"]
         )
 

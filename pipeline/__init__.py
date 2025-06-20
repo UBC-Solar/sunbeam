@@ -1,7 +1,8 @@
 from .collect import (
     collect_events,
     collect_targets,
-    collect_config_file
+    collect_config_file,
+    DataFrameTarget
 )
 
 from .configure import (
@@ -19,5 +20,6 @@ __all__ = [
     "collect_config_file",
     "build_stage_graph",
     "build_config",
-    "run_sunbeam"
+    "run_sunbeam",
+    "DataFrameTarget"
 ]
