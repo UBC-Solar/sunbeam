@@ -3,7 +3,7 @@ name = "TotalPackVoltage"
 field = "TotalPackVoltage"
 type = "TimeSeries"
 measurement = "BMS"
-frequency = 1.0
+frequency = 10.0
 units = "V"
 car = "Brightside"
 bucket = "CAN_log"
@@ -140,3 +140,47 @@ bucket = "CAN_log"
 frequency = 10.0
 units = "V"
 description = "Voltage of the battery module with the lowest voltage"
+
+[[target]]
+name = "ArrayCurrentStringC"
+field = "OutputCurrentC"
+type = "TimeSeries"
+measurement = "MPPT"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 3.0
+units = "A"
+description = "Output current of array string C"
+
+[[target]]
+name = "ArrayCurrentStringB"
+field = "OutputCurrentB"
+type = "TimeSeries"
+measurement = "MPPT"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 3.0
+units = "A"
+description = "Output current of array string B"
+
+[[target]]
+name = "ArrayCurrentStringA"
+field = "OutputCurrentA"
+type = "TimeSeries"
+measurement = "MPPT"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 3.0
+units = "A"
+description = "Output current of array string A"
+
+[[target]]
+name = "MotorRotatingSpeed"
+field = "MotorRotatingSpeed"
+type = "TimeSeries"
+measurement = "MC"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 10.0
+units = "km/h"
+description = "Speed of Brightside"
