@@ -228,6 +228,8 @@ class IngressStage(Stage):
 
     def _fetch_from_influxdb(self, event: Event, target: TimeSeriesTarget) -> Result[dict]:
         try:
+            offset = event.attributes.get("time_offset")
+
             queried_data = self._ingress_data_source.get(
                 CanonicalPath(
                     origin=target.bucket,
@@ -236,14 +238,16 @@ class IngressStage(Stage):
                     name=target.field
                 ),
                 start=event.start_as_iso_str,
-                stop=event.stop_as_iso_str
+                stop=event.stop_as_iso_str,
+                offset=offset
             ).unwrap()
 
             result = Result.Ok({
                 "data": queried_data,
                 "units": target.units,
                 "period": 1 / target.frequency,
-                "description": target.description
+                "description": target.description,
+                "field": target.field
             })
 
             self.logger.info(f"Successfully extracted time series data for {target.name} for {event.name}!")
@@ -263,11 +267,12 @@ class IngressStage(Stage):
                 data = target["data"]
                 units = target["units"]
                 period = target["period"]
+                field = target["field"]
 
                 time_series = TimeSeries.from_query_dataframe(
                     query_df=data,
                     granularity=period,
-                    field=name,
+                    field=field,
                     units=units
                 )
 

@@ -5,23 +5,24 @@ stop = "2024-07-17T01:00:00Z"
 flags = ["ncm_motorsports_park", "has_spreadsheet"]
 
 [[event]]
-name = "FSGP_2024_Day_2"
-start = "2024-07-17T14:00:00Z"
-stop = "2024-07-18T01:00:00Z"
-flags = ["ncm_motorsports_park", "has_spreadsheet"]
+name = "May_31st_Testing"      # Expected Offset: 14:00 from UTC to True Time (PDT)
+start = "2025-05-31T07:00:00Z" # True Time: "2025-05-31T00:00:00" PDT
+stop = "2025-06-01T07:00:00Z"  # True Time: "2025-06-01T00:00:00" PDT
 
 [[event]]
-name = "FSGP_2024_Day_3"
-start = "2024-07-18T14:00:00Z"
-stop = "2024-07-19T01:00:00Z"
-flags = ["ncm_motorsports_park", "has_spreadsheet"]
+name = "June_8th_Testing"      # Expected Offset: 14:00 from UTC to True Time (PDT)
+start = "2025-06-08T07:00:00Z" # True Time: "2025-06-08T00:00:00" PDT
+stop = "2025-06-09T07:00:00Z"  # True Time: "2025-06-09T00:00:00" PDT
 
 [[event]]
-name = "ASC_2024_Day_1"
-start = "2024-07-20T14:00:00Z"
-stop = "2024-07-21T01:00:00Z"
+name = "June_18th_Testing"     # Expected Offset: 07:00 from UTC to True Time (PDT)
+start = "2025-06-19T00:00:00Z" # True Time: "2025-06-18T17:00:00" PDT
+stop = "2025-06-19T01:00:00Z"  # True Time: "2025-06-18T18:00:00" PDT
+time_offset = 7
 
 [[event]]
-name = "realtime"
-start = "2025-06-14T05:00:00Z"
-stop = "2025-06-19T05:00:00Z"
+name = "June_20th_Testing"     # Expected Offset: 07:00 from UTC to True Time (PDT)
+start = "2025-06-20T07:00:00Z" # True Time: "2025-06-20T00:00:00" PDT
+stop = "2025-06-21T07:00:00Z"  # True Time: "2025-06-21T00:00:00" PDT
+time_offset = 7
+
