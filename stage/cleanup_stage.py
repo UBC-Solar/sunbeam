@@ -84,5 +84,23 @@ class CleanupStage(Stage):
 
         return speed_mps_loader,
 
+    def skip_stage(self):
+        self.logger.error(f"{self.get_stage_name()} is being skipped!")
+
+        speed_mps_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=CleanupStage.get_stage_name(),
+                name="PackPower",
+            ),
+            file_type=FileType.TimeSeries,
+            data=None
+        )
+
+        speed_mps_loader = self.context.data_source.store(speed_mps_file)
+
+        return speed_mps_loader,
+
 
 stage_registry.register_stage(CleanupStage.get_stage_name(), CleanupStage)
