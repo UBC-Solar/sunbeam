@@ -36,7 +36,7 @@ class LocalizationStage(Stage):
     def run(self,
             gps_latitude_df_loader: FileLoader,
             gps_longitude_df_loader: FileLoader,
-            vehicle_velocity_loader: FileLoader) -> tuple[FileLoader, ...]:
+            speed_mps_loader: FileLoader) -> tuple[FileLoader, ...]:
         """
         Run the localization stage, which computes various metrics relating to the car's location in a track race.
 
@@ -69,10 +69,10 @@ class LocalizationStage(Stage):
         :param self: an instance of LocalizationStage to be run
         :param FileLoader gps_latitude_df_loader: loader to GPSLatitude dataframe from Ingress
         :param FileLoader gps_longitude_df_loader: loader to GPSLongitude dataframe from Ingress
-        :param FileLoader vehicle_velocity_loader: loader to VehicleVelocity from Ingress
+        :param FileLoader speed_mps_loader: loader to SpeedMPS from CleanupStage
         :returns: LapIndexIntegratedSpeed, LapIndexSpreadsheet, TrackDistanceSpreadsheet, TrackIndexSpreadsheet (FileLoaders pointing to TimeSeries)
         """
-        return super().run(self, gps_latitude_df_loader, gps_longitude_df_loader, vehicle_velocity_loader)
+        return super().run(self, gps_latitude_df_loader, gps_longitude_df_loader, speed_mps_loader)
 
     @property
     def event_name(self) -> str:
@@ -95,10 +95,10 @@ class LocalizationStage(Stage):
     def extract(self,
                 gps_latitude_df_loader: FileLoader,
                 gps_longitude_df_loader: FileLoader,
-                vehicle_velocity_loader: FileLoader) -> tuple[Result, Result, Result, Result]:
+                speed_mps_loader: FileLoader) -> tuple[Result, Result, Result, Result]:
         gps_latitude_df_result: Result = gps_latitude_df_loader()
         gps_longitude_df_result: Result = gps_longitude_df_loader()
-        vehicle_velocity_result: Result = vehicle_velocity_loader()
+        speed_mps_result: Result = speed_mps_loader()
 
         try:
             coords_result = Result.Ok(np.abs(np.array(self.stage_data[self.event_name]["coords"]["coordinates"])))
@@ -106,9 +106,9 @@ class LocalizationStage(Stage):
         except KeyError:
             coords_result = Result.Err(KeyError(f"No coordinates found for event {self._event_name}! \n"))
 
-        return gps_latitude_df_result, gps_longitude_df_result, vehicle_velocity_result, coords_result
+        return gps_latitude_df_result, gps_longitude_df_result, speed_mps_result, coords_result
 
-    def transform(self, gps_latitude_df_result, gps_longitude_df_result, vehicle_velocity_result, coords_result) -> tuple[Result, ...]:
+    def transform(self, gps_latitude_df_result, gps_longitude_df_result, speed_mps_result, coords_result) -> tuple[Result, ...]:
         if not coords_result:
             self.logger.error(f"Localization Stage for {self.event_name} has no coordinates!")
             gps_latitude_result = Result.Err(RuntimeError("Failed to process GPSLatitude!"))
@@ -183,20 +183,20 @@ class LocalizationStage(Stage):
 
         # lap index integrated speed, lap/track index from spreadsheet
         try:
-            vehicle_velocity_ts: TimeSeries = vehicle_velocity_result.unwrap().data
+            speed_mps_ts: TimeSeries = speed_mps_result.unwrap().data
 
-            lap_index_integrated_speed_result = self._get_lap_index_integrated_speed(vehicle_velocity_ts)
+            lap_index_integrated_speed_result = self._get_lap_index_integrated_speed(speed_mps_ts)
 
-            lap_index_spreadsheet_ts = self._get_lap_index_spreadsheet(self.event, vehicle_velocity_ts)
+            lap_index_spreadsheet_ts = self._get_lap_index_spreadsheet(self.event, speed_mps_ts)
             lap_index_spreadsheet_result = Result.Ok(lap_index_spreadsheet_ts)
 
             track_distance_spreadsheet_ts, track_index_spreadsheet_ts = self._get_track_index_spreadsheet(
-                self.event, lap_index_spreadsheet_ts, vehicle_velocity_ts, coords
+                self.event, lap_index_spreadsheet_ts, speed_mps_ts, coords
             )
             track_distance_spreadsheet_result = Result.Ok(track_distance_spreadsheet_ts)
             track_index_spreadsheet_result = Result.Ok(track_index_spreadsheet_ts)
         except UnwrappedError as e:
-            self.logger.error(f"Failed to unwrap vehicle velocity result! \n {e}")
+            self.logger.error(f"Failed to unwrap SpeedMPS result! \n {e}")
             lap_index_integrated_speed_result = Result.Err(RuntimeError("Failed to process LapIndexIntegratedSpeed!"))
             lap_index_spreadsheet_result = Result.Err(RuntimeError("Failed to process LapIndexSpreadsheet!"))
             track_distance_spreadsheet_result = Result.Err(RuntimeError("Failed to process TrackDistanceSpreadsheet!"))
@@ -244,7 +244,7 @@ class LocalizationStage(Stage):
             "LapIndexIntegratedSpeed": {
                 "data": lap_index_integrated_speed_result.unwrap() if lap_index_integrated_speed_result else None,
                 "description": f"Estimate of the FSGP lap index in this event as a function of time. "
-                               f"Value is estimated by integrating VehicleVelocity and tiling the result over the FSGP lap "
+                               f"Value is estimated by integrating SpeedMPS and tiling the result over the FSGP lap "
                                f"length of {NCM_LAP_LEN_M} meters."
             },
             "LapIndexSpreadsheet": {
@@ -325,16 +325,16 @@ class LocalizationStage(Stage):
 
 
     @staticmethod
-    def _get_lap_index_integrated_speed(vehicle_velocity_ts: TimeSeries) -> Result[TimeSeries]:
-        integrated_velocity_m = np.cumsum(vehicle_velocity_ts) * vehicle_velocity_ts.period
-        lap_index_integrated_speed = vehicle_velocity_ts.promote(
-            np.array([int(dist_m // NCM_LAP_LEN_M) for dist_m in integrated_velocity_m]))
+    def _get_lap_index_integrated_speed(speed_mps_ts: TimeSeries) -> Result[TimeSeries]:
+        integrated_speed_m = np.cumsum(speed_mps_ts) * speed_mps_ts.period
+        lap_index_integrated_speed = speed_mps_ts.promote(
+            np.array([int(dist_m // NCM_LAP_LEN_M) for dist_m in integrated_speed_m]))
         lap_index_integrated_speed.name = "LapIndexIntegratedSpeed"
         lap_index_integrated_speed.units = "Laps"
         return Result.Ok(lap_index_integrated_speed)
 
     @staticmethod
-    def _get_track_index_spreadsheet(event: Event, lap_index_spreadsheet: TimeSeries, vehicle_velocity_ts: TimeSeries, coords: NDArray):
+    def _get_track_index_spreadsheet(event: Event, lap_index_spreadsheet: TimeSeries, speed_mps_ts: TimeSeries, coords: NDArray):
         if event.name not in fsgp_lap_days.keys():
             return None, None  # result is not defined
 
@@ -351,42 +351,42 @@ class LocalizationStage(Stage):
         # get indices in time for when a new lap begins
         # set nans to -1 so that we have an increase when we begin lap 0
         lap_starts = np.nonzero(np.diff(np.nan_to_num(lap_index_spreadsheet, nan=-1)))[0] + np.array(1)
-        velocity_split = np.split(vehicle_velocity_ts, lap_starts)
-        velocity_by_lap = velocity_split[1:-1] # discard times outside of when we are doing laps
+        speed_split = np.split(speed_mps_ts, lap_starts)
+        speed_by_lap = speed_split[1:-1] # discard times outside of when we are doing laps
 
         track_distance: list[NDArray] = []
         track_indices: list[NDArray] = []
-        for lap_velocity_array in velocity_by_lap:
-            lap_total_distance_m = np.sum(lap_velocity_array) * vehicle_velocity_ts.period
-            track_distance.append(np.cumsum(lap_velocity_array) * vehicle_velocity_ts.period)
+        for lap_speed_array in speed_by_lap:
+            lap_total_distance_m = np.sum(lap_speed_array) * speed_mps_ts.period
+            track_distance.append(np.cumsum(lap_speed_array) * speed_mps_ts.period)
             norm_factor = NCM_LAP_LEN_M / lap_total_distance_m  # normalize such that all laps appear to travel the same distance
-            lap_distance_per_tick = lap_velocity_array * norm_factor * vehicle_velocity_ts.period
+            lap_distance_per_tick = lap_speed_array * norm_factor * speed_mps_ts.period
             track_indices.append(gis.calculate_closest_gis_indices(lap_distance_per_tick))
 
         track_distance_flat = np.concatenate(
-            [np.full_like(velocity_split[0], np.nan)] + track_distance + [np.full_like(velocity_split[-1], np.nan)]
+            [np.full_like(speed_split[0], np.nan)] + track_distance + [np.full_like(speed_split[-1], np.nan)]
         )
-        track_distance_ts = vehicle_velocity_ts.promote(track_distance_flat)
+        track_distance_ts = speed_mps_ts.promote(track_distance_flat)
         track_distance_ts.name = "TrackDistanceSpreadsheet"
         track_distance_ts.units = "m"
 
         track_index_flat = np.concatenate(
-            [np.zeros_like(velocity_split[0])] + track_indices + [np.full_like(velocity_split[-1], np.nan)]
+            [np.zeros_like(speed_split[0])] + track_indices + [np.full_like(speed_split[-1], np.nan)]
         )
-        track_index_ts = vehicle_velocity_ts.promote(track_index_flat)
+        track_index_ts = speed_mps_ts.promote(track_index_flat)
         track_index_ts.name = "TrackIndexSpreadsheet"
         track_index_ts.units = "Track Index"
         return track_distance_ts, track_index_ts
 
     @staticmethod
-    def _get_lap_index_spreadsheet(event: Event, vehicle_velocity_ts: TimeSeries):
+    def _get_lap_index_spreadsheet(event: Event, speed_mps_ts: TimeSeries):
         if event.name not in fsgp_lap_days.keys():
             return None  # result is not defined
 
-        # we don't actually need vehicle_velocity here, but we need the time data & promote method
+        # we don't actually need speed_mps here, but we need the time data & promote method
         # unfortunately the times are off by 7h (vancouver time offset)
         timezone_fix = 60 * 60 * 7
-        unix_times: NDArray[float] = vehicle_velocity_ts.unix_x_axis + timezone_fix
+        unix_times: NDArray[float] = speed_mps_ts.unix_x_axis + timezone_fix
 
         lap_info = FSGPDayLaps(fsgp_lap_days[event.name])
         num_laps = lap_info.get_lap_count()
@@ -401,7 +401,7 @@ class LocalizationStage(Stage):
             else:
                 lap_indices[i] = np.count_nonzero(time > np.array(lap_finishes_unix))
 
-        lap_indices_ts = vehicle_velocity_ts.promote(lap_indices)
+        lap_indices_ts = speed_mps_ts.promote(lap_indices)
         lap_indices_ts.name = "LapIndexSpreadsheet"
         lap_indices_ts.units = "Laps"
         return lap_indices_ts
