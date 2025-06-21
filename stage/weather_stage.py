@@ -194,5 +194,11 @@ class WeatherStage(Stage):
         return tuple([self.get_fileloader(ts_data, solcast_output)
                       for ts_data, solcast_output in zip(query_results, weather_output_order)])
 
+    def skip_stage(self):
+        self.logger.error(f"{self.get_stage_name()} is being skipped!")
+
+        return tuple([self.get_fileloader(None, solcast_output)
+                      for solcast_output in weather_output_order])
+
 
 stage_registry.register_stage(WeatherStage.get_stage_name(), WeatherStage)

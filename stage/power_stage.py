@@ -1,10 +1,8 @@
 from data_tools.schema import FileLoader
 from stage.stage import Stage
 from stage.stage_registry import stage_registry
-from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath
+from data_tools.schema import Result, UnwrappedError, File, FileType, CanonicalPath, Event
 from data_tools.collections import TimeSeries
-from data_tools import Event
-import copy
 from prefect import task
 
 
@@ -49,27 +47,25 @@ class PowerStage(Stage):
         )
 
     @property
-    def event_name(self) -> str:
+    def event_name(self):
         return self._event.name
-
-    @property
-    def event(self) -> Event:
-        """Get a copy of this stage's event"""
-        return copy.deepcopy(self._event)
 
     def __init__(self, event: Event):
         """
-        :param event: the event currently being processed
+        :param Event event: which event is currently being processed
         """
         super().__init__()
+
         self._event = event
 
-    def extract(self,
+    def extract(
+            self,
             total_pack_voltage_loader: FileLoader,
             pack_current_loader: FileLoader,
             motor_voltage_loader: FileLoader,
             motor_current_loader: FileLoader,
-            motor_current_direction_loader: FileLoader) -> tuple[Result, Result, Result, Result, Result]:
+            motor_current_direction_loader: FileLoader
+    ) -> tuple[Result, Result, Result, Result, Result]:
         total_pack_voltage_result: Result = total_pack_voltage_loader()
         pack_current_result: Result = pack_current_loader()
         motor_voltage_result: Result = motor_voltage_loader()
@@ -94,6 +90,7 @@ class PowerStage(Stage):
             # the linear function -2x + 1 maps 1 to -1 and 0 to 1,
             # resulting in a number that represents the sign/direction of the current
             motor_current_sign = motor_current_direction * -2 + 1
+
             motor_current, motor_voltage, motor_current_sign = TimeSeries.align(
                 motor_current, motor_voltage, motor_current_sign
             )
@@ -152,6 +149,36 @@ class PowerStage(Stage):
 
         motor_power_loader = self.context.data_source.store(motor_power_file)
         self.logger.info(f"Successfully loaded MotorPower!")
+
+        return pack_power_loader, motor_power_loader
+
+    def skip_stage(self):
+        self.logger.error(f"{self.get_stage_name()} is being skipped!")
+
+        pack_power_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=PowerStage.get_stage_name(),
+                name="PackPower",
+            ),
+            file_type=FileType.TimeSeries,
+            data=None
+        )
+
+        motor_power_file = File(
+            canonical_path=CanonicalPath(
+                origin=self.context.title,
+                event=self.event_name,
+                source=PowerStage.get_stage_name(),
+                name="MotorPower",
+            ),
+            file_type=FileType.TimeSeries,
+            data=None
+        )
+
+        pack_power_loader = self.context.data_source.store(pack_power_file)
+        motor_power_loader = self.context.data_source.store(motor_power_file)
 
         return pack_power_loader, motor_power_loader
 

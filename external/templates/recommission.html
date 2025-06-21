@@ -10,6 +10,17 @@
     <form action="{{ request.path }}" method="post">
         <label for="git_target">Pipeline Git Target:</label>
         <input type="text" id="git_target" name="git_target" required>
+
+        <div>
+          <input
+            type="checkbox"
+            id="build_local"
+            name="build_local"
+            value="true"
+          >
+          <label for="build_local">Build Local</label>
+        </div>
+
         <button type="submit">Recommission</button>
     </form>
     <a href="{{ request.path.rsplit('/', 1)[0] if '/' in request.path.rsplit('/', 1)[0] else '/' }}">Back</a>

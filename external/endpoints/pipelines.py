@@ -1,21 +1,49 @@
 import prefect.client.schemas.responses
+from prefect.docker import DockerImage
+from pipeline import run_sunbeam
+import prefect.client.schemas.responses
 import logging
-from prefect import flow
 from prefect import exceptions as prefect_exceptions
-from prefect_github import GitHubRepository
 from prefect.client.orchestration import get_client
+import docker
+import datetime
+import sys
 import asyncio
 import re
 
 
 SOURCE_REPO = "https://github.com/UBC-Solar/sunbeam.git"
-
-
 PIPELINE_NAME_PATTERN = r"pipeline-(.+)"
 
 
 logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
 logger = logging.getLogger()
+
+
+def build_run_sunbeam_image(
+    tag: str = "run-sunbeam:latest",
+    dockerfile: str = "compiled.Dockerfile",
+    build_args: dict[str,str] | None = None,
+):
+    """
+    Builds a Docker image from `path` (where your Dockerfile lives),
+    tags it with `tag`, and optionally passes build-args.
+    """
+    client = docker.from_env()
+
+    image, logs = client.images.build(
+        path="/build/",
+        dockerfile=f"{dockerfile}",
+        tag=tag,
+        buildargs=build_args or {},
+        pull=False,       # do not pull base images from remote
+        rm=True,          # remove intermediate containers
+        forcerm=True,     # always remove intermediate containers
+        cache_from=[tag]
+    )
+
+    print(f"Successfully built image: {image.id[:12]}")
+    return image
 
 
 def decommission_pipeline(collection, git_target):
@@ -32,7 +60,7 @@ def decommission_pipeline(collection, git_target):
                 deployment = await prefect_client.read_deployment_by_name(f"run-sunbeam/pipeline-{deployment_name}")
                 assert isinstance(deployment, prefect.client.schemas.responses.DeploymentResponse)
 
-                print(f"Decomissioning {deployment_name}")
+                print(f"Decomissioning {deployment_name}!")
 
                 await prefect_client.delete_deployment(deployment.id)
 
@@ -44,26 +72,34 @@ def decommission_pipeline(collection, git_target):
     return f"Decommissioned {git_target}!", 200
 
 
-def commission_pipeline(git_target):
+def commission_pipeline(git_target, build_local=False):
     commissioned_pipelines = get_deployments()
     if git_target in commissioned_pipelines:
         return f"Pipeline {git_target} already commissioned!", 400
 
-    repo_block = GitHubRepository(
-        repository_url=SOURCE_REPO,
-        reference=git_target
-    )
-    repo_block.save(name=f"source", overwrite=True)
+    dockerfile_name = "local.Dockerfile" if build_local else "compiled.Dockerfile"
 
-    flow.from_source(
-        source=repo_block,
-        entrypoint="pipeline/run.py:run_sunbeam"
-    ).deploy(
+    build_run_sunbeam_image(
+        dockerfile=dockerfile_name,
+        tag=f"run-sunbeam:{git_target}",
+        build_args={"BRANCH": git_target, "CACHE_DATE": datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}
+    )
+
+    run_sunbeam.deploy(
         name=f"pipeline-{git_target}",
-        work_pool_name="default-work-pool",
+        work_pool_name="docker-work-pool",
+        image=DockerImage(
+            name="run-sunbeam",
+            tag=f"{git_target}",
+            dockerfile="compiled.Dockerfile"
+        ),
         parameters={
-            "git_target": git_target
-        }
+            "git_target": git_target,
+            "stages_to_skip": [],
+            "ingress_to_skip": []
+        },
+        push=False,
+        build=False
     )
 
     async def run_deployment_by_name(deployment_name):
