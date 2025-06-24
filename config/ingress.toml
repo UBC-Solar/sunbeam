@@ -184,3 +184,25 @@ bucket = "CAN_prod"
 frequency = 10.0
 units = "km/h"
 description = "Speed of Brightside"
+
+[[target]]
+name = "GPSLatitude"
+field = "GPSLatitude"
+type = "DataFrame"
+measurement = "TEL"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 4.0
+units = "deg"
+description = "Latitude of the car in degrees"
+
+[[target]]
+name = "GPSLongitude"
+field = "GPSLongitude"
+type = "DataFrame"
+measurement = "TEL"
+car = "Brightside"
+bucket = "CAN_log"
+frequency = 4.0
+units = "deg"
+description = "Longitude of the car in degrees"
