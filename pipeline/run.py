@@ -2,12 +2,10 @@ from data_tools import DataSource
 from prefect import flow
 from logs import SunbeamLogger
 from data_source import DataSourceFactory
-from pipeline.configure import build_config, build_stage_graph
-from stage import Context, IngressStage, EnergyStage, PowerStage, WeatherStage, EfficiencyStage
-from stage.weather_stage import weather_output_order
+from pipeline.configure import build_config
 from dotenv import load_dotenv
 from stage import (Context, IngressStage, EnergyStage, PowerStage,
-                   WeatherStage, EfficiencyStage, LocalizationStage)
+                   WeatherStage, EfficiencyStage, LocalizationStage, CleanupStage)
 
 logger = SunbeamLogger("sunbeam")
 
@@ -35,6 +33,13 @@ def run_sunbeam(git_target="pipeline", ingress_to_skip=None, stages_to_skip=None
     # We will process each event separately.
     for event in events:
 
+        cleanup_stage: CleanupStage = CleanupStage(event)
+        speed_mps, = CleanupStage.run(
+            cleanup_stage,
+            ingress_outputs[event.name]["VehicleVelocity"],
+            ingress_outputs[event.name]["MotorRotatingSpeed"],
+        )
+
         power_stage: PowerStage = PowerStage(event)
         pack_power, motor_power = PowerStage.run(
             power_stage,
@@ -61,16 +66,18 @@ def run_sunbeam(git_target="pipeline", ingress_to_skip=None, stages_to_skip=None
         )
 
         localization_stage: LocalizationStage = LocalizationStage(event)
-        (lap_index, track_index, lap_index_integrated_speed,
-         lap_index_spreadsheet, track_distance_spreadsheet, track_index_spreadsheet) = LocalizationStage.run(
+        (lap_index, track_index, lap_index_integrated_speed, lap_index_spreadsheet, track_distance_spreadsheet,
+         track_index_spreadsheet, gps_latitude, gps_longitude, track_index_gps) = LocalizationStage.run(
             localization_stage,
-            ingress_outputs[event.name]["VehicleVelocity"]
+            ingress_outputs[event.name]["GPSLatitude"],
+            ingress_outputs[event.name]["GPSLongitude"],
+            speed_mps,
         )
 
         efficiency_stage: EfficiencyStage = EfficiencyStage(event)
         efficiency_5min, efficiency_1h, efficiency_lap_distance = EfficiencyStage.run(
             efficiency_stage,
-            ingress_outputs[event.name]["VehicleVelocity"],
+            speed_mps,
             motor_power,
             lap_index
         )

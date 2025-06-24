@@ -5,6 +5,7 @@ from stage.stage_registry import stage_registry
 from data_tools.schema import File, Result, FileLoader, FileType, Event, UnwrappedError, CanonicalPath, DataSource
 from data_tools.query.influxdb_query import TimeSeriesTarget
 from data_tools.collections.time_series import TimeSeries
+from pipeline.collect import DataFrameTarget
 from typing import List, Dict, cast
 import traceback
 from prefect import task
@@ -79,7 +80,7 @@ class IngressStage(Stage):
     @task(name="Ingress")
     def run(
             self,
-            targets: List[TimeSeriesTarget],
+            targets: List[TimeSeriesTarget | DataFrameTarget],
             events: List[Event],
             ingress_to_skip: List[str]
     ) -> Dict[str, Dict[str, FileLoader]]:
@@ -138,7 +139,7 @@ class IngressStage(Stage):
 
     def extract(
             self,
-            targets: List[TimeSeriesTarget],
+            targets: List[TimeSeriesTarget | DataFrameTarget],
             events: List[Event],
             ingress_to_skip: List[str]
     ) -> tuple[Dict[str, Dict[str, FileLoader]]]:
@@ -158,7 +159,7 @@ class IngressStage(Stage):
 
     def _extract_transform_load_influxdb(
             self,
-            targets: List[TimeSeriesTarget],
+            targets: List[TimeSeriesTarget | DataFrameTarget],
             events: List[Event],
             ingress_to_skip: List[str]
     ) -> tuple[Dict[str, Dict[str, FileLoader]]]:
@@ -176,13 +177,19 @@ class IngressStage(Stage):
             for target in targets:
                 if target.name not in ingress_to_skip:
                     result_extract = self._fetch_from_influxdb(event, target)
-                    result_transform = self._transform_into_timeseries(result_extract, event.name, target.name)
+                    if isinstance(target, TimeSeriesTarget):
+                        result_transform = self._transform_into_timeseries(result_extract, event.name, target.name)
+                    elif isinstance(target, DataFrameTarget):
+                        result_transform = self._wrap_dataframe(result_extract, event.name, target.name)
+                    else:
+                        self.logger.error(f"Unexpected target type {type(target)}")
+                        result_transform = Result.Err(ValueError(f"Unexpected target type {type(target)}"))
 
                 else:
                     self.logger.error(f"Skipping {target.name}!")
                     result_transform = None
 
-                result_dict[event.name][target.name] = self._load_timeseries(result_transform, event.name, target.name)
+                result_dict[event.name][target.name] = self._load_file(result_transform, event.name, target.name)
 
         return (result_dict, )
 
@@ -205,7 +212,7 @@ class IngressStage(Stage):
 
             for target in targets:
                 result = self._fetch_from_existing(event, target)
-                result_dict[event.name][target.name] = self._load_timeseries(result, event.name, target.name)
+                result_dict[event.name][target.name] = self._load_file(result, event.name, target.name)
 
         return (result_dict, )
 
@@ -228,6 +235,8 @@ class IngressStage(Stage):
 
     def _fetch_from_influxdb(self, event: Event, target: TimeSeriesTarget) -> Result[dict]:
         try:
+            offset = event.attributes.get("time_offset")
+
             queried_data = self._ingress_data_source.get(
                 CanonicalPath(
                     origin=target.bucket,
@@ -236,14 +245,16 @@ class IngressStage(Stage):
                     name=target.field
                 ),
                 start=event.start_as_iso_str,
-                stop=event.stop_as_iso_str
+                stop=event.stop_as_iso_str,
+                offset=offset
             ).unwrap()
 
             result = Result.Ok({
                 "data": queried_data,
                 "units": target.units,
                 "period": 1 / target.frequency,
-                "description": target.description
+                "description": target.description,
+                "field": target.field
             })
 
             self.logger.info(f"Successfully extracted time series data for {target.name} for {event.name}!")
@@ -255,6 +266,34 @@ class IngressStage(Stage):
 
         return result
 
+    def _wrap_dataframe(self, result: Result[dict], event_name: str, name: str) -> Result[File]:
+
+        try:
+            target = result.unwrap()
+            # discard all data except the dataframe itself
+            dataframe = target["data"]
+
+            file = File(
+                canonical_path=CanonicalPath(
+                    origin=self.context.title,
+                    source=self.get_stage_name(),
+                    event=event_name,
+                    name=name
+                ),
+                description=target["description"],
+                file_type=FileType.TimeSeries,
+                data=dataframe
+            )
+
+            dataframe_result = Result.Ok(file)
+            self.logger.info(f"Successfully processed time series data {name}.")
+
+        except UnwrappedError as e:
+            dataframe_result = Result.Err(e)
+            self.logger.error(f"Failed to process time series data {name}: {traceback.format_exc()}")
+
+        return dataframe_result
+
     def _transform_into_timeseries(self, result: Result[dict], event_name: str, name: str) -> Result[File]:
         if result:  # Check if we're going to get an error
             # If not, try to process the data
@@ -263,11 +302,12 @@ class IngressStage(Stage):
                 data = target["data"]
                 units = target["units"]
                 period = target["period"]
+                field = target["field"]
 
                 time_series = TimeSeries.from_query_dataframe(
                     query_df=data,
                     granularity=period,
-                    field=name,
+                    field=field,
                     units=units
                 )
 
@@ -300,7 +340,7 @@ class IngressStage(Stage):
 
         return time_series_result
 
-    def _load_timeseries(self, result: Result[File], event_name: str, name: str) -> FileLoader:
+    def _load_file(self, result: Result[File], event_name: str, name: str) -> FileLoader:
         canonical_path = CanonicalPath(
             origin=self.context.title,
             source=self.get_stage_name(),
