@@ -91,12 +91,8 @@ class ArrayStage(Stage):
             output_current_b = output_current_b_result.unwrap().data
             output_current_c = output_current_c_result.unwrap().data
 
-            self.logger.error(output_voltage_a._start.tzinfo)
-
             output_voltage_a, output_current_a = TimeSeries.align(output_voltage_a, output_current_a)
             array_power_a = output_voltage_a * output_current_a
-
-            self.logger.error(output_voltage_a._start.tzinfo)
 
             output_voltage_b, output_current_b = TimeSeries.align(output_voltage_b, output_current_b)
             array_power_b = output_voltage_b * output_current_b
@@ -110,8 +106,6 @@ class ArrayStage(Stage):
 
             array_power.units = "W"
             array_power.name = "Array Power"
-
-            self.logger.error(array_power._start.tzinfo)
 
             motor_power = Result.Ok(array_power)
 
