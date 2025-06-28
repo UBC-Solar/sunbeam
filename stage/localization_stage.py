@@ -209,7 +209,11 @@ class LocalizationStage(Stage):
             lap_index_result = lap_index_spreadsheet_result
         else:
             lap_index_result = lap_index_integrated_speed_result
-        track_index_result = track_index_spreadsheet_result
+
+        if track_index_gps_result:
+            track_index_result = track_index_gps_result
+        else:
+            track_index_result = track_index_spreadsheet_result
 
         return (lap_index_result,
                 track_index_result,
