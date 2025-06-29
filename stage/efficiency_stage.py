@@ -45,7 +45,7 @@ class EfficiencyStage(Stage):
     @staticmethod
     @task(name="Efficiency")
     def run(self,
-            vehicle_velocity_loader: FileLoader,
+            speed_mps_loader: FileLoader,
             motor_power_loader: FileLoader,
             lap_index_loader: FileLoader) -> tuple[FileLoader, ...]:
         """
@@ -53,12 +53,12 @@ class EfficiencyStage(Stage):
         time slices.
 
         :param self: an instance of EfficiencyStage to be run
-        :param FileLoader vehicle_velocity_loader: loader to VehicleVelocity from Ingress
+        :param FileLoader speed_mps_loader: loader to SpeedMPS from CleanupStage
         :param FileLoader motor_power_loader: loader to Motor Power from PowerStage
         :param FileLoader lap_index_loader: loader to the best available lap index data from LocalizationStage
         :returns: Efficiency5Minute, Efficiency1Hour, EfficiencyLapDistance (FileLoaders pointing to TimeSeries)
         """
-        return super().run(self, vehicle_velocity_loader, motor_power_loader, lap_index_loader)
+        return super().run(self, speed_mps_loader, motor_power_loader, lap_index_loader)
 
     @property
     def event_name(self):
@@ -74,26 +74,26 @@ class EfficiencyStage(Stage):
 
     def extract(
             self,
-            vehicle_velocity_loader: FileLoader,
+            speed_mps_loader: FileLoader,
             motor_power_loader: FileLoader,
             lap_index_loader: FileLoader
     ) -> tuple[Result, Result, Result]:
-        vehicle_velocity_result: Result = vehicle_velocity_loader()
+        speed_mps_result: Result = speed_mps_loader()
         motor_power_result: Result = motor_power_loader()
         lap_index_result: Result = lap_index_loader()
 
-        return vehicle_velocity_result, motor_power_result, lap_index_result
+        return speed_mps_result, motor_power_result, lap_index_result
 
     @staticmethod
     def get_periodic_efficiency(
-            vehicle_velocity_aligned: TimeSeries,
+            speed_mps_aligned: TimeSeries,
             motor_power_aligned: TimeSeries,
             period_seconds: float
     ) -> TimeSeries:
         # (seconds/window) / (seconds/index) == indices/window
-        downsample_factor = int(period_seconds / vehicle_velocity_aligned.period)
-        vehicle_velocity_averaged: np.ndarray = windowed_mean(
-            np.array(vehicle_velocity_aligned),
+        downsample_factor = int(period_seconds / speed_mps_aligned.period)
+        speed_mps_averaged: np.ndarray = windowed_mean(
+            np.array(speed_mps_aligned),
             downsample_factor,
             allow_truncate=True
         )
@@ -104,86 +104,86 @@ class EfficiencyStage(Stage):
             allow_truncate=True
         )
 
-        efficiency_array = motor_power_averaged / vehicle_velocity_averaged  # (J/s) / (m/s) = J/m
+        efficiency_array = motor_power_averaged / speed_mps_averaged  # (J/s) / (m/s) = J/m
 
         # clean bad values by setting them to zero
-        bad_values_mask = EfficiencyStage.get_anomaly_mask(motor_power_averaged, vehicle_velocity_averaged)
+        bad_values_mask = EfficiencyStage.get_anomaly_mask(motor_power_averaged, speed_mps_averaged)
         efficiency_array[bad_values_mask] = np.nan
-        efficiency = vehicle_velocity_aligned.promote(efficiency_array)
+        efficiency = speed_mps_aligned.promote(efficiency_array)
 
         efficiency.meta['period'] = period_seconds  # important: update the period for this TimeSeries
         efficiency.units = "J/m"
         return efficiency
 
     @staticmethod
-    def get_anomaly_mask(motor_power_averaged: np.ndarray, vehicle_velocity_averaged: np.ndarray) -> np.ndarray:
-        bad_values_mask: np.ndarray = ((vehicle_velocity_averaged > MAX_AVG_METERS_PER_SEC)
-                                       | (vehicle_velocity_averaged < MIN_AVG_METERS_PER_SEC)
+    def get_anomaly_mask(motor_power_averaged: np.ndarray, speed_mps_averaged: np.ndarray) -> np.ndarray:
+        bad_values_mask: np.ndarray = ((speed_mps_averaged > MAX_AVG_METERS_PER_SEC)
+                                       | (speed_mps_averaged < MIN_AVG_METERS_PER_SEC)
                                        | (motor_power_averaged < MIN_AVG_WATTS)
                                        | (motor_power_averaged > MAX_AVG_WATTS))
         return bad_values_mask
 
     @staticmethod
-    def get_lap_dist_efficiency(vehicle_velocity_aligned, motor_power_aligned, lap_index_aligned) -> np.ndarray:
+    def get_lap_dist_efficiency(speed_mps_aligned, motor_power_aligned, lap_index_aligned) -> np.ndarray:
         """Produces an array which represents efficiency indexed by lap.
 
         For example, the efficiency of the third lap is given by efficiency_lap_distance[2].
         The lap index is approximate, as it is obtained by tiling arrays over the distance of the track.
 
-        :param TimeSeries vehicle_velocity_aligned: VehicleVelocity, aligned with motor_power_aligned
-        :param TimeSeries motor_power_aligned: MotorPower, aligned with vehicle_velocity_aligned
+        :param TimeSeries speed_mps_aligned: SpeedMPS, aligned with motor_power_aligned
+        :param TimeSeries motor_power_aligned: MotorPower, aligned with speed_mps_aligned
         :param TimeSeries lap_index_aligned: Index of the lap as a function of time.
         :return: efficiency_lap_distance
         """
         lap_index = np.array(lap_index_aligned, dtype=int)
-        vv_aligned_arr = np.array(vehicle_velocity_aligned)
+        vv_aligned_arr = np.array(speed_mps_aligned)
         mp_aligned_arr = np.array(motor_power_aligned)
         efficiency_lap_distance = np.zeros(int(np.max(lap_index) + 1))
 
         # iterate over the time indices, and update efficiency_lap_distance every time we roll into a new lap
         sum_power = 0
-        sum_velocity = 0
+        sum_speed = 0
         num_vals = 0
         prev_lap_idx = 0
         for array_index, lap_idx in enumerate(lap_index):
             if lap_idx > prev_lap_idx:
                 # start of a new lap
 
-                # determine avg power and velocity over the last lap
+                # determine avg power and speed over the last lap
                 avg_power = sum_power / num_vals
-                avg_velocity = sum_velocity / num_vals
+                avg_speed = sum_speed / num_vals
 
                 # set value to:
                 #     np.nan if the speed or power are outside the acceptable range
                 #     otherwise the efficiency for the last lap
-                if ((avg_velocity > MAX_AVG_METERS_PER_SEC) | (avg_velocity < MIN_AVG_METERS_PER_SEC)
+                if ((avg_speed > MAX_AVG_METERS_PER_SEC) | (avg_speed < MIN_AVG_METERS_PER_SEC)
                         | (avg_power < MIN_AVG_WATTS) | (avg_power > MAX_AVG_WATTS)):
                     efficiency_lap_distance[lap_idx] = np.nan  # invalid data
                 else:
-                    efficiency_lap_distance[lap_idx] = avg_power / avg_velocity
+                    efficiency_lap_distance[lap_idx] = avg_power / avg_speed
 
                 # reset the accumulating variables
                 sum_power = 0
-                sum_velocity = 0
+                sum_speed = 0
                 num_vals = 0
                 prev_lap_idx = lap_idx
 
             # accumulate values so that they can be averaged later
             sum_power += mp_aligned_arr[array_index]
-            sum_velocity += vv_aligned_arr[array_index]
+            sum_speed += vv_aligned_arr[array_index]
             num_vals += 1
 
         return np.array(efficiency_lap_distance)
 
-    def transform(self, vehicle_velocity_result, motor_power_result, lap_index_result) -> tuple[Result, Result, Result]:
+    def transform(self, speed_mps_result, motor_power_result, lap_index_result) -> tuple[Result, Result, Result]:
         try:
-            vehicle_velocity_ts: TimeSeries = vehicle_velocity_result.unwrap().data
+            speed_mps_ts: TimeSeries = speed_mps_result.unwrap().data
             motor_power_ts: TimeSeries = motor_power_result.unwrap().data
-            vehicle_velocity_aligned, motor_power_aligned = TimeSeries.align(
-                vehicle_velocity_ts, motor_power_ts)
+            speed_mps_aligned, motor_power_aligned = TimeSeries.align(
+                speed_mps_ts, motor_power_ts)
 
             efficiency_5min: TimeSeries = self.get_periodic_efficiency(
-                vehicle_velocity_aligned,
+                speed_mps_aligned,
                 motor_power_aligned,
                 300
             )
@@ -192,7 +192,7 @@ class EfficiencyStage(Stage):
             efficiency_5min_result = Result.Ok(efficiency_5min)
 
             efficiency_1h: TimeSeries = self.get_periodic_efficiency(
-                vehicle_velocity_aligned,
+                speed_mps_aligned,
                 motor_power_aligned,
                 3600
             )
@@ -202,11 +202,11 @@ class EfficiencyStage(Stage):
 
             try:
                 lap_index = lap_index_result.unwrap().data
-                lap_index_aligned, vehicle_velocity_aligned, motor_power_aligned = TimeSeries.align(
-                    lap_index, vehicle_velocity_ts, motor_power_ts)
+                lap_index_aligned, speed_mps_aligned, motor_power_aligned = TimeSeries.align(
+                    lap_index, speed_mps_ts, motor_power_ts)
 
                 efficiency_lap_distance: np.ndarray = self.get_lap_dist_efficiency(
-                    vehicle_velocity_aligned,
+                    speed_mps_aligned,
                     motor_power_aligned,
                     lap_index_aligned
                 )
@@ -237,8 +237,8 @@ class EfficiencyStage(Stage):
             ),
             file_type=FileType.TimeSeries,
             data=efficiency_5min_result.unwrap() if efficiency_5min_result else None,
-            description="Driving efficiency in J/m, computed as avg_motor_power / avg_vehicle_velocity with values "
-                        "averaged over 5-minute periods. Values are np.nan where mean velocity is outside "
+            description="Driving efficiency in J/m, computed as avg_motor_power / avg_speed_mps with values "
+                        "averaged over 5-minute periods. Values are np.nan where mean speed is outside "
                         "the range [2, 50] m/s or if mean power is outside the range [0, 10] kW."
         )
 
@@ -251,8 +251,8 @@ class EfficiencyStage(Stage):
             ),
             file_type=FileType.TimeSeries,
             data=efficiency_1h_result.unwrap() if efficiency_1h_result else None,
-            description="Driving efficiency in J/m, computed as avg_motor_power / avg_vehicle_velocity with values "
-                        "averaged over 1-hour periods. Values are np.nan where mean velocity is outside "
+            description="Driving efficiency in J/m, computed as avg_motor_power / avg_speed_mps with values "
+                        "averaged over 1-hour periods. Values are np.nan where mean speed is outside "
                         "the range [2, 50] m/s or if mean power is outside the range [0, 10] kW."
         )
 
@@ -265,14 +265,14 @@ class EfficiencyStage(Stage):
             ),
             file_type=FileType.TimeSeries,  # actually an ndarray but this is not yet supported
             data=efficiency_lap_distance_result.unwrap() if efficiency_lap_distance_result else None,
-            description="Driving efficiency in J/m, computed as avg_motor_power / avg_vehicle_velocity with values "
-                        "averaged over each lap. The lap splitting calculation starts by integrating VehicelVelocity to"
+            description="Driving efficiency in J/m, computed as avg_motor_power / avg_speed_mps with values "
+                        "averaged over each lap. The lap splitting calculation starts by integrating SpeedMPS to"
                         " get total distance as a function over time. Then, the values are split into lengths of 5.04km"
-                        " as this is the length of the FSGP track. Then, avg_motor_power & avg_vehicle_velocity are "
-                        " taken over the timespan for each given lap. Since there is some error in VehicleVelocity and "
+                        " as this is the length of the FSGP track. Then, avg_motor_power & avg_speed_mps are "
+                        " taken over the timespan for each given lap. Since there is some error in SpeedMPS and "
                         "not all distance travelled is along the track, this should not be relied upon to exactly align"
                         " with real lap times. However, it is a decent estimate: it predicts 48 laps for FSGP day 1 "
-                        "where the real number was 46. Values are np.nan where mean velocity is outside "
+                        "where the real number was 46. Values are np.nan where mean speed is outside "
                         "the range [2, 50] m/s or if mean power is outside the range [0, 10] kW."
         )
 
