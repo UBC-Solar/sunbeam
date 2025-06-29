@@ -65,6 +65,8 @@ class LocalizationStage(Stage):
             Latitude TimeSeries of the car in degrees, filtered for anomalies.
         8. GPSLongitude
             Latitude TimeSeries of the car in degrees, filtered for anomalies.
+        9. TrackIndexGPS
+            Track index based on nearest filtered GPS coordinates.
 
         :param self: an instance of LocalizationStage to be run
         :param FileLoader gps_latitude_df_loader: loader to GPSLatitude dataframe from Ingress
@@ -207,7 +209,11 @@ class LocalizationStage(Stage):
             lap_index_result = lap_index_spreadsheet_result
         else:
             lap_index_result = lap_index_integrated_speed_result
-        track_index_result = track_index_spreadsheet_result
+
+        if track_index_gps_result:
+            track_index_result = track_index_gps_result
+        else:
+            track_index_result = track_index_spreadsheet_result
 
         return (lap_index_result,
                 track_index_result,
