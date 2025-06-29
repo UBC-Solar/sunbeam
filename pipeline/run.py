@@ -5,7 +5,7 @@ from data_source import DataSourceFactory
 from pipeline.configure import build_config
 from dotenv import load_dotenv
 from stage import (Context, IngressStage, EnergyStage, PowerStage,
-                   WeatherStage, EfficiencyStage, LocalizationStage, CleanupStage)
+                   WeatherStage, EfficiencyStage, LocalizationStage, CleanupStage, ArrayStage)
 
 logger = SunbeamLogger("sunbeam")
 
@@ -48,6 +48,17 @@ def run_sunbeam(git_target="pipeline", ingress_to_skip=None, stages_to_skip=None
             ingress_outputs[event.name]["BatteryVoltage"],
             ingress_outputs[event.name]["BatteryCurrent"],
             ingress_outputs[event.name]["BatteryCurrentDirection"],
+        )
+
+        array_stage: ArrayStage = ArrayStage(event)
+        array_power, = ArrayStage.run(
+            array_stage,
+            ingress_outputs[event.name]["ArrayVoltageStringA"],
+            ingress_outputs[event.name]["ArrayVoltageStringB"],
+            ingress_outputs[event.name]["ArrayVoltageStringC"],
+            ingress_outputs[event.name]["ArrayCurrentStringA"],
+            ingress_outputs[event.name]["ArrayCurrentStringB"],
+            ingress_outputs[event.name]["ArrayCurrentStringC"],
         )
 
         energy_stage: EnergyStage = EnergyStage(event)

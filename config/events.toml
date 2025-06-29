@@ -32,3 +32,9 @@ start = "2025-06-22T07:00:00Z" # True Time: "2025-06-22T00:00:00" PDT
 stop = "2025-07-21T07:00:00Z"  # True Time: "2025-07-21T00:00:00" PDT
 time_offset = 7
 
+[[event]]
+name = "June_23rd_Testing"     # Expected Offset: 07:00 from UTC to True Time (PDT)
+start = "2025-06-22T07:00:00Z" # True Time: "2025-06-22T00:00:00" PDT
+stop = "2025-07-21T07:00:00Z"  # True Time: "2025-07-21T00:00:00" PDT
+time_offset = 7
+

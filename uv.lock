@@ -2204,7 +2204,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.3.3,<9.0" },
     { name = "python-dotenv" },
     { name = "toml", specifier = ">=0.10.2,<1.0" },
-    { name = "ubc-solar-data-tools", specifier = ">=1.9.0,<2.0" },
+    { name = "ubc-solar-data-tools", specifier = ">=1.9.1,<2.0" },
     { name = "ubc-solar-physics", specifier = ">=1.7.10" },
 ]
 provides-extras = ["external", "test"]
@@ -2346,7 +2346,7 @@ wheels = [
 
 [[package]]
 name = "ubc-solar-data-tools"
-version = "1.9.0"
+version = "1.9.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dill" },
@@ -2363,7 +2363,7 @@ dependencies = [
     { name = "solcast" },
     { name = "sqlalchemy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/38/38/f45a6385e9f2e7013887d11cccac91726574ef32f318ba4eceece6579b1f/ubc_solar_data_tools-1.9.0.tar.gz", hash = "sha256:1ecd9fba0f7b4beab464b2121611d9562ff051f1d241201c0fa763ac921222b8", size = 31926, upload-time = "2025-05-24T21:06:41.586Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6b/1c/614e7daf9845006ad056347f534c6cc12f71aaa3ba0ca9116e44e8915a2e/ubc_solar_data_tools-1.9.1.tar.gz", hash = "sha256:ac3fe42888d9dafa0c3204a9e3b3cc5589f78f5bc306933368edab74991412e2", size = 31963, upload-time = "2025-06-25T07:29:26.766Z" }
 
 [[package]]
 name = "ubc-solar-physics"
