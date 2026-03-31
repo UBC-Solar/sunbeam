@@ -1,0 +1,12 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1
+
+COPY . /app
+
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir uv && uv add influxdb-client confluent-kafka && uv lock && uv sync
+
+CMD ["uv", "run", "fast_ingress.py"]

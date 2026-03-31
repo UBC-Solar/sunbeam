@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: redpanda
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp
+      - "1"
+      - --memory
+      - "1G"
+      - --reserve-memory
+      - "0M"
+      - --node-id
+      - "0"
+      - --check=false
+      - --kafka-addr
+      - internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr
+      - internal://redpanda:9092,external://localhost:19092
+    ports:
+      - "19092:19092"
+      - "9644:9644"
+    restart: unless-stopped
+
+  influx-publisher:
+    build:
+      context: .
+      dockerfile: Dockerfile.kafka_publisher
+    container_name: influx-publisher
+    depends_on:
+      - redpanda
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: "redpanda:9092"
+      KAFKA_TOPIC: "telemetry.latest"
+      POLL_INTERVAL_SECONDS: "0.05"
+      LOOKBACK: "30s"
+
+      # pass through anything your existing InfluxDBClient expects
+      INFLUX_URL: "${INFLUX_URL}"
+      INFLUX_TOKEN: "${INFLUX_TOKEN}"
+      INFLUX_ORG: "${INFLUX_ORG}"
+      INFLUX_BUCKET: "${INFLUX_BUCKET}"
+      INFLUX_MEASUREMENT: "${INFLUX_MEASUREMENT}"
+      INFLUX_CAR: "${INFLUX_CAR}"
+    restart: unless-stopped

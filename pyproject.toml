@@ -7,7 +7,7 @@ name = "sunbeam"
 version = "0.1.0"
 description = "UBC Solar's data pipeline: logic, distribution, storage, and infrastructure"
 readme = "README.md"
-requires-python = ">=3.12,<4.0"
+requires-python = ">=3.12,<3.14"
 authors = [
   { name = "UBC Solar Strategy", email = "strategy@ubcsolar.com" }
 ]
@@ -24,10 +24,11 @@ dependencies = [
   "python-dotenv",
   "docker>=7.1.0",
   "pymongo>=4.8.0,<5.0",
-  "ubc-solar-data-tools>=1.9.1,<2.0",
   "dill>=0.3.9,<1.0",
   "networkx>=3.4.2,<4.0",
-  "ubc-solar-physics>=1.7.10"
+  "ubc-solar-physics>=1.9.1",
+  "ubc-solar-data-tools",
+  "confluent-kafka>=2.13.2",
 ]
 
 [project.optional-dependencies]
@@ -41,3 +42,11 @@ test = [
 
 [tool.setuptools]
 packages = []
+
+[tool.uv.sources]
+ubc-solar-data-tools = { path = "../data_tools" }
+
+[tool.uv.workspace]
+members = [
+    "client",
+]
