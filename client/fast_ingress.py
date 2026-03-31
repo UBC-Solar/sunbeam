@@ -48,9 +48,9 @@ class FastLastValueReader:
             "PackCurrent",
             "VehicleVelocity",
             "AcceleratorPosition",
-            # "MechBrakePressed",
-            # "BatteryCurrent",
-            # "BatteryVoltage",
+            "MechBrakePressed",
+            "BatteryCurrent",
+            "BatteryVoltage",
         )
 
     @staticmethod

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from statistics import quantiles
 from confluent_kafka import Consumer
 
-BOOTSTRAP_SERVERS = "localhost:19092"
+BOOTSTRAP_SERVERS = "100.120.36.75:19092"
 TOPIC = "telemetry.latest"
 
 def parse_time(ts: str) -> datetime:
@@ -49,6 +49,10 @@ consumer = Consumer({
     "group.id": "manual-latest-reader",
     "auto.offset.reset": "latest",
     "enable.auto.commit": False,
+    # "fetch.wait.max.ms": 5,
+    # "fetch.min.bytes": 1,
+    # "fetch.queue.backoff.ms": 1,
+    # "queued.min.messages": 1000,
 })
 
 consumer.subscribe([TOPIC])
@@ -69,15 +73,14 @@ try:
         if msg is not None and not msg.error():
             latest_payload = json.loads(msg.value().decode("utf-8"))
 
-            # 🔥 compute latency
-            try:
-                produced_at = parse_time(latest_payload["produced_at"])
-                now = datetime.now(timezone.utc)
-                latency_ms = (now - produced_at).total_seconds() * 1000.0
+            ts_type, ts_ms = msg.timestamp()
+            if ts_ms is not None and ts_ms >= 0:
+                produced_at = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
+                received_at = datetime.now(timezone.utc)
+                latency_ms = (received_at - produced_at).total_seconds() * 1000.0
 
                 latencies_ms.append(latency_ms)
-
-            except Exception:
+            else:
                 latency_ms = None
         else:
             latency_ms = None
