@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any
 
 from influxdb_client import InfluxDBClient
@@ -53,6 +53,10 @@ class FastLastValueReader:
             "BatteryVoltage",
         )
 
+        self.start_time = datetime.now(timezone.utc)
+        self.query_start_time = datetime(2024, 7, 16, 10, 00, tzinfo=timezone.utc)
+
+
     @staticmethod
     def _flux_time(dt: datetime) -> str:
         if dt.tzinfo is None:
@@ -61,33 +65,29 @@ class FastLastValueReader:
 
     def _build_query(self, stop_time: datetime, lookback: str) -> str:
         stop_flux = self._flux_time(stop_time)
+        start_time = self._flux_time(stop_time - timedelta(seconds=1))
 
         field_filter = " or ".join(
             f'r["_field"] == "{field}"' for field in self.fields
         )
 
-
-        # Important:
-        # - One query
-        # - Narrow range if possible
-        # - last() on the server
-        #
-        # If you truly need "last value before T no matter how old",
-        # use range(start: 0, stop: T) instead of -lookback.
         return f'''
-from(bucket: "{self.bucket}")
-  |> range(start: 0, stop: {stop_flux})
-  |> filter(fn: (r) => {field_filter})
-  |> last()
-  |> keep(columns: ["_field", "_value", "_time"])
-'''.strip()
+                    from(bucket: "{self.bucket}")
+                      |> range(start: {start_time}, stop: {stop_flux})
+                      |> filter(fn: (r) => {field_filter})
+                      |> last()
+                      |> keep(columns: ["_field", "_value", "_time"])
+                    '''.strip()
 
     def get_last_values_before(
             self,
-            timestamp: datetime,
             *,
             lookback: str = "5m",
     ) -> dict[str, dict[str, Any] | None]:
+
+        now = datetime.now(timezone.utc)
+        time_elapsed = now - self.start_time
+        timestamp = self.query_start_time + time_elapsed
 
         query = self._build_query(timestamp, lookback)
 
@@ -123,144 +123,40 @@ from(bucket: "{self.bucket}")
     def close(self) -> None:
         self.client.close()
 
-class InfluxKafkaPublisher:
-    def __init__(self) -> None:
-        self.lookback = os.getenv("LOOKBACK", "30s")
-        self.topic = os.getenv("KAFKA_TOPIC", "telemetry.latest")
-        self.bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:19092")
-        self.poll_interval = float(os.getenv("POLL_INTERVAL_SECONDS", "0.05"))
 
-        self.reader = FastLastValueReader()
+if __name__ == "__main__":
+    from datetime import datetime, timezone
+    import sys
+    import time
 
-        self.admin = AdminClient(
-            {"bootstrap.servers": self.bootstrap_servers}
-        )
-        self.producer = Producer(
-            {
-                "bootstrap.servers": self.bootstrap_servers,
-                "client.id": "influx-publisher",
-                "acks": "1",
-                "linger.ms": 0,
-            }
-        )
+    reader = FastLastValueReader()
 
-        self.start_time = datetime.now(timezone.utc)
-        self.query_start_time = datetime(2024, 7, 16, 10, 00, tzinfo=timezone.utc)
-
-    def wait_for_kafka(self, timeout_s: float = 60.0) -> None:
-        deadline = time.time() + timeout_s
-        last_err: Exception | None = None
-
-        while time.time() < deadline:
-            try:
-                self.admin.list_topics(timeout=2)
-                return
-            except Exception as e:
-                last_err = e
-                time.sleep(1.0)
-
-        raise RuntimeError(f"Kafka did not become ready: {last_err}")
-
-    def ensure_topic(self) -> None:
-        try:
-            futures = self.admin.create_topics(
-                [NewTopic(self.topic, num_partitions=1, replication_factor=1)]
-            )
-            futures[self.topic].result(timeout=10)
-        except Exception as e:
-            # fine if topic already exists
-            if "TOPIC_ALREADY_EXISTS" not in str(e):
-                try:
-                    md = self.admin.list_topics(timeout=5)
-                    if self.topic in md.topics:
-                        return
-                except Exception:
-                    pass
-                raise
-
-    def publish_once(self) -> dict[str, Any]:
-        now = datetime.now(timezone.utc)
-        time_elapsed = now - self.start_time
-        query_time = self.query_start_time + time_elapsed
-
-        t0 = time.perf_counter()
-        values = self.reader.get_last_values_before(query_time, lookback=self.lookback)
-        influx_query_ms = (time.perf_counter() - t0) * 1000.0
-
-        now = datetime.now(timezone.utc)
-        payload = {
-            "produced_at": now,
-            "influx_query_ms": influx_query_ms,
-            "values": values,
-        }
-
-        self.producer.produce(
-            self.topic,
-            key=b"snapshot",
-            value=json.dumps(payload, default=json_default).encode("utf-8"),
-        )
-        self.producer.poll(0)
-
-        return payload
-
-    def run(self) -> None:
-        self.wait_for_kafka()
-        self.ensure_topic()
-
+    try:
         while True:
             loop_start = time.perf_counter()
 
-            try:
-                self.publish_once()
-            except Exception as e:
-                print(f"publish error: {e}", flush=True)
+            values = reader.get_last_values_before(lookback="30s")
 
+            total_time_ms = (time.perf_counter() - loop_start) * 1000
+
+            # Clear screen and move cursor to top
+            sys.stdout.write("\033[H\033[J")
+
+            print("=== Live Telemetry (Last Values) ===")
+            print(f"Query time: {total_time_ms:.2f} ms\n")
+
+            for field, data in values.items():
+                if data is None:
+                    print(f"{field}: None")
+                else:
+                    print(f"{field}: {data['value']} @ {data['time']}")
+
+            sys.stdout.flush()
+
+            # Maintain ~0.05s loop
             elapsed = time.perf_counter() - loop_start
-            time.sleep(max(0.0, self.poll_interval - elapsed))
+            time.sleep(max(0, 0.05 - elapsed))
 
-
-if __name__ == "__main__":
-    InfluxKafkaPublisher().run()
-
-# if __name__ == "__main__":
-#     from datetime import datetime, timezone
-#     import sys
-#     import time
-#
-#     reader = FastLastValueReader()
-#
-#     start_time = datetime.now(timezone.utc)
-#     query_start_time = datetime(2024, 7, 16, 10, 00, tzinfo=timezone.utc)
-#
-#     try:
-#         while True:
-#             loop_start = time.perf_counter()
-#
-#             now = datetime.now(timezone.utc)
-#             time_elapsed = now - start_time
-#             query_time = query_start_time + time_elapsed
-#             values = reader.get_last_values_before(query_time, lookback="30s")
-#
-#             total_time_ms = (time.perf_counter() - loop_start) * 1000
-#
-#             # Clear screen and move cursor to top
-#             sys.stdout.write("\033[H\033[J")
-#
-#             print("=== Live Telemetry (Last Values) ===")
-#             print(f"Query time: {total_time_ms:.2f} ms\n")
-#
-#             for field, data in values.items():
-#                 if data is None:
-#                     print(f"{field}: None")
-#                 else:
-#                     print(f"{field}: {data['value']} @ {data['time']}")
-#
-#             sys.stdout.flush()
-#
-#             # Maintain ~0.05s loop
-#             elapsed = time.perf_counter() - loop_start
-#             time.sleep(max(0, 0.05 - elapsed))
-#
-#     except KeyboardInterrupt:
-#         reader.close()
-#         print("\nStopped.")
+    except KeyboardInterrupt:
+        reader.close()
+        print("\nStopped.")
