@@ -14,6 +14,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    UniqueConstraint
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -45,18 +46,25 @@ class Event(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False)  # planned, active, complete
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     vehicle: Mapped["Vehicle"] = relationship(back_populates="events")
+    signals: Mapped[list["Signal"]] = relationship(back_populates="event")
 
 
 class Signal(Base):
     __tablename__ = "signal"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
     unit: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     source: Mapped[str] = mapped_column(String(32), nullable=False)  # raw, derived
-    nominal_rate_hz: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    frequency: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("event.id"), nullable=False)
 
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    event: Mapped["Event"] = relationship(back_populates="signals")
+
+    __table_args__ = (
+        UniqueConstraint("event_id", "name", name="uq_signal_event_name"),
+    )
 
 
 class RawSample(Base):

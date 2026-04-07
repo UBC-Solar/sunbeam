@@ -55,26 +55,8 @@ def create_schema() -> None:
         conn.execute(
             text(
                 """
-                CREATE INDEX IF NOT EXISTS raw_sample_event_signal_ts_idx
-                ON raw_sample (event_id, signal_id, ts DESC);
-                """
-            )
-        )
-
-        conn.execute(
-            text(
-                """
-                CREATE INDEX IF NOT EXISTS raw_sample_event_ts_idx
-                ON raw_sample (event_id, ts DESC);
-                """
-            )
-        )
-
-        conn.execute(
-            text(
-                """
-                CREATE INDEX IF NOT EXISTS aligned_sample_event_signal_rate_ts_idx
-                ON aligned_sample (event_id, signal_id, rate_hz, ts DESC);
+                CREATE INDEX IF NOT EXISTS aligned_sample_event_signal_ts_idx
+                ON aligned_sample (event_id, signal_id, ts DESC);
                 """
             )
         )

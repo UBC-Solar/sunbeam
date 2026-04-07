@@ -3,10 +3,41 @@ from __future__ import annotations
 import os
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, event
 from sqlalchemy.orm import Session
 
 from models import Event, Signal, Vehicle
+
+
+def get_or_create_event(
+    session: Session,
+    *,
+    name: str,
+    vehicle_id: int,
+    starts_at: datetime,
+    ends_at: datetime | None,
+    status: str,
+    description: str | None = None,
+) -> Event:
+    stmt = select(Event).where(Event.name == name)
+    event = session.execute(stmt).scalar_one_or_none()
+    if event is not None:
+        return event
+
+    event = Event(
+        name=name,
+        vehicle_id=vehicle_id,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        status=status,
+        description=description,
+    )
+    session.add(event)
+    session.flush()
+    return event
+
+from data_tools.localization import CanonicalName, LanguageLocalization
+
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -38,48 +69,37 @@ def get_or_create_vehicle(
     return vehicle
 
 
-def get_or_create_event(
-    session: Session,
-    *,
-    name: str,
-    vehicle_id: int,
-    starts_at: datetime,
-    ends_at: datetime | None,
-    status: str,
-    description: str | None = None,
-) -> Event:
-    stmt = select(Event).where(Event.name == name)
-    event = session.execute(stmt).scalar_one_or_none()
-    if event is not None:
-        return event
+def collect_signal_metadata_for_event(event: Event) -> list[dict]:
+    start_time = event.starts_at
+    signals = []
+    for name in CanonicalName:
+        try:
+            field, board, units, frequency = LanguageLocalization.localize(name, start_time.date())
+            signals.append(
+                {
+                    "name": str(name),
+                    "unit": units,
+                    "frequency": frequency,
+                    "source": "ingress",
+                    "event_id": event.id
+                }
+            )
+        except ValueError:
+            continue
 
-    event = Event(
-        name=name,
-        vehicle_id=vehicle_id,
-        starts_at=starts_at,
-        ends_at=ends_at,
-        status=status,
-        description=description,
-    )
-    session.add(event)
-    session.flush()
-    return event
-
+    return signals
 
 def get_or_create_signal(
     session: Session,
     *,
     name: str,
+    event_id: int,
     unit: str | None,
-    value_type: str,
-    source_kind: str,
-    nominal_rate_hz: float | None,
-    alignment_method: str | None,
-    max_age_ms: int | None,
-    persist_aligned: bool,
+    source: str = None,
+    frequency: float | None,
     description: str | None = None,
 ) -> Signal:
-    stmt = select(Signal).where(Signal.name == name)
+    stmt = select(Signal).where(Signal.name == name, Signal.event_id == event_id)
     signal = session.execute(stmt).scalar_one_or_none()
     if signal is not None:
         return signal
@@ -87,13 +107,10 @@ def get_or_create_signal(
     signal = Signal(
         name=name,
         unit=unit,
-        value_type=value_type,
-        source_kind=source_kind,
-        nominal_rate_hz=nominal_rate_hz,
-        alignment_method=alignment_method,
-        max_age_ms=max_age_ms,
-        persist_aligned=persist_aligned,
+        frequency=frequency,
         description=description,
+        event_id=event_id,
+        source=source
     )
     session.add(signal)
     session.flush()
@@ -118,66 +135,10 @@ def main() -> None:
             starts_at=now,
             ends_at=None,
             status="active",
-            description="Example active event for local development",
+            description="Example active event for local development"
         )
 
-        signals = [
-            {
-                "name": "MotorCurrent",
-                "unit": "A",
-                "value_type": "float8",
-                "source_kind": "raw",
-                "nominal_rate_hz": 10.0,
-                "alignment_method": "zoh",
-                "max_age_ms": 100,
-                "persist_aligned": True,
-                "description": "Motor DC current",
-            },
-            {
-                "name": "VehicleSpeed",
-                "unit": "m/s",
-                "value_type": "float8",
-                "source_kind": "raw",
-                "nominal_rate_hz": 10.0,
-                "alignment_method": "zoh",
-                "max_age_ms": 500,
-                "persist_aligned": True,
-                "description": "Vehicle speed",
-            },
-            {
-                "name": "PackVoltage",
-                "unit": "V",
-                "value_type": "float8",
-                "source_kind": "raw",
-                "nominal_rate_hz": 10.0,
-                "alignment_method": "zoh",
-                "max_age_ms": 500,
-                "persist_aligned": True,
-                "description": "Battery pack voltage",
-            },
-            {
-                "name": "MotorPower",
-                "unit": "W",
-                "value_type": "float8",
-                "source_kind": "derived",
-                "nominal_rate_hz": 10.0,
-                "alignment_method": "zoh",
-                "max_age_ms": 100,
-                "persist_aligned": True,
-                "description": "Derived motor electrical power",
-            },
-            {
-                "name": "MotorEfficiency",
-                "unit": "1",
-                "value_type": "float8",
-                "source_kind": "derived",
-                "nominal_rate_hz": 10.0,
-                "alignment_method": "zoh",
-                "max_age_ms": 500,
-                "persist_aligned": True,
-                "description": "Derived motor efficiency",
-            },
-        ]
+        signals = collect_signal_metadata_for_event(event)
 
         created_signals: list[Signal] = []
         for signal_data in signals:
@@ -197,8 +158,7 @@ def main() -> None:
             print(
                 f"  id={signal.id}, "
                 f"name={signal.name}, "
-                f"source_kind={signal.source_kind}, "
-                f"nominal_rate_hz={signal.nominal_rate_hz}"
+                f"frequency={signal.frequency}"
             )
 
 

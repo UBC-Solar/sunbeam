@@ -20,7 +20,7 @@ class DebugTimeProvider:
     Assistant class to debug real-time ingress by producing a now() function which does not return the current time
     but pretending to return the current time in the past by computing the time since the class instantiation.
 
-    Concretely, if the class is instantiated with start time ``t0`` and the class is instantiated at time ``t1``,
+    Concretely, if the class is instantiated at time ``t1``  and provided the start time ``t0``,
 
         DebugTimeProvider.now() => t0 + (system.now() - t1)
 
