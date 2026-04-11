@@ -5,12 +5,6 @@ from typing import Any, Protocol
 from typing import Iterable
 
 
-def json_default(obj: Any) -> Any:
-    if isinstance(obj, datetime):
-        return obj.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
-
-
 class TimeProvider(Protocol):
     def now(self, tz: timezone) -> datetime: ...
 
@@ -124,7 +118,7 @@ class RealtimeIngress:
                 _field = record.get_field()
                 if _field in _out:
                     _out[_field] = {
-                        "time": record.get_time() - self._timezone_fix,
+                        "time": record.get_time() + self._timezone_fix,
                         "value": record.get_value(),
                     }
 
@@ -133,9 +127,7 @@ class RealtimeIngress:
 
         return _out
 
-    def get_last_values(
-            self
-    ) -> dict[str, dict[str, Any] | None]:
+    def get_last_values(self) -> dict[str, dict[str, Any] | None]:
         query = self._build_last_value_query(self.now())
         out = self._process_query(query)
         return out
