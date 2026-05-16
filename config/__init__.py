@@ -1,26 +1,17 @@
-import pathlib
-
-from .models import (
-    DataSourceConfig,
-    FSDataSourceConfig,
-    MongoDBDataSourceConfig,
-    InfluxDBDataSourceConfig,
-    SunbeamConfig,
-    DataSourceConfigFactory,
-    SunbeamSourceConfig
-)
+from pathlib import Path
 
 
-config_directory = pathlib.Path(__file__).parent
+EVENTS_PATH = Path(__file__).parent / "events.toml"
+VEHICLES_PATH = Path(__file__).parent / "vehicles.toml"
 
+from .vehicles import VehicleManager
+from .events import EventManager
+from .signals import SignalManager
 
 __all__ = [
-    "DataSourceConfig",
-    "FSDataSourceConfig",
-    "MongoDBDataSourceConfig",
-    "InfluxDBDataSourceConfig",
-    "SunbeamConfig",
-    "DataSourceConfigFactory",
-    "config_directory",
-    "SunbeamSourceConfig"
+    "EVENTS_PATH",
+    "VEHICLES_PATH",
+    "VehicleManager",
+    "EventManager",
+    "SignalManager",
 ]

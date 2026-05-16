@@ -1,52 +1,18 @@
-[build-system]
-requires = ["setuptools<75", "setuptools-scm<8.2.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
-name = "sunbeam"
+name = "client"
 version = "0.1.0"
-description = "UBC Solar's data pipeline: logic, distribution, storage, and infrastructure"
+description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12,<3.14"
-authors = [
-  { name = "UBC Solar Strategy", email = "strategy@ubcsolar.com" }
-]
-keywords = ["data", "pipeline", "UBC", "solar"]
-classifiers = [
-  "Programming Language :: Python :: 3",
-  "Topic :: Scientific/Engineering :: Data Processing"
-]
+requires-python = ">=3.12, <3.14"
 dependencies = [
-  "toml>=0.10.2,<1.0",
-  "prefect==3.4.4",
-  "prefect-docker==0.6.6",
-  "prefect-github==0.3.1",
-  "python-dotenv",
-  "docker>=7.1.0",
-  "pymongo>=4.8.0,<5.0",
-  "dill>=0.3.9,<1.0",
-  "networkx>=3.4.2,<4.0",
-  "ubc-solar-physics>=1.9.1",
-  "ubc-solar-data-tools",
-  "confluent-kafka>=2.13.2",
+    "confluent-kafka>=2.13.2",
+    "influxdb-client>=1.50.0",
+    "networkx>=3.6.1",
+    "psycopg>=3.3.3",
+    "psycopg-binary>3.1",
+    "sqlalchemy>2",
+    "ubc-solar-data-tools",
 ]
-
-[project.optional-dependencies]
-external = [
-  "flask[async]>=3.0.3,<4.0",
-  "bokeh>=3.6.2,<4.0"
-]
-test = [
-  "pytest>=8.3.3,<9.0"
-]
-
-[tool.setuptools]
-packages = []
 
 [tool.uv.sources]
 ubc-solar-data-tools = { path = "../data_tools" }
-
-[tool.uv.workspace]
-members = [
-    "client",
-]
