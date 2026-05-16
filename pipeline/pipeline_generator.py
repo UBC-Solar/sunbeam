@@ -108,8 +108,8 @@ def describe_subgraphs(g: nx.DiGraph) -> list[dict]:
 
 class PipelineGenerator:
     @staticmethod
-    def collect_signals_for_ingress(nodes: list[Node]) -> list[str]:
-        unprovided_inputs: set[str] = set()
+    def collect_signals_for_ingress(nodes: list[Node]) -> list[CanonicalName]:
+        unprovided_inputs: set[CanonicalName] = set()
 
         # Get every node input
         for node in nodes:
@@ -128,20 +128,20 @@ class PipelineGenerator:
         return list(unprovided_inputs)
 
     @staticmethod
-    def bin_signals_by_frequency(signals: list[str], event_date: date) -> dict[float, list[str]]:
-        signal_bins: dict[float, list[str]] = {}
+    def bin_signals_by_frequency(signals: list[CanonicalName], event_date: date) -> dict[float, list[CanonicalName]]:
+        signal_bins: dict[float, list[CanonicalName]] = {}
         for signal in signals:
             _, _, _, frequency = InfluxDBLanguageLocalization.localize(signal, event_date)
 
             if frequency not in signal_bins:
-                signal_bins[frequency] = [signal]
-            else:
-                signal_bins[frequency].append(signal)
+                signal_bins[frequency] = []
+
+            signal_bins[frequency].append(signal)
 
         return signal_bins
 
     @staticmethod
-    def generate_ingress_for_nodes(signal_bins: dict[float, list[str]], debug: bool = False, debug_time: datetime = None) -> list[Node]:
+    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], debug: bool = False, debug_time: datetime = None) -> list[Node]:
         ingress_nodes: list[Node] = []
         for frequency, signals in signal_bins.items():
             if debug:

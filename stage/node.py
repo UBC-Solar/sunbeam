@@ -1,12 +1,15 @@
 from typing import ClassVar
 from abc import ABC, abstractmethod
+
+from data_tools.localization import CanonicalName
+
 from state.frame import Frame, FrameView
 
 
 class Node(ABC):
     node_name: ClassVar[str]
-    inputs: ClassVar[list[str]]
-    outputs: ClassVar[list[str]]
+    inputs: ClassVar[list[CanonicalName]]
+    outputs: ClassVar[list[CanonicalName]]
     rate: ClassVar[float]
 
     def __init_subclass__(cls) -> None:

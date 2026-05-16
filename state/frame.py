@@ -1,19 +1,20 @@
+from data_tools.localization import CanonicalName
 from datetime import datetime
 
 
 class FrameView:
-    def __init__(self, timestamp: datetime, values: dict[str, float] = None):
+    def __init__(self, timestamp: datetime, values: dict[CanonicalName, float] = None):
         self._values = {} if not values else values
         self.timestamp = timestamp
 
-    def read(self, signal: str) -> float:
+    def read(self, signal: CanonicalName) -> float:
         return float(self._values[signal])
 
     def __repr__(self):
         return f"Frame({self.timestamp}) with {len(self._values)} values"
 
     def __str__(self):
-        internal_str = [f"{signal}: {float(value):.1f} \n" for signal, value in self._values.items()]
+        internal_str = [f"{str(signal)}: {float(value):.1f} \n" for signal, value in self._values.items()]
         return f"-- {self.timestamp} -- \n{"".join(internal_str)}"
 
     def __iter__(self):
@@ -21,7 +22,7 @@ class FrameView:
 
 
 class Frame(FrameView):
-    def write(self, signal: str, value: float) -> None:
+    def write(self, signal: CanonicalName, value: float) -> None:
         self._values[signal] = value
 
     def as_view(self) -> FrameView:
