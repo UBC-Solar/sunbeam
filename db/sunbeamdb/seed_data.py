@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from db.models import Event, Signal, Vehicle, EventStatus
+from db.sunbeamdb.models import Event, Signal, Vehicle, EventStatus
 from data_tools.localization import CanonicalName, SunbeamDBLanguageLocalization
 
 
@@ -17,7 +17,6 @@ def get_or_create_event(
     vehicle_id: int,
     starts_at: datetime,
     ends_at: datetime | None,
-    status: EventStatus,
     description: str | None = None,
 ) -> Event:
     stmt = select(Event).where(Event.name == name)
@@ -134,7 +133,6 @@ def main() -> None:
             vehicle_id=vehicle.id,
             starts_at=now,
             ends_at=None,
-            status=EventStatus.ONGOING,
             description="Example active event for local development"
         )
 

@@ -1,6 +1,6 @@
 from sqlalchemy import select, Engine
 from sqlalchemy.orm import Session
-from db.models import Event, EventStatus, Signal, AlignedSample
+from db.sunbeamdb.models import Event, EventStatus, Signal, AlignedSample
 from state.frame import FrameView
 
 

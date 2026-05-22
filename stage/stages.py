@@ -1,4 +1,4 @@
-from client.realtime_ingress import RealtimeIngress, TimeProvider
+from db.telemetrydb.realtime_ingress import RealtimeIngress, TimeProvider
 from data_tools.localization import InfluxDBLanguageLocalization, CanonicalName
 from state.frame import Frame, FrameView
 from datetime import timezone

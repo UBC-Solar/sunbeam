@@ -1,7 +1,7 @@
 from sqlalchemy import select, Engine
 from sqlalchemy.orm import Session
-from db.models import Event, Signal
-from db.seed_data import collect_signal_metadata_for_event, get_or_create_signal
+from db.sunbeamdb.models import Event, Signal
+from db.sunbeamdb.seed_data import collect_signal_metadata_for_event, get_or_create_signal
 
 
 class SignalManager:

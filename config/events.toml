@@ -12,4 +12,3 @@ vehicle = "Brightside"
 description = "Ongoing"
 stages = ["Power", "Efficiency"]
 starts_at = "2024-07-16T04:00:00Z"
-

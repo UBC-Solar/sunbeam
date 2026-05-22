@@ -1,12 +1,12 @@
-from db.models import Event, Vehicle, EventStatus
-from db.seed_data import get_or_create_event
+from db.sunbeamdb.models import Event, Vehicle, EventStatus
+from db.sunbeamdb.seed_data import get_or_create_event
 from config import EVENTS_PATH
 
 
 from sqlalchemy import select, Engine
 from sqlalchemy.orm import Session
 import tomllib
-from datetime import datetime, date
+from datetime import datetime
 
 
 class EventManager:
@@ -36,7 +36,6 @@ class EventManager:
                     vehicle_id=vehicle.id,
                     starts_at=raw_event["starts_at"],
                     ends_at=raw_event.get("ends_at"),
-                    status=EventStatus.UNPROCESSED,
                     description=raw_event["description"]
                 )
 

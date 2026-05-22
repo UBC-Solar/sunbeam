@@ -1,23 +1,20 @@
-import os
+import tomllib
 from datetime import datetime, timezone
 
 from sqlalchemy import create_engine
+
+import config
+from config.context import Context, ServiceType
 from db import create_schema
 from config import VehicleManager, EventManager, SignalManager
 from pipeline import Executor
 
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg://telemetry:telemetry@localhost:5432/telemetry",
-)
-
-
 class Sunbeam:
-    def __init__(self, sunbeamdb_url: str = None):
-        self.sunbeamdb_url = sunbeamdb_url if sunbeamdb_url else DATABASE_URL
+    def __init__(self):
+        database_url = Context().sunbeam_db.build_url()
 
-        self._engine = create_engine(DATABASE_URL, echo=False)
+        self._engine = create_engine(database_url, echo=False)
         create_schema(self._engine)
         print("SunbeamDB initialized.")
 
@@ -45,7 +42,10 @@ class Sunbeam:
         executor.run()
 
 if __name__ == "__main__":
-    sunbeam = Sunbeam()
+    with open(config.CONTEXT_PATH, "rb") as f:
+        config_dict = tomllib.load(f)
+        Context.from_config(config_dict, ServiceType.Client)
 
+    sunbeam = Sunbeam()
     sunbeam.start()
     sunbeam.run("realtime", reprocess=True, debug=True, debug_time=datetime(2024, 7, 16, 14, 10, tzinfo=timezone.utc))

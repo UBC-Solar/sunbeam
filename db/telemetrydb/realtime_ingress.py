@@ -18,7 +18,7 @@ class DebugTimeProvider:
 
         DebugTimeProvider.now() => t0 + (system.now() - t1)
 
-    where system.now() is the genuine, real time.
+    where system.now() is the genuine, real time. Note that `system.now() - t1` computes the time since instantiation.
 
     Basically, the class pretends that it was instantiated at ``start_time`` and counts from then to give
     the "current" time.

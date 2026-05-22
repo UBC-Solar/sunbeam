@@ -1,6 +1,6 @@
 from config import VEHICLES_PATH
-from db.models import Vehicle
-from db.seed_data import get_or_create_vehicle
+from db.sunbeamdb.models import Vehicle
+from db.sunbeamdb.seed_data import get_or_create_vehicle
 from sqlalchemy.orm import Session
 from sqlalchemy import Engine
 import tomllib

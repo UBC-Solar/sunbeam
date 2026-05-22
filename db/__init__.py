@@ -1,2 +1,2 @@
-from .seed_data import get_or_create_vehicle, get_or_create_event, get_or_create_signal, collect_signal_metadata_for_event
-from .init_db import create_schema
+from db.sunbeamdb.seed_data import get_or_create_vehicle, get_or_create_event, get_or_create_signal, collect_signal_metadata_for_event
+from db.sunbeamdb.init_db import create_schema

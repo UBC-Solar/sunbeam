@@ -1,6 +1,4 @@
-import time
-
-from db.writer import EventWriter
+from db.sunbeamdb.writer import EventWriter
 from sqlalchemy import Engine
 
 from pipeline.pipeline_generator import PipelineGenerator

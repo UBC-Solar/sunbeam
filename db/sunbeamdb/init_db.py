@@ -1,5 +1,5 @@
 from sqlalchemy import create_engine, text
-from db.models import Base
+from db.sunbeamdb.models import Base
 
 
 def create_schema(engine) -> None:
