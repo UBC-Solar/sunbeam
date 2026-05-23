@@ -6,8 +6,8 @@ from data_tools.localization import CanonicalName
 from state.frame import Frame, FrameView
 
 
-class Node(ABC):
-    node_name: ClassVar[str]
+class Stage(ABC):
+    stage_name: ClassVar[str]
     inputs: ClassVar[list[CanonicalName]]
     outputs: ClassVar[list[CanonicalName]]
     rate: ClassVar[float]
@@ -15,8 +15,8 @@ class Node(ABC):
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
 
-        if "node_name" not in cls.__dict__:
-            raise TypeError(f"{cls.__name__} must override 'node_name'")
+        if "stage_name" not in cls.__dict__:
+            raise TypeError(f"{cls.__name__} must override 'stage_name'")
 
         if "inputs" not in cls.__dict__:
             raise TypeError(f"{cls.__name__} must override 'inputs'")

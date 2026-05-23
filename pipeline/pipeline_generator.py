@@ -1,30 +1,29 @@
 from db.telemetrydb.realtime_ingress import DebugTimeProvider
-from stage.node import Node
+from stage.stage import Stage
 import networkx as nx
 from pipeline.pipeline import Pipeline
-from stage.stages import Ingress
 from data_tools.localization import InfluxDBLanguageLocalization, CanonicalName
 from datetime import date, datetime
 
 
-def build_node_graph(nodes: list[Node]) -> nx.DiGraph:
+def build_node_graph(nodes: list[Stage]) -> nx.DiGraph:
     producer_of: dict[str, str] = {}
     for node in nodes:
         for out in node.outputs:
             if out in producer_of:
                 raise ValueError(f"Signal {out!r} is produced by multiple nodes.")
-            producer_of[out] = node.node_name
+            producer_of[out] = node.stage_name
 
     g = nx.DiGraph()
 
     for node in nodes:
-        g.add_node(node.node_name, node=node)
+        g.add_node(node.stage_name, node=node)
 
     for node in nodes:
         for inp in node.inputs:
             src = producer_of.get(inp)
             if src is not None:
-                g.add_edge(src, node.node_name, signal=inp)
+                g.add_edge(src, node.stage_name, signal=inp)
 
     if not nx.is_directed_acyclic_graph(g):
         raise ValueError("Node graph is not a DAG")
@@ -108,7 +107,7 @@ def describe_subgraphs(g: nx.DiGraph) -> list[dict]:
 
 class PipelineGenerator:
     @staticmethod
-    def collect_signals_for_ingress(nodes: list[Node]) -> list[CanonicalName]:
+    def collect_signals_for_ingress(nodes: list[Stage]) -> list[CanonicalName]:
         unprovided_inputs: set[CanonicalName] = set()
 
         # Get every node input
@@ -141,8 +140,10 @@ class PipelineGenerator:
         return signal_bins
 
     @staticmethod
-    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], debug: bool = False, debug_time: datetime = None) -> list[Node]:
-        ingress_nodes: list[Node] = []
+    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, debug: bool = False, debug_time: datetime = None) -> list[Stage]:
+        ingress_node = stage_library.get_stage_by_name("Ingress")
+
+        ingress_nodes: list[Stage] = []
         for frequency, signals in signal_bins.items():
             if debug:
                 time_provider = DebugTimeProvider(start_time=debug_time)
@@ -150,7 +151,7 @@ class PipelineGenerator:
                 time_provider = datetime
 
             ingress_nodes.append(
-                Ingress(
+                ingress_node(
                     frequency=frequency,
                     output_signals=signals,
                     time_provider=time_provider
@@ -160,10 +161,10 @@ class PipelineGenerator:
         return ingress_nodes
 
     @staticmethod
-    def generate_pipeline_from_nodes(nodes: list[Node], event_date: date, debug: bool = False, debug_time: datetime = None) -> list[Pipeline]:
+    def generate_pipeline_from_nodes(nodes: list[Stage], event_date: date, stage_library, debug: bool = False, debug_time: datetime = None) -> list[Pipeline]:
         ingress_signals = PipelineGenerator.collect_signals_for_ingress(nodes)
         signal_bins = PipelineGenerator.bin_signals_by_frequency(ingress_signals, event_date)
-        ingress_nodes = PipelineGenerator.generate_ingress_for_nodes(signal_bins, debug=debug, debug_time=debug_time)
+        ingress_nodes = PipelineGenerator.generate_ingress_for_nodes(signal_bins, debug=debug, debug_time=debug_time, stage_library=stage_library)
 
         all_nodes = [*ingress_nodes, *nodes]
 

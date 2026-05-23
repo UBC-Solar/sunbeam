@@ -49,6 +49,7 @@ class Event(Base):
 
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    pipeline_edition: Mapped[str] = mapped_column(String(32), nullable=False)
 
     status: Mapped[EventStatus] = mapped_column(Enum(EventStatus), nullable=False)  # planned, active, complete
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

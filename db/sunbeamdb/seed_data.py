@@ -16,6 +16,7 @@ def get_or_create_event(
     name: str,
     vehicle_id: int,
     starts_at: datetime,
+    pipeline_edition: str,
     ends_at: datetime | None,
     description: str | None = None,
 ) -> Event:
@@ -31,6 +32,7 @@ def get_or_create_event(
         ends_at=ends_at,
         status=EventStatus.UNPROCESSED,
         description=description,
+        pipeline_edition=pipeline_edition,
     )
     session.add(event)
     session.flush()
@@ -133,7 +135,8 @@ def main() -> None:
             vehicle_id=vehicle.id,
             starts_at=now,
             ends_at=None,
-            description="Example active event for local development"
+            description="Example active event for local development",
+            pipeline_edition="v3_0",
         )
 
         signals = collect_signal_metadata_for_event(event)

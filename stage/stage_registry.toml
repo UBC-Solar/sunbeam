@@ -1,0 +1,14 @@
+[v3_0]
+name = "Brightside 2024"
+
+[v3_0.Ingress]
+module = "stage.v3_0.ingress"
+class = "Ingress"
+
+[v3_0.Power]
+module = "stage.v3_0.power"
+class = "Power"
+
+[v3_0.Efficiency]
+module = "stage.v3_0.efficiency"
+class = "Efficiency"

@@ -36,7 +36,8 @@ class EventManager:
                     vehicle_id=vehicle.id,
                     starts_at=raw_event["starts_at"],
                     ends_at=raw_event.get("ends_at"),
-                    description=raw_event["description"]
+                    description=raw_event["description"],
+                    pipeline_edition=raw_event["pipeline_edition"]
                 )
 
                 self._events[event.name] = event
@@ -52,5 +53,12 @@ class EventManager:
         for event in self._raw_events:
             if event["name"] == event_name:
                 return datetime.fromisoformat(event["starts_at"])
+
+        raise ValueError(f"Event {event_name} not found!")
+
+    def get_event_pipeline_edition(self, event_name) -> str:
+        for event in self._raw_events:
+            if event["name"] == event_name:
+                return event["pipeline_edition"]
 
         raise ValueError(f"Event {event_name} not found!")

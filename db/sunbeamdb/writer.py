@@ -43,7 +43,6 @@ class EventWriter:
                 i += 1
 
             session.commit()
-            print(f"Wrote {i} samples to {self._event_name}")
 
     def __del__(self):
         self.close()

@@ -1,5 +1,5 @@
 [project]
-name = "client"
+name = "sunbeam"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -16,12 +16,15 @@ broker = [
 ]
 executor = [
     "networkx>=3.6.1",
+    "psycopg>=3.3.4",
     "psycopg-binary>=3.3.4",
+    "rich>=15.0.0",
     "sqlalchemy>=2.0.49",
     "ubc-solar-data-tools",
 ]
-v3 = [
+v3_0 = [
     "influxdb-client>=1.50.0",
+    "psycopg>=3.3.4",
 ]
 
 [tool.uv.sources]
