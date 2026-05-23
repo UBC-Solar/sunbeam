@@ -37,6 +37,9 @@ class SunbeamBroker:
     broker_url: str
     broker_port: int
 
+    def build_url(self) -> str:
+        return f"tcp://{self.broker_url}:{self.broker_port}"
+
 
 class ServiceType(StrEnum):
     Client = "client"
@@ -76,12 +79,9 @@ class Context:
             **service_config_dict["telemetrydb"][configuration_type]
         )
 
-        if service != ServiceType.Broker:
-            ctx._sunbeam_broker = SunbeamBroker(
-                **service_config_dict["sunbeam-broker"][configuration_type]
-            )
-        else:
-            ctx._sunbeam_broker = None
+        ctx._sunbeam_broker = SunbeamBroker(
+            **service_config_dict["sunbeam-broker"][configuration_type]
+        )
 
         return ctx
 

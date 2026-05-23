@@ -1,9 +1,7 @@
-version: "3.9"
-
 services:
   db:
     image: timescale/timescaledb:2.14.2-pg16
-    container_name: telemetry-db
+    container_name: sunbeam-db
     restart: unless-stopped
     environment:
       POSTGRES_DB: telemetry
@@ -18,6 +16,18 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  broker:
+    container_name: sunbeam-broker
+    environment:
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      - db
+    build:
+      context: .
+      dockerfile: docker/broker.Dockerfile
+    ports:
+      - "5555:5555"
 
 
 volumes:

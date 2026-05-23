@@ -9,6 +9,14 @@ broker_port = 5555
 broker_url = "localhost"
 broker_port = 5555
 
+[broker.sunbeam-broker.debug]
+broker_url = "*"
+broker_port = 5555
+
+[broker.sunbeam-broker.production]
+broker_url = "*"
+broker_port = 5555
+
 [client.sunbeamdb.debug]
 database_host_ip = "localhost"
 database_port = 5432
@@ -39,14 +47,30 @@ token = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5Lg
 debug = true
 debug_time = "2024-07-16T14:10:00Z"
 
-[server.sunbeamdb.debug]
+[broker.telemetrydb.debug]
+database_url = "http://influxdb.telemetry.ubcsolar.com"
+bucket = "CAN_log"
+organization = "8a0b66d77a331e96"
+token = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA=="
+debug = true
+debug_time = "2024-07-16T14:10:00Z"
+
+[broker.telemetrydb.production]
+database_url = "localhost"
+bucket = "CAN_prod"
+organization = "8a0b66d77a331e96"
+token = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA=="
+debug = true
+debug_time = "2024-07-16T14:10:00Z"
+
+[broker.sunbeamdb.debug]
 database_host_ip = "localhost"
 database_port = 5432
 database_name = "telemetry"
 database_username = "telemetry"
 database_password = "telemetry"
 
-[server.sunbeamdb.production]
+[broker.sunbeamdb.production]
 database_host_ip = "localhost"
 database_port = 5432
 database_name = "telemetry"
