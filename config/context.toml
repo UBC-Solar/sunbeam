@@ -48,11 +48,11 @@ debug = true
 debug_time = "2024-07-16T14:10:00Z"
 
 [broker.telemetrydb.debug]
-database_url = "http://influxdb.telemetry.ubcsolar.com"
-bucket = "CAN_log"
-organization = "8a0b66d77a331e96"
-token = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA=="
-debug = true
+database_url = "100.101.183.2:8086"
+bucket = "CAN_prod"
+organization = "c1ba037e7cf72585"
+token = "9JFrHB-H4VNQucMLNPuGypDiuCuyQDyoRYQEok_2yPy0TqeRsiIGewOxul0-JD5zNI-mIdtq7l4ar5kvkotvxQ=="
+debug = false
 debug_time = "2024-07-16T14:10:00Z"
 
 [broker.telemetrydb.production]

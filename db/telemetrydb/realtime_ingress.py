@@ -48,10 +48,10 @@ class RealtimeIngress:
 
     def __init__(
             self,
-            bucket: str = "CAN_log",
-            organization: str = "8a0b66d77a331e96",
-            url: str = "http://influxdb.telemetry.ubcsolar.com",
-            token: str = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==",
+            bucket: str = "CAN_prod",
+            organization: str = "c1ba037e7cf72585",
+            url: str = "100.101.183.2:8086",
+            token: str = "9JFrHB-H4VNQucMLNPuGypDiuCuyQDyoRYQEok_2yPy0TqeRsiIGewOxul0-JD5zNI-mIdtq7l4ar5kvkotvxQ==",
             timeout_s: float = 1.0,
             fields: Iterable[str] = None,
             time_provider: TimeProvider = datetime
@@ -90,15 +90,20 @@ class RealtimeIngress:
         stop_flux = self._flux_time(stop_time - self._timezone_fix)
         start_time = self._flux_time(stop_time - self._timezone_fix - timedelta(seconds=10))
 
-        field_filter = self._get_fields_filter()
+        stop_flux = self._flux_time(stop_time)
+        start_time = self._flux_time(stop_time - timedelta(seconds=10))
 
-        return f'''
+        # print(f"Start: {start_time}  Stop: {stop_flux}")
+        field_filter = self._get_fields_filter()
+        query = f'''
                     from(bucket: "{self._bucket}")
                       |> range(start: {start_time}, stop: {stop_flux})
-                      |> filter(fn: (r) => {field_filter})
+                      |> filter(fn: (r) => r["_field"] == "MDITimeSinceBootUp")
                       |> last()
                       |> keep(columns: ["_field", "_value", "_time"])
                     '''.strip()
+        # print(query)
+        return query
 
     def _process_query(self, query: str):
         _out: dict[str, dict[str, Any] | None] = {
