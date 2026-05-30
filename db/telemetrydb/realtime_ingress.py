@@ -49,9 +49,9 @@ class RealtimeIngress:
     def __init__(
             self,
             bucket: str = "CAN_prod",
-            organization: str = "c1ba037e7cf72585",
-            url: str = "100.101.183.2:8086",
-            token: str = "9JFrHB-H4VNQucMLNPuGypDiuCuyQDyoRYQEok_2yPy0TqeRsiIGewOxul0-JD5zNI-mIdtq7l4ar5kvkotvxQ==",
+            organization: str = "fc4fd11e148ae3ef",
+            url: str = "100.116.114.63:8086",
+            token: str = "L2rLgq5NWlYbIuObNYDmfg0Q5Y1OOq39oBoq2_-tkItrdkaUnxH_3c-4PcOWDfKbYj51sqGO20hJj4hF-hhSzQ==",
             timeout_s: float = 1.0,
             fields: Iterable[str] = None,
             time_provider: TimeProvider = datetime
