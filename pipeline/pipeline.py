@@ -1,5 +1,4 @@
-from dataclasses import dataclass, field
-from collections import defaultdict
+from pipeline.timing import StageTimingStats
 from state.frame import FrameView
 from state.state import State
 from stage.stage import Stage
@@ -7,22 +6,6 @@ from typing import Iterator
 import networkx as nx
 import datetime
 import time
-
-@dataclass
-class StageTimingStats:
-    total_ns: dict[str, int] = field(default_factory=lambda: defaultdict(int))
-    calls: dict[str, int] = field(default_factory=lambda: defaultdict(int))
-    max_ns: dict[str, int] = field(default_factory=lambda: defaultdict(int))
-
-    def record(self, stage_name: str, elapsed_ns: int) -> None:
-        self.total_ns[stage_name] += elapsed_ns
-        self.calls[stage_name] += 1
-        self.max_ns[stage_name] = max(self.max_ns[stage_name], elapsed_ns)
-
-    def reset(self) -> None:
-        self.total_ns.clear()
-        self.calls.clear()
-        self.max_ns.clear()
 
 
 class Pipeline:

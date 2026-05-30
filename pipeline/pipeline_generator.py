@@ -161,19 +161,24 @@ class PipelineGenerator:
         return ingress_nodes
 
     @staticmethod
-    def generate_pipeline_from_nodes(nodes: list[Stage], event_date: date, stage_library, debug: bool = False, debug_time: datetime = None) -> list[Pipeline]:
-        ingress_signals = PipelineGenerator.collect_signals_for_ingress(nodes)
-        signal_bins = PipelineGenerator.bin_signals_by_frequency(ingress_signals, event_date)
-        ingress_nodes = PipelineGenerator.generate_ingress_for_nodes(signal_bins, debug=debug, debug_time=debug_time, stage_library=stage_library)
-
-        all_nodes = [*ingress_nodes, *nodes]
-
-        graph = build_node_graph(all_nodes)
+    def build_pipeline_from_nodes(nodes: list[Stage]) -> list[Pipeline]:
+        graph = build_node_graph(nodes)
         subgraphs = same_rate_components(graph)
 
         pipelines = [Pipeline(subgraph, frequency) for (subgraph, frequency) in subgraphs]
 
         return pipelines
+
+    @staticmethod
+    def generate_pipeline_from_nodes(nodes: list[Stage], event_date: date, stage_library, debug: bool = False, debug_time: datetime = None) -> tuple[list[Pipeline], list[Pipeline]]:
+        ingress_signals = PipelineGenerator.collect_signals_for_ingress(nodes)
+        signal_bins = PipelineGenerator.bin_signals_by_frequency(ingress_signals, event_date)
+        ingress_nodes = PipelineGenerator.generate_ingress_for_nodes(signal_bins, debug=debug, debug_time=debug_time, stage_library=stage_library)
+
+        ingress_pipeline = PipelineGenerator.build_pipeline_from_nodes(ingress_nodes)
+        pipelines = PipelineGenerator.build_pipeline_from_nodes(nodes)
+
+        return pipelines, ingress_pipeline
 
     def from_event(self):
         pass
