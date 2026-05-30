@@ -121,11 +121,11 @@ class RealtimeIngress:
                     continue
 
                 _field = record.get_field()
-                if _field in _out:
-                    _out[_field] = {
-                        "time": record.get_time() + self._timezone_fix,
-                        "value": record.get_value(),
-                    }
+                # if _field in _out:
+                _out["MotorRotatingSpeed"] = {
+                    "time": record.get_time() + self._timezone_fix,
+                    "value": record.get_value(),
+                }
 
         except Exception:
             return _out
