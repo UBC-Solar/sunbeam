@@ -9,7 +9,7 @@ from stage.stage import Stage
 class Ingress(Stage):
     inputs: ClassVar[list[str]] = []
 
-    def __init__(self, output_signals: list[str], frequency: float, time_provider: TimeProvider) -> None:
+    def __init__(self, output_signals: list[str], frequency: float, time_provider: TimeProvider, bucket: str = None, organization: str = None, token: str = None, url: str = None) -> None:
         super().__init__()
         self._output_signals = output_signals
         self._frequency = frequency
@@ -21,7 +21,14 @@ class Ingress(Stage):
             self._localized_output_signals.append(field)
             self._localized_signal_to_signal[field] = signal
 
-        self._ingress = RealtimeIngress(fields=self._localized_output_signals, time_provider=time_provider)
+        self._ingress = RealtimeIngress(
+            fields=self._localized_output_signals,
+            time_provider=time_provider,
+            bucket=bucket,
+            organization=organization,
+            url=url,
+            token=token
+        )
 
 
     @property

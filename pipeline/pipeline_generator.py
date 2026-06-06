@@ -1,3 +1,4 @@
+from config.context import Context, TelemetryDB
 from db.telemetrydb.realtime_ingress import DebugTimeProvider
 from stage.stage import Stage
 import networkx as nx
@@ -143,6 +144,8 @@ class PipelineGenerator:
     def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, debug: bool = False, debug_time: datetime = None) -> list[Stage]:
         ingress_node = stage_library.get_stage_by_name("Ingress")
 
+        telemetry_db: TelemetryDB = Context().telemetry_db
+
         ingress_nodes: list[Stage] = []
         for frequency, signals in signal_bins.items():
             if debug:
@@ -154,7 +157,11 @@ class PipelineGenerator:
                 ingress_node(
                     frequency=frequency,
                     output_signals=signals,
-                    time_provider=time_provider
+                    time_provider=time_provider,
+                    bucket=telemetry_db.bucket,
+                    organization=telemetry_db.organization,
+                    url=telemetry_db.database_url,
+                    token=telemetry_db.token
                 )
             )
 
