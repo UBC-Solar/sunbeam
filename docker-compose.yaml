@@ -1,0 +1,34 @@
+services:
+  db:
+    image: timescale/timescaledb:2.14.2-pg16
+    container_name: sunbeam-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: telemetry
+      POSTGRES_USER: telemetry
+      POSTGRES_PASSWORD: telemetry
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgresql:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U telemetry -d telemetry"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  broker:
+    container_name: sunbeam-broker
+    environment:
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      - db
+    build:
+      context: .
+      dockerfile: docker/broker.Dockerfile
+    ports:
+      - "5555:5555"
+
+
+volumes:
+  telemetry_db_data:
