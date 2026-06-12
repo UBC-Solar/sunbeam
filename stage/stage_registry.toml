@@ -16,3 +16,7 @@ class = "Efficiency"
 [v3_0.MotorSpeed]
 module = "stage.v3_0.motor_speed"
 class = "MotorSpeed"
+
+[v3_0.Array]
+module = "stage.v3_0.motor_speed"
+class = "Array"
