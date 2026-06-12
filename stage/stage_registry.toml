@@ -18,5 +18,5 @@ module = "stage.v3_0.motor_speed"
 class = "MotorSpeed"
 
 [v3_0.Array]
-module = "stage.v3_0.motor_speed"
+module = "stage.v3_0.array"
 class = "Array"
