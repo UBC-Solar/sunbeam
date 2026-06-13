@@ -14,7 +14,7 @@ class Array(Stage):
         CanonicalName.MPPTInputCurrentC,
     ]
     outputs: ClassVar[list[str]] = [CanonicalName.ArrayPower]
-    frequency: ClassVar[float] = 5
+    frequency: ClassVar[float] = 4
 
     def run(self, input_frame: FrameView) -> Frame:
         new_frame = Frame.from_view(input_frame)
@@ -23,11 +23,9 @@ class Array(Stage):
         i_a = input_frame.read(CanonicalName.MPPTInputCurrentA)
         v_b = input_frame.read(CanonicalName.MPPTInputVoltageB)
         i_b = input_frame.read(CanonicalName.MPPTInputCurrentB)
-        v_c = input_frame.read(CanonicalName.MPPTInputVoltageC)
-        i_c = input_frame.read(CanonicalName.MPPTInputCurrentC)
 
-        array_power = (v_a * i_a) + (v_b * i_b) + (v_c * i_c)
-
+        array_power = (v_a * i_a) + (v_b * i_b)
+                                                   
         new_frame.write(CanonicalName.ArrayPower, array_power)
 
         return new_frame
