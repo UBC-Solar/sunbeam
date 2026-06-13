@@ -10,8 +10,6 @@ class Array(Stage):
         CanonicalName.MPPTInputCurrentA,
         CanonicalName.MPPTInputVoltageB,
         CanonicalName.MPPTInputCurrentB,
-        CanonicalName.MPPTInputVoltageC,
-        CanonicalName.MPPTInputCurrentC,
     ]
     outputs: ClassVar[list[str]] = [CanonicalName.ArrayPower]
     frequency: ClassVar[float] = 4
