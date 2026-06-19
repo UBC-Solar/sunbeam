@@ -22,7 +22,7 @@ class MotorPower(Stage):
         # resulting in a number that represents the sign/direction of the current
         motor_current_sign = motor_current_direction * -2 + 1
 
-        motor_power = motor_voltage * motor_current * motor_current_direction
+        motor_power = motor_voltage * motor_current * motor_current_sign
         new_frame.write(CanonicalName.MotorPower, motor_power)
 
         return new_frame
