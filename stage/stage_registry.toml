@@ -5,10 +5,6 @@ name = "Brightside 2024"
 module = "stage.v3_0.ingress"
 class = "Ingress"
 
-[v3_0.Power]
-module = "stage.v3_0.power"
-class = "Power"
-
 [v3_0.Efficiency]
 module = "stage.v3_0.efficiency"
 class = "Efficiency"
@@ -20,3 +16,11 @@ class = "MotorSpeed"
 [v3_0.Array]
 module = "stage.v3_0.array"
 class = "Array"
+
+[v3_0.MotorPower]
+module = "stage.v3_0.motor_power"
+class = "MotorPower"
+
+[v3_0.PackPower]
+module = "stage.v3_0.pack_power"
+class = "PackPower"
