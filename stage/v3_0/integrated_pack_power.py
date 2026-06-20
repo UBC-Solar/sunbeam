@@ -19,7 +19,7 @@ class IntegratedPackPower(Stage):
         seconds_per_hour = 3600
 
         if self.last_timestamp is None:
-            dt = 1.0 / self.frequency
+            dt = 1.0 / self.frequency # for the first tick, estimate the period as we don't have two timestamps yet
         else:
             dt = (input_frame.timestamp - self.last_timestamp).total_seconds()
 
