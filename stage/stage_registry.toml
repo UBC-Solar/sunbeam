@@ -24,3 +24,7 @@ class = "MotorPower"
 [v3_0.PackPower]
 module = "stage.v3_0.pack_power"
 class = "PackPower"
+
+[v3_0.IntegratedPackPower]
+module = "stage.v3_0.integrated_pack_power"
+class = "IntegratedPackPower"
