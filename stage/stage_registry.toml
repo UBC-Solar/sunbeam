@@ -28,3 +28,11 @@ class = "PackPower"
 [v3_0.IntegratedPackPower]
 module = "stage.v3_0.integrated_pack_power"
 class = "IntegratedPackPower"
+
+[v3_0.EnergyVOLExtrapolated]
+module = "stage.v3_0.energy_vol_extrapolated"
+class = "EnergyVOLExtrapolated"
+
+[v3_0.EnergyFromIntegratedPower]
+module = "stage.v3_0.energy_from_integrated_power"
+class = "EnergyFromIntegratedPower"
