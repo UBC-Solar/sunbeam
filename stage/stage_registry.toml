@@ -36,3 +36,7 @@ class = "EnergyVOLExtrapolated"
 [v3_0.EnergyFromIntegratedPower]
 module = "stage.v3_0.energy_from_integrated_power"
 class = "EnergyFromIntegratedPower"
+
+[v3_0.LatitudeLongitude]
+module = "stage.v3_0.latitude_longitude"
+class = "LatitudeLongitude"
