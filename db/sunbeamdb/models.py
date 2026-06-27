@@ -3,7 +3,6 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 from typing import Optional
-
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -19,7 +18,8 @@ from sqlalchemy import (
     Enum
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-
+from sqlalchemy.dialects.postgresql import UUID
+import uuid
 
 class Base(DeclarativeBase):
     pass
@@ -115,3 +115,63 @@ class AlignedSample(Base):
             name="pk_aligned_sample",
         ),
     )
+
+class WorkerStatus(enum.Enum):
+
+    REQUESTED = "requested"
+
+    STARTING = "starting"
+
+    RUNNING = "running"
+
+    STOP_REQUESTED = "stop_requested"
+
+    STOPPING = "stopping"
+
+    COMPLETED = "completed"
+
+    FAILED = "failed"
+
+    LOST = "lost"
+
+    CANCELLED = "cancelled"
+
+class WorkerRun(Base):
+
+    __tablename__ = "worker_run"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    event_id: Mapped[int] = mapped_column(
+        ForeignKey("event.id"),
+        nullable=False,
+    )
+
+    pipeline_edition: Mapped[str] = mapped_column(String(32), nullable=False)
+    image_tag: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[WorkerStatus] = mapped_column(
+        Enum(WorkerStatus),
+        nullable=False,
+        default=WorkerStatus.REQUESTED,
+    )
+
+    host: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    container_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    container_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    current_stage: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    status_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    stop_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_heartbeat_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    stopped_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    event: Mapped["Event"] = relationship()

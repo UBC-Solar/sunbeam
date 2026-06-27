@@ -64,7 +64,7 @@ debug = true
 debug_time = "2024-07-16T14:10:00Z"
 
 [broker.sunbeamdb.debug]
-database_host_ip = "localhost"
+database_host_ip = "db"
 database_port = 5432
 database_name = "telemetry"
 database_username = "telemetry"

@@ -1,5 +1,7 @@
 services:
   db:
+    networks:
+      - sunbeam-net
     image: timescale/timescaledb:2.14.2-pg16
     container_name: sunbeam-db
     restart: unless-stopped
@@ -17,18 +19,43 @@ services:
       timeout: 5s
       retries: 10
 
-  broker:
-    container_name: sunbeam-broker
+  orchestrator:
+    networks:
+      - sunbeam-net
+    container_name: sunbeam-orchestrator
     environment:
       PYTHONUNBUFFERED: "1"
+      SUNBEAM_DATABASE_URL: postgresql+psycopg://telemetry:telemetry@db:5432/telemetry
+      SUNBEAM_WORKER_NETWORK: sunbeam-net
+      SUNBEAM_WORKER_SERVER_URL: http://orchestrator:8000
+      SUNBEAM_WORKER_DB_URL: postgresql+psycopg://telemetry:telemetry@db:5432/telemetry
     depends_on:
       - db
     build:
       context: .
-      dockerfile: docker/broker.Dockerfile
+      dockerfile: orchestration/Dockerfile
     ports:
-      - "5555:5555"
+      - "8000:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
+  dashboard:
+    networks:
+      - sunbeam-net
+    container_name: sunbeam-dashboard
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    depends_on:
+      - orchestrator
 
 volumes:
   telemetry_db_data:
+
+networks:
+  sunbeam-net:
+    name: sunbeam-net
