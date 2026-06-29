@@ -25,6 +25,7 @@ executor = [
 v3_0 = [
     "influxdb-client>=1.50.0",
     "psycopg>=3.3.4",
+    "pytest>=9.1.1",
 ]
 
 [tool.uv.sources]
