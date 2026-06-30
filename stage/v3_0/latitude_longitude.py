@@ -12,8 +12,8 @@ COORDINATES_DIR = Path(__file__).parent.parent / "localization"
 
 class LatitudeLongitude(Stage):
     stage_name: ClassVar[str] = "LatitudeLongitude"
-    inputs: ClassVar[list[str]] = [CanonicalName.GPSLatitude, CanonicalName.GPSLongitude]
-    outputs: ClassVar[list[str]] = [CanonicalName.Latitude, CanonicalName.Longitude]
+    inputs: ClassVar[list[str]] = [CanonicalName.LatitudeRaw, CanonicalName.LongitudeRaw]
+    outputs: ClassVar[list[str]] = [CanonicalName.LatitudeFiltered, CanonicalName.LongitudeFiltered]
     frequency: ClassVar[float] = 3
 
     def __init__(self, event_name: str | None = None):
@@ -43,14 +43,14 @@ class LatitudeLongitude(Stage):
 
     def run(self, input_frame: FrameView) -> Frame:
         new_frame = Frame.from_view(input_frame)
-        latitude = input_frame.read(CanonicalName.GPSLatitude)
-        longitude = input_frame.read(CanonicalName.GPSLongitude)
+        latitude = input_frame.read(CanonicalName.LatitudeRaw)
+        longitude = input_frame.read(CanonicalName.LongitudeRaw)
 
         #TODO: are longitude and latitude still flipped?
 
         if self.in_bounds(latitude, longitude):
-            new_frame.write(CanonicalName.Latitude, latitude)
-            new_frame.write(CanonicalName.Longitude, longitude)
+            new_frame.write(CanonicalName.LatitudeFiltered, latitude)
+            new_frame.write(CanonicalName.LongitudeFiltered, longitude)
 
         return new_frame # if empty frame. accounted for?
 
