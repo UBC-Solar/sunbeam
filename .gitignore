@@ -15,3 +15,6 @@ db/pg_data
 
 # to help with development
 /sunbeam_old
+
+# tests
+.coverage
