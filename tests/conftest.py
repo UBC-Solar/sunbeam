@@ -55,4 +55,4 @@ def energy_vol_extrapolated_stage():
 @pytest.fixture
 def latitude_longitude_stage():
     from stage.v3_0.latitude_longitude import LatitudeLongitude
-    return LatitudeLongitude()
+    return LatitudeLongitude() # no arguments passed means no event name
