@@ -91,30 +91,6 @@ class TestArrayStage:
         result = array_stage.run(frame)
         assert result.read(CanonicalName.ArrayPower) == pytest.approx(2e-7)
 
-    def test_output_frame_has_input_timestamp(self, array_stage, make_frame_view, sample_timestamp):
-        frame = make_frame_view(
-            values={
-                CanonicalName.MPPTInputVoltageA: 100.0,
-                CanonicalName.MPPTInputCurrentA: 5.0,
-                CanonicalName.MPPTInputVoltageB: 120.0,
-                CanonicalName.MPPTInputCurrentB: 3.0,
-            },
-            timestamp=sample_timestamp
-        )
-        result = array_stage.run(frame)
-        assert result.timestamp == sample_timestamp
-
-    def test_output_frame_only_contains_output_signal(self, array_stage, make_frame_view):
-        frame = make_frame_view({
-            CanonicalName.MPPTInputVoltageA: 100.0,
-            CanonicalName.MPPTInputCurrentA: 5.0,
-            CanonicalName.MPPTInputVoltageB: 120.0,
-            CanonicalName.MPPTInputCurrentB: 3.0,
-        })
-        result = array_stage.run(frame)
-        signals = [s for s, _ in result]
-        assert signals == [CanonicalName.ArrayPower]
-
     def test_missing_voltage_a_raises_key_error(self, array_stage, make_frame_view):
         frame = make_frame_view({
             CanonicalName.MPPTInputCurrentA: 5.0,
@@ -155,3 +131,27 @@ class TestArrayStage:
         frame = make_frame_view({})
         with pytest.raises(KeyError):
             array_stage.run(frame)
+
+    def test_output_frame_preserves_timestamp(self, array_stage, make_frame_view, sample_timestamp):
+        frame = make_frame_view(
+            values={
+                CanonicalName.MPPTInputVoltageA: 100.0,
+                CanonicalName.MPPTInputCurrentA: 5.0,
+                CanonicalName.MPPTInputVoltageB: 120.0,
+                CanonicalName.MPPTInputCurrentB: 3.0,
+            },
+            timestamp=sample_timestamp
+        )
+        result = array_stage.run(frame)
+        assert result.timestamp == sample_timestamp
+
+    def test_output_frame_only_contains_output(self, array_stage, make_frame_view):
+        frame = make_frame_view({
+            CanonicalName.MPPTInputVoltageA: 100.0,
+            CanonicalName.MPPTInputCurrentA: 5.0,
+            CanonicalName.MPPTInputVoltageB: 120.0,
+            CanonicalName.MPPTInputCurrentB: 3.0,
+        })
+        result = array_stage.run(frame)
+        signals = [s for s, _ in result]
+        assert signals == [CanonicalName.ArrayPower]
