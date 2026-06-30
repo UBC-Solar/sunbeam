@@ -26,7 +26,11 @@ v3_0 = [
     "influxdb-client>=1.50.0",
     "psycopg>=3.3.4",
     "pytest>=9.1.1",
+    "pytest-mock>=3.15.1",
 ]
 
 [tool.uv.sources]
 ubc-solar-data-tools = { git = "https://github.com/UBC-Solar/data_tools.git", rev = "e2d3e4bee849171a70e4f227a03819ab2e288934" }
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
