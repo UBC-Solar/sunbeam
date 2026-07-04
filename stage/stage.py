@@ -12,6 +12,8 @@ class Stage(ABC):
     outputs: ClassVar[list[CanonicalName]]
     frequency: ClassVar[float]
 
+    # in the future, default constructor with **kwargs?
+
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
 
