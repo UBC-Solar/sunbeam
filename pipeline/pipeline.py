@@ -7,7 +7,6 @@ import networkx as nx
 import datetime
 import time
 
-
 class Pipeline:
     def __init__(self, node_graph: nx.DiGraph, frequency: float):
         self.graph = node_graph

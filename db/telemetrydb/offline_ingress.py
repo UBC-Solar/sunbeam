@@ -41,7 +41,7 @@ class OfflineIngress:
             self,
             start_time: datetime,
             stop_time: datetime
-    ) -> dict[str, TimeSeries]:
+            ) -> dict[str, TimeSeries]:
         _out: dict[str, TimeSeries | None] = {
             _field: None for _field in self._fields
         }

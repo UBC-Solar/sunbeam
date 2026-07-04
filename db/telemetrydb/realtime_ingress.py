@@ -8,7 +8,6 @@ from typing import Iterable
 class TimeProvider(Protocol):
     def now(self, tz: timezone) -> datetime: ...
 
-
 class DebugTimeProvider:
     """
     Assistant class to debug real-time ingress by producing a now() function which does not return the current time
