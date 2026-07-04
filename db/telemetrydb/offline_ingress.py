@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Iterable
 
 
-class OfflineIngress:
+class OfflineIngressQuerier:
     """
     Fast path for:
       'get the last value of these three fields before timestamp T'
@@ -58,7 +58,7 @@ class OfflineIngress:
 if __name__ == "__main__":
     from datetime import timezone
 
-    reader = OfflineIngress(
+    reader = OfflineIngressQuerier(
         bucket="CAN_log",
         organization="8a0b66d77a331e96",
         url="http://influxdb.telemetry.ubcsolar.com",

@@ -34,7 +34,7 @@ class DebugTimeProvider:
         return timestamp
 
 
-class RealtimeIngress:
+class RealtimeIngressQuerier:
     """
     Fast path for:
       'get the last value of these three fields before timestamp T'
@@ -140,7 +140,7 @@ if __name__ == "__main__":
     import sys
     import time
 
-    reader = RealtimeIngress(bucket="CAN_log",
+    reader = RealtimeIngressQuerier(bucket="CAN_log",
             organization="8a0b66d77a331e96",
             url="http://influxdb.telemetry.ubcsolar.com",
             token="s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==",

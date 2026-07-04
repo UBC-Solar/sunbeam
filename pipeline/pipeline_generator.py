@@ -142,7 +142,7 @@ class PipelineGenerator:
 
     @staticmethod
     def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, debug: bool = False, debug_time: datetime = None) -> list[Stage]:
-        ingress_node = stage_library.get_stage_by_name("Offline_Ingress")
+        ingress_node = stage_library.get_stage_by_name("Ingress")
 
         telemetry_db: TelemetryDB = Context().telemetry_db
 

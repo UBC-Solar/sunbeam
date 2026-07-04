@@ -19,7 +19,7 @@ class Executor:
         self._writer = QueuedEventWriter(writer)
 
         event_manager = EventManager()
-        event_datetime: datetime = event_manager.get_event_date(event_name)
+        event_datetime: datetime = event_manager.get_event_start_date(event_name)
         pipeline_stage_names = event_manager.get_stages_for_event(event_name)
         stage_library = StageLibrary(event_manager.get_event_pipeline_edition(event_name))
 

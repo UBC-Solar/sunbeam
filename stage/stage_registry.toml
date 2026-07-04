@@ -3,7 +3,7 @@ name = "Brightside 2024"
 
 [v3_0.Offline_Ingress]
 module = "stage.v3_0.offline_ingress"
-class = "Offline_Ingress"
+class = "OfflineIngress"
 
 [v3_0.Ingress]
 module = "stage.v3_0.ingress"

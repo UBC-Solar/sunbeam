@@ -49,11 +49,37 @@ class EventManager:
 
         return self._events
 
-    def get_event_date(self, event_name) -> datetime:
+    def get_event_start_date(self, event_name) -> datetime:
+        '''
+        Returns the starting date of an event
+
+        :param str event_name: Event name
+        :return: Starting date of event
+
+        :raises ValueError: Event name not found in events
+        '''
         for event in self._raw_events:
             if event["name"] == event_name:
                 return datetime.fromisoformat(event["starts_at"])
 
+        raise ValueError(f"Event {event_name} not found!")
+    
+    def get_event_end_date(self, event_name) -> datetime:
+        '''
+        Returns the ending date of an event
+
+        :param str event_name: Event name
+        :return: Ending date of event
+
+        :raises ValueError: Event name not found in events
+        :raises ValueError: Event does not have an end date
+        '''
+        for event in self._raw_events:
+            if event["name"] == event_name:
+                if "ends_at" in event:
+                    return datetime.fromisoformat(event["ends_at"])
+                else:
+                    raise ValueError(f"Event {event_name} has not end date!")
         raise ValueError(f"Event {event_name} not found!")
 
     def get_event_pipeline_edition(self, event_name) -> str:

@@ -1,4 +1,4 @@
-from db.telemetrydb.realtime_ingress import RealtimeIngress, TimeProvider
+from db.telemetrydb.realtime_ingress import RealtimeIngressQuerier, TimeProvider
 from data_tools.localization import InfluxDBLanguageLocalization
 from state.frame import Frame, FrameView
 from datetime import timezone
@@ -21,7 +21,7 @@ class Ingress(Stage):
             self._localized_output_signals.append(field)
             self._localized_signal_to_signal[field] = signal
 
-        self._ingress = RealtimeIngress(
+        self._ingress = RealtimeIngressQuerier(
             fields=self._localized_output_signals,
             time_provider=time_provider,
             bucket=bucket,
