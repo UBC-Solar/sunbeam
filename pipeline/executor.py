@@ -24,7 +24,8 @@ class Executor:
         stage_library = StageLibrary(event_manager.get_event_pipeline_edition(event_name))
 
         pipeline_stage_definitions = stage_library.get_stages_by_names(pipeline_stage_names)
-        pipeline_stages = [stage() for stage in pipeline_stage_definitions]
+        kwargs = {} #TODO: store these kwargs (likely going to be hardcoded values) in another file?
+        pipeline_stages = [stage(**kwargs) for stage in pipeline_stage_definitions]
 
         self._pipelines, self._ingress_pipelines = PipelineGenerator.generate_pipeline_from_nodes(
             pipeline_stages,

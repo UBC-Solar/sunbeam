@@ -10,7 +10,7 @@ class EnergyVOLExtrapolated(Stage):
     outputs: ClassVar[list[str]] = [CanonicalName.EnergyVOLExtrapolated]
     frequency: ClassVar[float] = 10
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         # lookup table mapping cell voltage to cell energy, derived from SANYO NCR18650GA datasheet 2A discharge curve.
         # see https://github.com/UBC-Solar/data_analysis/blob/main/v3/soc_analysis/datasheet_voltage_soc/charge_voltage_energy.ipynb
         # TODO: hardcoded values

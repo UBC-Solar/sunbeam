@@ -9,7 +9,7 @@ class EnergyFromIntegratedPower(Stage):
     outputs: ClassVar[list[str]] = [CanonicalName.EnergyFromIntegratedPower]
     frequency: ClassVar[float] = 5
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.initial_energy = None
 
     def run(self, input_frame: FrameView) -> Frame:

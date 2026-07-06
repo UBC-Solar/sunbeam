@@ -9,7 +9,7 @@ class IntegratedPackPower(Stage):
     outputs: ClassVar[list[str]] = [CanonicalName.IntegratedPackPower]
     frequency: ClassVar[float] = 5 
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.total = 0
         self.last_timestamp = None
 

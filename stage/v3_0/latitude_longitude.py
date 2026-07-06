@@ -16,7 +16,7 @@ class LatitudeLongitude(Stage):
     outputs: ClassVar[list[str]] = [CanonicalName.LatitudeFiltered, CanonicalName.LongitudeFiltered]
     frequency: ClassVar[float] = 3
 
-    def __init__(self, event_name: str | None = None):
+    def __init__(self, event_name: str | None = None, **kwargs):
         self.min_lat = self.max_lat = self.min_lon = self.max_lon = None
         if event_name is None:
             return
@@ -33,7 +33,7 @@ class LatitudeLongitude(Stage):
         
         # create a box with 0.01deg lat/lon padding around track
         # 1deg is ~100km (pi/180 * earth radius)
-        padding = 0.1 # ~10km #TODO: contradictory with comment from old sunbeam?
+        padding = 0.01 # ~1km 
         self.min_lat = np.min(coords[:, 0]) - padding
         self.max_lat = np.max(coords[:, 0]) + padding
         self.min_lon = np.min(coords[:, 1]) - padding
@@ -45,8 +45,6 @@ class LatitudeLongitude(Stage):
         new_frame = Frame.from_view(input_frame)
         latitude = input_frame.read(CanonicalName.LatitudeRaw)
         longitude = input_frame.read(CanonicalName.LongitudeRaw)
-
-        #TODO: are longitude and latitude still flipped?
 
         if self.in_bounds(latitude, longitude):
             new_frame.write(CanonicalName.LatitudeFiltered, latitude)
