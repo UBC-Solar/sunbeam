@@ -189,10 +189,10 @@ class TestLatitudeLongitudeStage:
 
         stage = LatitudeLongitude(event_name=event_name)
 
-        assert stage.min_lat == pytest.approx(48.4)
-        assert stage.max_lat == pytest.approx(49.6)
-        assert stage.min_lon == pytest.approx(123.4)
-        assert stage.max_lon == pytest.approx(124.6)
+        assert stage.min_lat == pytest.approx(48.49)
+        assert stage.max_lat == pytest.approx(49.51)
+        assert stage.min_lon == pytest.approx(123.49)
+        assert stage.max_lon == pytest.approx(124.51)
 
         assert stage.in_bounds(49.0, 124.0)
         assert not stage.in_bounds(48.3, 124.0)
