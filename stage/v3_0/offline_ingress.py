@@ -1,4 +1,5 @@
-from db.telemetrydb.offline_ingress import OfflineIngressQuerier, TimeProvider
+from db.telemetrydb.offline_ingress import OfflineIngressQuerier
+from db.telemetrydb.protocols import TimeProvider
 from data_tools.localization import InfluxDBLanguageLocalization
 from state.frame import Frame, FrameView
 from datetime import timezone

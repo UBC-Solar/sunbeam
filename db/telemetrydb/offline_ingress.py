@@ -3,7 +3,6 @@ from data_tools.query import InfluxDBClient
 from datetime import datetime
 from typing import Iterable
 
-
 class OfflineIngressQuerier:
     """
     Fast path for:

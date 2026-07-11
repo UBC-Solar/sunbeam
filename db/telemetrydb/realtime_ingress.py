@@ -1,12 +1,10 @@
 from data_tools.localization import TemporalLocalization
+from db.telemetrydb.protocols import TimeProvider
 from datetime import datetime, timedelta, timezone
 from influxdb_client import InfluxDBClient
-from typing import Any, Protocol
+from typing import Any
 from typing import Iterable
 
-
-class TimeProvider(Protocol):
-    def now(self, tz: timezone) -> datetime: ...
 
 class DebugTimeProvider:
     """
