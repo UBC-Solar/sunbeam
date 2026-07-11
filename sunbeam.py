@@ -48,4 +48,4 @@ if __name__ == "__main__":
 
     sunbeam = Sunbeam()
     sunbeam.start()
-    sunbeam.run("realtime", reprocess=True, debug=True, debug_time=datetime(2024, 7, 16, 14, 10, tzinfo=timezone.utc))
+    sunbeam.run("FSGP_2024_Day_1", reprocess=True, debug=True, debug_time=datetime(2024, 7, 16, 14, 10, tzinfo=timezone.utc))

@@ -19,7 +19,10 @@ class Executor:
         self._writer = QueuedEventWriter(writer)
 
         event_manager = EventManager()
-        event_datetime: datetime = event_manager.get_event_start_date(event_name)
+        event_start_datetime: datetime = event_manager.get_event_start_date(event_name)
+
+        is_past_event = event_manager.check_if_past_event(event_name=event_name)
+
         pipeline_stage_names = event_manager.get_stages_for_event(event_name)
         stage_library = StageLibrary(event_manager.get_event_pipeline_edition(event_name))
 
@@ -28,10 +31,11 @@ class Executor:
 
         self._pipelines, self._ingress_pipelines = PipelineGenerator.generate_pipeline_from_nodes(
             pipeline_stages,
-            event_datetime.date(),
+            event_start_datetime.date(),
             debug=debug,
             debug_time=debug_time,
-            stage_library=stage_library
+            stage_library=stage_library,
+            is_past_event=is_past_event
         )
         self._state = State()
 
@@ -68,3 +72,9 @@ class Executor:
                 on_tick=output_manager.on_tick,
                 on_output=self._handle_pipeline_output,
             )
+
+if __name__ == '__main__':
+    event_manager = EventManager()
+
+    print(event_manager.get_event_start_date("FSGP_2024_Day_1"))
+    print(event_manager.get_event_start_date("realtime"))

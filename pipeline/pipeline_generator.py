@@ -177,9 +177,9 @@ class PipelineGenerator:
         return pipelines
 
     @staticmethod
-    def generate_pipeline_from_nodes(nodes: list[Stage], event_date: date, stage_library, debug: bool = False, debug_time: datetime = None) -> tuple[list[Pipeline], list[Pipeline]]:
+    def generate_pipeline_from_nodes(nodes: list[Stage], event_start_date: date, stage_library, is_past_event: bool, debug: bool = False, debug_time: datetime = None) -> tuple[list[Pipeline], list[Pipeline]]:
         ingress_signals = PipelineGenerator.collect_signals_for_ingress(nodes)
-        signal_bins = PipelineGenerator.bin_signals_by_frequency(ingress_signals, event_date)
+        signal_bins = PipelineGenerator.bin_signals_by_frequency(ingress_signals, event_start_date)
         ingress_nodes = PipelineGenerator.generate_ingress_for_nodes(signal_bins, debug=debug, debug_time=debug_time, stage_library=stage_library)
 
         ingress_pipeline = PipelineGenerator.build_pipeline_from_nodes(ingress_nodes)

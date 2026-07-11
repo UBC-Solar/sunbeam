@@ -6,7 +6,7 @@ from config import EVENTS_PATH
 from sqlalchemy import select, Engine
 from sqlalchemy.orm import Session
 import tomllib
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class EventManager:
@@ -48,6 +48,27 @@ class EventManager:
             session.commit()
 
         return self._events
+
+    def check_if_past_event(self, event_name) -> bool:
+        '''
+        Finds if an event is over by checking if its end data is in the past
+
+        :param str event_name: Event name
+        
+        :return bool: If the event is past or not
+
+        :raises ValueError: Event name not found 
+        '''
+        for event in self._raw_events: # Very if statements, would like to rewrite
+            if event["name"] == event_name: # Checks if event exists
+                if "ends_at" in event: # Checks if event has an ending date
+                    if datetime.fromisoformat(event["ends_at"]) < datetime.now(timezone.utc):
+                        return True # End date in the past
+                    else:
+                        return False # End date in the future
+                else:
+                    return False # Event has no end date
+        raise ValueError(f"Event {event_name} not found!")
 
     def get_event_start_date(self, event_name) -> datetime:
         '''
