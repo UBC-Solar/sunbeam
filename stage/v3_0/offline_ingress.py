@@ -24,7 +24,6 @@ class OfflineIngress(Stage):
 
         self._ingress = OfflineIngressQuerier(
             fields=self._localized_output_signals,
-            time_provider=time_provider,
             bucket=bucket,
             organization=organization,
             url=url,
