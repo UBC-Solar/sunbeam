@@ -53,6 +53,13 @@ class Scheduler:
         *,
         stop_on_error: bool = True,
     ) -> None:
+        """ Function which runs Sunbeam on loop.
+
+        :param Any state: State object which holds the values for processing
+        :param Callable[[RunnablePipeline, Any, dt.datetime], None] | None on_output: The function which runs on output, defaults to None
+        :param Callable[[], None] | None on_tick: The function which runs every tick, defaults to None
+        :param bool stop_on_error: Bool to stop Sunbeam if an error is encountered, defaults to True
+        """          
         while True:
             scheduled = heapq.heappop(self._heap)
 
@@ -60,7 +67,7 @@ class Scheduler:
             sleep_ns = scheduled.next_run_ns - now_ns
 
             if sleep_ns > 0:
-                time.sleep(sleep_ns / 1_000_000_000)
+                time.sleep(sleep_ns / 1_000_000_000) # Delete probably
                 if self._observer is not None:
                     self._observer.on_idle(sleep_ns)
                 late_ns = 0

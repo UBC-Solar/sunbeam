@@ -51,7 +51,7 @@ class EventManager:
 
     def check_if_past_event(self, event_name) -> bool:
         '''
-        Finds if an event is over by checking if its end data is in the past
+        Finds if an event is in the past by checking if its end date precedes the current time
 
         :param str event_name: Event name
         
@@ -59,9 +59,9 @@ class EventManager:
 
         :raises ValueError: Event name not found 
         '''
-        for event in self._raw_events: # Very if statements, would like to rewrite
+        for event in self._raw_events: # Very weird if statements, would like to rewrite
             if event["name"] == event_name: # Checks if event exists
-                if "ends_at" in event: # Checks if event has an ending date
+                if "ends_at" in event:
                     if datetime.fromisoformat(event["ends_at"]) < datetime.now(timezone.utc):
                         return True # End date in the past
                     else:
