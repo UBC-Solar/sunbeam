@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import tomllib
 
-COORDINATES_DIR = Path(__file__).parent.parent / "localization"
+COORDINATES_DIR = Path(__file__).parent / "localization"
 
 
 class LatitudeLongitude(Stage):
@@ -21,7 +21,7 @@ class LatitudeLongitude(Stage):
         if event_name is None:
             return
         
-        coords_path = COORDINATES_DIR / event_name / "coords.toml" # TODO: hardcoded path
+        coords_path = COORDINATES_DIR / event_name / "coords.toml" 
         if not coords_path.exists():
             return
         
