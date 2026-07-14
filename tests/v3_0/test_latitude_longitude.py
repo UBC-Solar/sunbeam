@@ -21,52 +21,51 @@ class TestLatitudeLongitudeStage:
         assert result.read(CanonicalName.LongitudeFiltered) == pytest.approx(-123.0)
 
     def test_in_bounds_no_bounds_configured(self, latitude_longitude_stage):
-        assert latitude_longitude_stage.in_bounds(-999, -999) is True
-        assert latitude_longitude_stage.in_bounds(0, 0) is True
-        assert latitude_longitude_stage.in_bounds(999, 999) is True
+        assert latitude_longitude_stage.in_bounds(-999, -999) 
+        assert latitude_longitude_stage.in_bounds(0, 0) 
+        assert latitude_longitude_stage.in_bounds(999, 999)
 
     def test_in_bounds_within_range(self, latitude_longitude_stage):
         latitude_longitude_stage.min_lat = 48.0
         latitude_longitude_stage.max_lat = 50.0
         latitude_longitude_stage.min_lon = -124.0
         latitude_longitude_stage.max_lon = -122.0
-        assert latitude_longitude_stage.in_bounds(49.0, -123.0) is True
+        assert latitude_longitude_stage.in_bounds(49.0, -123.0)
 
     def test_in_bounds_on_boundary(self, latitude_longitude_stage):
         latitude_longitude_stage.min_lat = 48.0
         latitude_longitude_stage.max_lat = 50.0
         latitude_longitude_stage.min_lon = -124.0
         latitude_longitude_stage.max_lon = -122.0
-        assert latitude_longitude_stage.in_bounds(48.0, -124.0) is True
-        assert latitude_longitude_stage.in_bounds(50.0, -122.0) is True
+        assert latitude_longitude_stage.in_bounds(48.0, -124.0)
+        assert latitude_longitude_stage.in_bounds(50.0, -122.0)
 
     def test_in_bounds_lat_below_min(self, latitude_longitude_stage):
         latitude_longitude_stage.min_lat = 48.0
         latitude_longitude_stage.max_lat = 50.0
         latitude_longitude_stage.min_lon = -124.0
         latitude_longitude_stage.max_lon = -122.0
-        assert latitude_longitude_stage.in_bounds(47.9, -123.0) is False
+        assert not latitude_longitude_stage.in_bounds(47.9, -123.0)
 
     def test_in_bounds_lat_above_max(self, latitude_longitude_stage):
         latitude_longitude_stage.min_lat = 48.0
         latitude_longitude_stage.max_lat = 50.0
         latitude_longitude_stage.min_lon = -124.0
         latitude_longitude_stage.max_lon = -122.0
-        assert latitude_longitude_stage.in_bounds(50.1, -123.0) is False
-
+        assert not latitude_longitude_stage.in_bounds(50.1, -123.0)
     def test_in_bounds_lon_below_min(self, latitude_longitude_stage):
         latitude_longitude_stage.min_lat = 48.0
         latitude_longitude_stage.max_lat = 50.0
         latitude_longitude_stage.min_lon = -124.0
         latitude_longitude_stage.max_lon = -122.0
-        assert latitude_longitude_stage.in_bounds(49.0, -124.1) is False
+        assert not latitude_longitude_stage.in_bounds(49.0, -124.1)
 
     def test_in_bounds_lon_above_max(self, latitude_longitude_stage):
         latitude_longitude_stage.min_lat = 48.0
         latitude_longitude_stage.max_lat = 50.0
         latitude_longitude_stage.min_lon = -124.0
         latitude_longitude_stage.max_lon = -122.0
-        assert latitude_longitude_stage.in_bounds(49.0, -121.9) is False
+        assert not latitude_longitude_stage.in_bounds(49.0, -121.9)
 
     def test_run_coords_in_bounds_written(self, latitude_longitude_stage, make_frame_view):
         latitude_longitude_stage.min_lat = 48.0
