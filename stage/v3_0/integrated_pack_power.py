@@ -10,7 +10,7 @@ class IntegratedPackPower(Stage):
     frequency_hz: ClassVar[float] = 5 
 
     def __init__(self, **kwargs):
-        self.total = 0
+        self.total_energy = 0
         self.last_timestamp = None
 
     def run(self, input_frame: FrameView) -> Frame:
@@ -23,8 +23,8 @@ class IntegratedPackPower(Stage):
         else:
             dt = (input_frame.timestamp -  self.last_timestamp).total_seconds()
 
-        self.total += pack_power * dt / seconds_per_hour
+        self.total_energy += pack_power * dt / seconds_per_hour
         self.last_timestamp = input_frame.timestamp
-        new_frame.write(CanonicalName.IntegratedPackPower, self.total)
+        new_frame.write(CanonicalName.IntegratedPackPower, self.total_energy)
 
         return new_frame
