@@ -7,7 +7,7 @@ class PackPower(Stage):
     stage_name: ClassVar[str] = "PackPower"
     inputs: ClassVar[list[str]] = [CanonicalName.PackVoltage, CanonicalName.PackCurrent]
     outputs: ClassVar[list[str]] = [CanonicalName.PackPower]
-    frequency: ClassVar[float] = 5
+    frequency_hz: ClassVar[float] = 5
 
     def run(self, input_frame: FrameView) -> Frame:
         new_frame = Frame.from_view(input_frame)

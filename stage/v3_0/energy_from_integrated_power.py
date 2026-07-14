@@ -7,7 +7,7 @@ class EnergyFromIntegratedPower(Stage):
     stage_name: ClassVar[str] = "EnergyFromIntegratedPower"
     inputs: ClassVar[list[str]] = [CanonicalName.IntegratedPackPower, CanonicalName.EnergyVOLExtrapolated]
     outputs: ClassVar[list[str]] = [CanonicalName.EnergyFromIntegratedPower]
-    frequency: ClassVar[float] = 5
+    frequency_hz: ClassVar[float] = 5
 
     def __init__(self, **kwargs):
         self.initial_energy = None

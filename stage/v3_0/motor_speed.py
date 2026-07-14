@@ -8,7 +8,7 @@ class MotorSpeed(Stage):
     stage_name: ClassVar[str] = "MotorSpeed"
     inputs: ClassVar[list[str]] = [CanonicalName.VehicleSpeed]
     outputs: ClassVar[list[str]] = [CanonicalName.MotorPower]
-    frequency: ClassVar[float] = 5
+    frequency_hz: ClassVar[float] = 5
 
     def run(self, input_frame: FrameView) -> Frame:
         new_frame = Frame.from_view(input_frame)

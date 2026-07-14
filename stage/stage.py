@@ -10,7 +10,7 @@ class Stage(ABC):
     stage_name: ClassVar[str]
     inputs: ClassVar[list[CanonicalName]]
     outputs: ClassVar[list[CanonicalName]]
-    frequency: ClassVar[float]
+    frequency_hz: ClassVar[float]
 
     def __init__(self, **kwargs):
         pass
@@ -27,8 +27,8 @@ class Stage(ABC):
         if "outputs" not in cls.__dict__:
             raise TypeError(f"{cls.__name__} must override 'outputs'")
 
-        if "frequency" not in cls.__dict__:
-            raise TypeError(f"{cls.__name__} must override 'frequency'")
+        if "frequency_hz" not in cls.__dict__:
+            raise TypeError(f"{cls.__name__} must override 'frequency_hz'")
 
     @abstractmethod
     def run(self, input_frame: FrameView) -> Frame: ...
