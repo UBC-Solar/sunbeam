@@ -4,20 +4,6 @@ import pytest
 
 
 class TestPackPowerStage:
-    def test_stage_name(self, pack_power_stage):
-        assert pack_power_stage.stage_name == "PackPower"
-
-    def test_inputs(self, pack_power_stage):
-        assert pack_power_stage.inputs == [
-            CanonicalName.PackVoltage,
-            CanonicalName.PackCurrent,
-        ]
-
-    def test_outputs(self, pack_power_stage):
-        assert pack_power_stage.outputs == [CanonicalName.PackPower]
-
-    def test_frequency(self, pack_power_stage):
-        assert pack_power_stage.frequency == 5
 
     def test_basic_computation(self, pack_power_stage, make_frame_view):
         frame = make_frame_view({

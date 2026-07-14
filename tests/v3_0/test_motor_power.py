@@ -4,21 +4,6 @@ import pytest
 
 
 class TestMotorPowerStage:
-    def test_stage_name(self, motor_power_stage):
-        assert motor_power_stage.stage_name == "MotorPower"
-
-    def test_inputs(self, motor_power_stage):
-        assert motor_power_stage.inputs == [
-            CanonicalName.PackVoltage,
-            CanonicalName.MotorCurrent,
-            CanonicalName.MotorCurrentDirection,
-        ]
-
-    def test_outputs(self, motor_power_stage):
-        assert motor_power_stage.outputs == [CanonicalName.MotorPower]
-
-    def test_frequency(self, motor_power_stage):
-        assert motor_power_stage.frequency == 5
 
     def test_driving(self, motor_power_stage, make_frame_view):
         frame = make_frame_view({

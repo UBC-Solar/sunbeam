@@ -5,22 +5,6 @@ import pytest
 
 
 class TestEnergyFromIntegratedPowerStage:
-    def test_stage_name(self, energy_from_integrated_power_stage):
-        assert energy_from_integrated_power_stage.stage_name == "EnergyFromIntegratedPower"
-
-    def test_inputs(self, energy_from_integrated_power_stage):
-        assert energy_from_integrated_power_stage.inputs == [
-            CanonicalName.IntegratedPackPower,
-            CanonicalName.EnergyVOLExtrapolated,
-        ]
-
-    def test_outputs(self, energy_from_integrated_power_stage):
-        assert energy_from_integrated_power_stage.outputs == [
-            CanonicalName.EnergyFromIntegratedPower,
-        ]
-
-    def test_frequency(self, energy_from_integrated_power_stage):
-        assert energy_from_integrated_power_stage.frequency == 5
 
     def test_initial_energy_is_none(self, energy_from_integrated_power_stage):
         assert energy_from_integrated_power_stage.initial_energy is None

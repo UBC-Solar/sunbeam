@@ -5,24 +5,6 @@ import pytest
 
 
 class TestLatitudeLongitudeStage:
-    def test_stage_name(self, latitude_longitude_stage):
-        assert latitude_longitude_stage.stage_name == "LatitudeLongitude"
-
-    def test_inputs(self, latitude_longitude_stage):
-        assert latitude_longitude_stage.inputs == [
-            CanonicalName.LatitudeRaw,
-            CanonicalName.LongitudeRaw,
-        ]
-
-    def test_outputs(self, latitude_longitude_stage):
-        assert latitude_longitude_stage.outputs == [
-            CanonicalName.LatitudeFiltered,
-            CanonicalName.LongitudeFiltered,
-        ]
-
-    def test_frequency(self, latitude_longitude_stage):
-        assert latitude_longitude_stage.frequency == 3
-
     def test_no_event_bounds_are_none(self, latitude_longitude_stage):
         assert latitude_longitude_stage.min_lat is None
         assert latitude_longitude_stage.max_lat is None

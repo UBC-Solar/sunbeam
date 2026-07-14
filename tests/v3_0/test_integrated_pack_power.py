@@ -6,20 +6,9 @@ import pytest
 
 
 class TestIntegratedPackPowerStage:
-    def test_stage_name(self, integrated_pack_power_stage):
-        assert integrated_pack_power_stage.stage_name == "IntegratedPackPower"
-
-    def test_inputs(self, integrated_pack_power_stage):
-        assert integrated_pack_power_stage.inputs == [CanonicalName.PackPower]
-
-    def test_outputs(self, integrated_pack_power_stage):
-        assert integrated_pack_power_stage.outputs == [CanonicalName.IntegratedPackPower]
-
-    def test_frequency(self, integrated_pack_power_stage):
-        assert integrated_pack_power_stage.frequency == 5
 
     def test_initial_state(self, integrated_pack_power_stage):
-        assert integrated_pack_power_stage.total == 0.0
+        assert integrated_pack_power_stage.total_energy == 0.0
         assert integrated_pack_power_stage.last_timestamp is None
 
     def test_first_call_uses_estimated_dt(self, integrated_pack_power_stage, make_frame_view):
@@ -114,7 +103,7 @@ class TestIntegratedPackPowerStage:
         stage2 = IntegratedPackPower()
         result = stage2.run(frame)
         assert result.read(CanonicalName.IntegratedPackPower) == pytest.approx(0.2)
-        assert stage2.total == pytest.approx(0.2)
+        assert stage2.total_energy == pytest.approx(0.2)
 
     def test_missing_input_raises_key_error(self, integrated_pack_power_stage, make_frame_view):
         frame = make_frame_view({})

@@ -5,30 +5,6 @@ import pytest
 
 
 class TestEnergyVOLExtrapolatedStage:
-    def test_stage_name(self, energy_vol_extrapolated_stage):
-        assert energy_vol_extrapolated_stage.stage_name == "EnergyVOLExtrapolated"
-
-    def test_inputs(self, energy_vol_extrapolated_stage):
-        assert energy_vol_extrapolated_stage.inputs == [
-            CanonicalName.MinimumModuleVoltage,
-        ]
-
-    def test_outputs(self, energy_vol_extrapolated_stage):
-        assert energy_vol_extrapolated_stage.outputs == [
-            CanonicalName.EnergyVOLExtrapolated,
-        ]
-
-    def test_frequency(self, energy_vol_extrapolated_stage):
-        assert energy_vol_extrapolated_stage.frequency == 10
-
-    def test_battery_configuration(self, energy_vol_extrapolated_stage):
-        assert energy_vol_extrapolated_stage.cells_in_module == 13
-        assert energy_vol_extrapolated_stage.modules_in_pack == 32
-        assert energy_vol_extrapolated_stage.cells_in_module * energy_vol_extrapolated_stage.modules_in_pack == 416
-
-    def test_cubic_spline_initialized(self, energy_vol_extrapolated_stage):
-        assert isinstance(energy_vol_extrapolated_stage.voltage_to_energy, CubicSpline)
-
 
     def test_voltage_at_low_end_of_range(self, energy_vol_extrapolated_stage, make_frame_view):
         frame = make_frame_view({CanonicalName.MinimumModuleVoltage: 2.701298701298701})

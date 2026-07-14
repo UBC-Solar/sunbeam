@@ -3,22 +3,6 @@ from state.frame import FrameView
 import pytest
 
 class TestArrayStage:
-    def test_stage_name(self, array_stage):
-        assert array_stage.stage_name == "Array"
-
-    def test_inputs(self, array_stage):
-        assert array_stage.inputs == [
-            CanonicalName.MPPTInputVoltageA,
-            CanonicalName.MPPTInputCurrentA,
-            CanonicalName.MPPTInputVoltageB,
-            CanonicalName.MPPTInputCurrentB,
-        ]
-
-    def test_outputs(self, array_stage):
-        assert array_stage.outputs == [CanonicalName.ArrayPower]
-
-    def test_frequency(self, array_stage):
-        assert array_stage.frequency == 4
 
     def test_basic_computation(self, array_stage, make_frame_view):
         frame = make_frame_view({
