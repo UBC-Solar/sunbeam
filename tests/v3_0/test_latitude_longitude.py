@@ -190,7 +190,7 @@ class TestLatitudeLongitudeStage:
         assert stage.max_lat is None
         assert stage.min_lon is None
         assert stage.max_lon is None
-        assert stage.in_bounds(0, 0) is True
+        assert stage.in_bounds(0, 0)
 
     def test_missing_gps_lat_raises_key_error(self, latitude_longitude_stage, make_frame_view):
         frame = make_frame_view({CanonicalName.LongitudeRaw: -123.0})
