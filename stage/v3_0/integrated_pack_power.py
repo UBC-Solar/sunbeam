@@ -2,6 +2,7 @@ from data_tools.localization import CanonicalName
 from state.frame import Frame, FrameView
 from typing import ClassVar
 from stage.stage import Stage
+from datetime import datetime
 
 class IntegratedPackPower(Stage):
     stage_name: ClassVar[str] = "IntegratedPackPower"
@@ -11,7 +12,7 @@ class IntegratedPackPower(Stage):
 
     def __init__(self, **kwargs):
         self.total_energy = 0
-        self.last_timestamp = None
+        self.last_timestamp: datetime | None = None
 
     def run(self, input_frame: FrameView) -> Frame:
         new_frame = Frame.from_view(input_frame)

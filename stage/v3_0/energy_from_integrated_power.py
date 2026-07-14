@@ -10,7 +10,7 @@ class EnergyFromIntegratedPower(Stage):
     frequency_hz: ClassVar[float] = 5
 
     def __init__(self, **kwargs):
-        self.initial_energy = None
+        self.initial_energy: float | None = None
 
     def run(self, input_frame: FrameView) -> Frame:
         new_frame = Frame.from_view(input_frame)
