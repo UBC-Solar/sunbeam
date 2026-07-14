@@ -55,4 +55,4 @@ def energy_vol_extrapolated_stage():
 @pytest.fixture
 def latitude_longitude_stage():
     from stage.v3_0.latitude_longitude import LatitudeLongitude
-    return LatitudeLongitude() # no arguments passed means no event name
+    return LatitudeLongitude() # no arguments passed means no event name. this means the min/max_lat/lon attributes should all be none
