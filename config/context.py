@@ -1,7 +1,16 @@
+import dataclasses
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from sqlalchemy import URL
+
+
+def _redacted_dict(instance, secret_fields: set[str]) -> dict:
+    data = dataclasses.asdict(instance)
+    for field in secret_fields:
+        if data.get(field) is not None:
+            data[field] = "***"
+    return data
 
 @dataclass
 class TelemetryDB:
@@ -10,7 +19,7 @@ class TelemetryDB:
     organization: str
     token: str
     debug: bool
-    debug_time: datetime
+    debug_time: str
 
 
 @dataclass
@@ -38,12 +47,13 @@ class SunbeamBroker:
     broker_port: int
 
     def build_url(self) -> str:
-        return f"tcp://{self.broker_url}:{self.broker_port}"
+        return f"http://{self.broker_url}:{self.broker_port}"
 
 
 class ServiceType(StrEnum):
     Client = "client"
     Broker = "broker"
+    Worker = "worker"
 
 
 class Context:
@@ -102,3 +112,14 @@ class Context:
         if self._sunbeam_broker is None:
             raise RuntimeError("Sunbeam broker has not been configured.")
         return self._sunbeam_broker
+
+    def describe(self) -> dict:
+        """
+        A redacted, log-safe snapshot of the resolved configuration.
+        Passwords and API tokens are never included.
+        """
+        return {
+            "sunbeam_db": _redacted_dict(self.sunbeam_db, {"database_password"}),
+            "telemetry_db": _redacted_dict(self.telemetry_db, {"token"}),
+            "sunbeam_broker": dataclasses.asdict(self.sunbeam_broker),
+        }

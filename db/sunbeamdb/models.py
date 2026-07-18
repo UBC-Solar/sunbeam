@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import enum
 from datetime import datetime
 from typing import Optional
@@ -136,6 +134,14 @@ class WorkerStatus(enum.Enum):
 
     CANCELLED = "cancelled"
 
+
+TERMINAL_WORKER_STATUSES = {
+    WorkerStatus.COMPLETED,
+    WorkerStatus.FAILED,
+    WorkerStatus.CANCELLED,
+    WorkerStatus.LOST,
+}
+
 class WorkerRun(Base):
 
     __tablename__ = "worker_run"
@@ -164,6 +170,7 @@ class WorkerRun(Base):
     current_stage: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     status_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     stop_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    stop_requested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

@@ -1,6 +1,8 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -10,11 +12,14 @@ from orchestration.schemas import (
     LaunchWorkerRequest,
     WorkerCompleteRequest,
     WorkerHeartbeatRequest,
+    WorkerMetricsRead,
+    WorkerMetricsReport,
     WorkerPermissionResponse,
     WorkerRunRead,
 )
 from orchestration.services.worker_service import WorkerService
 
+logger = logging.getLogger("sunbeam.orchestrator")
 
 router = APIRouter(prefix="/workers", tags=["workers"])
 
@@ -131,3 +136,81 @@ def complete_worker(
         raise HTTPException(status_code=404, detail="Worker not found")
 
     return worker
+
+
+@router.post("/{worker_id}/metrics", status_code=204)
+def report_metrics(
+    worker_id: uuid.UUID,
+    payload: WorkerMetricsReport,
+    db: Session = Depends(get_db),
+    service: WorkerService = Depends(get_worker_service),
+):
+    accepted = service.record_metrics(
+        db,
+        worker_id=worker_id,
+        payload=payload.model_dump(),
+    )
+
+    if not accepted:
+        raise HTTPException(
+            status_code=404,
+            detail="Worker not found or no longer active",
+        )
+
+
+@router.get("/{worker_id}/metrics", response_model=WorkerMetricsRead)
+def get_metrics(
+    worker_id: uuid.UUID,
+    service: WorkerService = Depends(get_worker_service),
+):
+    metrics = service.get_metrics(worker_id)
+
+    if metrics is None:
+        raise HTTPException(status_code=404, detail="No metrics available")
+
+    return metrics
+
+
+@router.get("/{worker_id}/logs")
+def get_logs(
+    worker_id: uuid.UUID,
+    tail: int = 500,
+    db: Session = Depends(get_db),
+    service: WorkerService = Depends(get_worker_service),
+):
+    lines = service.get_logs(db, worker_id, tail=tail)
+
+    if lines is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Worker or its container could not be found",
+        )
+
+    return {"lines": lines}
+
+
+@router.get("/{worker_id}/logs/stream")
+def stream_logs(
+    worker_id: uuid.UUID,
+    tail: int = 200,
+    db: Session = Depends(get_db),
+    service: WorkerService = Depends(get_worker_service),
+):
+    log_stream = service.stream_logs(db, worker_id, tail=tail)
+
+    if log_stream is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Worker or its container could not be found",
+        )
+
+    def event_source():
+        try:
+            for chunk in log_stream:
+                text = chunk.decode("utf-8", errors="replace")
+                for line in text.splitlines():
+                    yield f"data: {line}\n\n"
+        except Exception:
+            logger.exception("Log stream for worker %s failed", worker_id)
+
+    return StreamingResponse(event_source(), media_type="text/event-stream")

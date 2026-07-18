@@ -5,7 +5,10 @@ from stage.stage import Stage
 from typing import Iterator
 import networkx as nx
 import datetime
+import logging
 import time
+
+logger = logging.getLogger("sunbeam.worker")
 
 
 class Pipeline:
@@ -26,7 +29,7 @@ class Pipeline:
             try:
                 input_frame = state.as_frame(stage.inputs, timestamp)
             except KeyError:
-                print(f"{stage.stage_name} not ready to run yet. Yielding...")
+                logger.debug("%s not ready to run yet. Yielding...", stage.stage_name)
                 return
 
             start_ns = time.monotonic_ns()

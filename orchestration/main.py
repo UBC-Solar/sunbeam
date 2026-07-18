@@ -1,17 +1,59 @@
-import tomllib
-
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine
-
-import config
-from config.context import Context, ServiceType
-from db import create_schema
 from orchestration.routes import events, workers, pipeline_editions
-import os
+from orchestration.services.watchdog_service import WatchdogService
+from orchestration.preflight import check_docker, check_postgres
+from orchestration.db import engine as db_engine
+from config import VehicleManager, EventManager, SignalManager
+from fastapi.middleware.cors import CORSMiddleware
+from config.context import Context, ServiceType
+from stage.stage_library import StageLibrary
+from sqlalchemy import create_engine, text
+from dataclasses import dataclass
+from db import create_schema
+from docker.errors import DockerException
+from fastapi import FastAPI, HTTPException
+from typing import Mapping
+import tomllib
+import pathlib
+import logging
+from contextlib import asynccontextmanager
+import config
+import docker
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
+logger = logging.getLogger("sunbeam.orchestrator")
+
+_watchdog: WatchdogService | None = None
 
 
-app = FastAPI(title="Sunbeam Orchestrator")
+@dataclass
+class PipelineWorker:
+    pipeline_edition: str
+    docker_image: str
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # See https://fastapi.tiangolo.com/advanced/events/#use-case
+    global _watchdog
+
+    on_startup()
+
+    _watchdog = WatchdogService()
+    _watchdog.start()
+
+    yield
+
+    _watchdog.stop()
+    on_shutdown()
+
+app = FastAPI(title="Sunbeam Orchestrator", lifespan=lifespan)
+
+
+PROJECT_ROOT = pathlib.Path(__file__).parent.parent.absolute()
 
 
 app.add_middleware(
@@ -26,19 +68,75 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-def startup() -> None:
+def build_workers() -> Mapping[str, PipelineWorker]:
+    library = StageLibrary()
+    client = docker.from_env()
+
+    worker_versions = {}
+    for pipeline_edition in library.pipeline_editions:
+        tag = f"sunbeam-worker:{pipeline_edition}"
+        logger.info("Building worker image: %s", tag)
+
+        client.images.build(
+            path=str(PROJECT_ROOT),
+            dockerfile="dockerfiles/worker.Dockerfile",
+            tag=tag,
+            rm=True,
+            buildargs={
+                "PIPELINE_EDITION": pipeline_edition,
+            },
+        )
+
+        worker_versions[pipeline_edition] = PipelineWorker(pipeline_edition, tag)
+        logger.info("Built worker image: %s", tag)
+
+    return worker_versions
+
+
+def on_shutdown():
+    pass
+
+def on_startup() -> None:
     with open(config.CONTEXT_PATH, "rb") as f:
         config_dict = tomllib.load(f)
         Context.from_config(config_dict, ServiceType.Broker)
 
+    logger.info("Resolved orchestrator configuration: %s", Context().describe())
+
     database_url = Context().sunbeam_db.build_url()
     engine = create_engine(database_url, echo=False)
+
+    check_postgres(engine)
+    check_docker()
+
     create_schema(engine)
+
+    VehicleManager().sync_vehicles(engine)
+    EventManager().sync_events(engine)
+    SignalManager.sync_signals(engine)
+
     engine.dispose()
+
+    build_workers()
+
 
 @app.get("/health")
 def health() -> dict[str, str]:
+    try:
+        with db_engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"PostgreSQL unavailable: {exc}")
+
+    try:
+        client = docker.from_env()
+        try:
+            client.ping()
+        finally:
+            client.close()
+    except DockerException as exc:
+        raise HTTPException(status_code=503, detail=f"Docker unavailable: {exc}")
+
     return {"status": "ok"}
 
 

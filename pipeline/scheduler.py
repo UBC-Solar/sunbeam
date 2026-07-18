@@ -52,8 +52,9 @@ class Scheduler:
         on_tick: Callable[[], None] | None = None,
         *,
         stop_on_error: bool = True,
+        should_stop: Callable[[], bool] | None = None,
     ) -> None:
-        while True:
+        while not (should_stop and should_stop()):
             scheduled = heapq.heappop(self._heap)
 
             now_ns = time.monotonic_ns()

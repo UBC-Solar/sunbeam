@@ -1,4 +1,4 @@
-import {useEffect, useState} from "react";
+import {useEffect, useMemo, useState} from "react";
 import {
   Event,
   WorkerRun,
@@ -8,43 +8,54 @@ import {
   launchWorker,
   stopWorker,
 } from "./api";
+import {WorkerDetail} from "./components/WorkerDetail";
+import {WorkersTable} from "./components/WorkersTable";
 
 function App() {
   const [events, setEvents] = useState<Event[]>([]);
   const [workers, setWorkers] = useState<WorkerRun[]>([]);
   const [editions, setEditions] = useState<string[]>([]);
   const [selectedEdition, setSelectedEdition] = useState<string>("");
+  const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
+
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
-    const eventsPromise = getEvents();
-    const workersPromise = getWorkers(true);
-    const editionsPromise = getPipelineEditions();
+    try {
+      const [eventsData, workersData, editionsData] = await Promise.all([
+        getEvents(),
+        getWorkers(),
+        getPipelineEditions(),
+      ]);
 
-    const eventsData = await eventsPromise;
-    const workersData = await workersPromise;
-    const editionsData = await editionsPromise;
+      setEvents(eventsData);
+      setWorkers(workersData);
+      setEditions(editionsData);
+      setError(null);
+      setLoaded(true);
 
-    setEvents(eventsData);
-    setWorkers(workersData);
-    setEditions(editionsData);
-
-    setSelectedEdition((current) => {
-      if (!current && editionsData.length > 0) {
-        return editionsData[0];
-      }
-
-      return current;
-    });
+      setSelectedEdition((current) => {
+        if (!current && editionsData.length > 0) return editionsData[0];
+        return current;
+      });
+    } catch (err) {
+      setError((err as Error).message);
+    }
   }
 
   useEffect(() => {
     refresh();
-
     const interval = setInterval(refresh, 3000);
     return () => clearInterval(interval);
   }, []);
 
-  async function onLaunch(eventId: string) {
+  const selectedWorker = useMemo(
+    () => workers.find((w) => w.id === selectedWorkerId) ?? null,
+    [workers, selectedWorkerId],
+  );
+
+  async function onLaunch(eventId: number) {
     await launchWorker(eventId, selectedEdition);
     await refresh();
   }
@@ -55,87 +66,79 @@ function App() {
   }
 
   return (
-    <main style={{padding: "2rem", fontFamily: "system-ui"}}>
+    <main>
       <h1>Sunbeam Orchestrator</h1>
+      <p className="subtitle">Launch and monitor pipeline workers.</p>
 
-      <section>
-        <h2>Events</h2>
+      {error && <div className="error-banner">Couldn't reach the orchestrator: {error}</div>}
+      {!loaded && !error && <p className="text-muted">Loading…</p>}
 
-        <label>
-          Pipeline edition:{" "}
-          <select
-            value={selectedEdition}
-            onChange={(e) => setSelectedEdition(e.target.value)}
-          >
-            {editions.map((edition) => (
-              <option key={edition} value={edition}>
-                {edition}
-              </option>
-            ))}
-          </select>
-        </label>
+      {loaded && (
+        <>
+          <div className="card">
+            <div className="card-header">
+              <h2>Events</h2>
+              <label className="text-secondary">
+                Pipeline edition:{" "}
+                <select
+                  value={selectedEdition}
+                  onChange={(e) => setSelectedEdition(e.target.value)}
+                >
+                  {editions.map((edition) => (
+                    <option key={edition} value={edition}>
+                      {edition}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
 
-        <table>
-          <thead>
-            <tr>
-              <th>Event</th>
-              <th>Description</th>
-              <th>Launch</th>
-            </tr>
-          </thead>
-          <tbody>
-            {events.map((event) => (
-              <tr key={event.id}>
-                <td>{event.name}</td>
-                <td>{event.description}</td>
-                <td>
-                  <button onClick={() => onLaunch(event.id)}>
-                    Launch worker
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+            <table>
+              <thead>
+                <tr>
+                  <th>Event</th>
+                  <th>Description</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {events.length === 0 && (
+                  <tr className="empty-row">
+                    <td colSpan={3}>No events found.</td>
+                  </tr>
+                )}
+                {events.map((event) => (
+                  <tr key={event.id}>
+                    <td>{event.name}</td>
+                    <td className="text-secondary">{event.description ?? "—"}</td>
+                    <td>
+                      <button className="primary" onClick={() => onLaunch(event.id)}>
+                        Launch worker
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-      <section>
-        <h2>Active Workers</h2>
+          <WorkersTable
+            workers={workers}
+            events={events}
+            onSelect={(worker) => setSelectedWorkerId(worker.id)}
+            onStop={onStop}
+          />
+        </>
+      )}
 
-        <table>
-          <thead>
-            <tr>
-              <th>Status</th>
-              <th>Edition</th>
-              <th>Stage</th>
-              <th>Message</th>
-              <th>Host</th>
-              <th>Last heartbeat</th>
-              <th>Stop</th>
-            </tr>
-          </thead>
-          <tbody>
-            {workers.map((worker) => (
-              <tr key={worker.id}>
-                <td>{worker.status}</td>
-                <td>{worker.pipeline_edition}</td>
-                <td>{worker.current_stage ?? "-"}</td>
-                <td>{worker.status_message ?? "-"}</td>
-                <td>{worker.host ?? "-"}</td>
-                <td>{worker.last_heartbeat_at ?? "-"}</td>
-                <td>
-                  <button
-                    disabled={worker.stop_requested}
-                    onClick={() => onStop(worker.id)}
-                  >
-                    {worker.stop_requested ? "Stopping..." : "Stop"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+      {selectedWorker && (
+        <WorkerDetail
+          worker={selectedWorker}
+          events={events}
+          onClose={() => setSelectedWorkerId(null)}
+          onStop={onStop}
+        />
+      )}
     </main>
   );
 }

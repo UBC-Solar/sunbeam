@@ -56,3 +56,32 @@ class WorkerRegisterRequest(BaseModel):
 class WorkerCompleteRequest(BaseModel):
     success: bool
     message: str | None = None
+
+
+class StageMetric(BaseModel):
+    name: str
+    total_ms: float
+    avg_ms: float
+    max_ms: float
+    calls: int
+
+
+class PipelineMetric(BaseModel):
+    name: str
+    total_ms: float
+    avg_ms: float
+    ticks: int
+    late_now_ms: float
+    late_max_ms: float
+    stages: list[StageMetric] = []
+
+
+class WorkerMetricsReport(BaseModel):
+    idle_pct: float
+    busy_pct: float
+    writer_ms: float
+    pipelines: list[PipelineMetric] = []
+
+
+class WorkerMetricsRead(WorkerMetricsReport):
+    reported_at: datetime
