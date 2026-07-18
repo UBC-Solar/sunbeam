@@ -10,10 +10,9 @@ from stage.stage import Stage
 class OfflineIngress(Stage):
     inputs: ClassVar[list[str]] = []
 
-    def __init__(self, output_signals: list[str], frequency: float, time_provider: TimeProvider, bucket: str = None, organization: str = None, token: str = None, url: str = None) -> None:
+    def __init__(self, output_signals: list[str], time_provider: TimeProvider, bucket: str = None, organization: str = None, token: str = None, url: str = None) -> None:
         super().__init__()
         self._output_signals = output_signals
-        self._frequency = frequency
 
         self._localized_output_signals = []
         self._localized_signal_to_signal = {}
@@ -29,10 +28,6 @@ class OfflineIngress(Stage):
             url=url,
             token=token
         )
-
-    @property
-    def frequency(self) -> float:
-        return self._frequency
 
     @property
     def outputs(self) -> list[str]:
