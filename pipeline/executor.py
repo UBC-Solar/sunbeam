@@ -2,7 +2,7 @@ from db.sunbeamdb.writer import EventWriter
 from db.sunbeamdb.queued_writer import QueuedEventWriter
 from sqlalchemy import Engine
 
-from pipeline.pipeline_generator import PipelineGenerator
+from pipeline.pipeline_generator import RealtimePipelineGenerator, OfflinePipelineGenerator
 from config import EventManager
 from stage.stage_library import StageLibrary
 from pipeline.timing import TimingStats
@@ -29,13 +29,16 @@ class Executor:
         pipeline_stage_definitions = stage_library.get_stages_by_names(pipeline_stage_names)
         pipeline_stages = [stage() for stage in pipeline_stage_definitions]
 
-        self._pipelines, self._ingress_pipelines = PipelineGenerator.generate_pipeline_from_nodes(
+        generator_class = RealtimePipelineGenerator
+        if is_past_event:
+            generator_class = OfflinePipelineGenerator
+
+        self._pipelines, self._ingress_pipelines = generator_class.generate_pipeline_from_nodes(
             pipeline_stages,
             event_start_datetime.date(),
             debug=debug,
             debug_time=debug_time,
             stage_library=stage_library,
-            is_past_event=is_past_event
         )
         self._state = State()
 
