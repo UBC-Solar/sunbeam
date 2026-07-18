@@ -1,6 +1,6 @@
 from db.telemetrydb.offline_ingress import OfflineIngressQuerier
 from db.telemetrydb.protocols import TimeProvider
-from data_tools.localization import InfluxDBLanguageLocalization
+from data_tools.localization import InfluxDBLanguageLocalization # type: ignore
 from state.frame import Frame, FrameView
 from datetime import timezone
 from typing import ClassVar
@@ -30,7 +30,6 @@ class OfflineIngress(Stage):
             token=token
         )
 
-
     @property
     def frequency(self) -> float:
         return self._frequency
@@ -46,7 +45,7 @@ class OfflineIngress(Stage):
     def run(self, input_frame: FrameView) -> Frame:
         new_frame = Frame.from_view(input_frame)
 
-        values = self._ingress.get_last_values()
+        values = self._ingress.get_last_values() # Remove this please
 
         for field, data in values.items():
             try:

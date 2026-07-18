@@ -1,4 +1,5 @@
 from data_tools.localization import CanonicalName
+from data_tools.collections import TimeSeries
 
 from state.frame import FrameView, Frame
 from datetime import datetime
@@ -14,7 +15,12 @@ class State:
             frame = Frame(timestamp)
 
             for signal in signals:
-                frame.write(signal, self._values[signal])
+                if not isinstance(signal, TimeSeries):
+                    frame.write(signal, self._values[signal])
+                    print(f"This is not a TimeSeries, value is: {signal}")
+                else:
+                    frame.write(signal[timestamp], self._values[signal])
+                    print(f"This is a TimeSeries, value is: {signal}, time is: {timestamp}")
 
             return frame.as_view()
 
