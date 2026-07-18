@@ -1,4 +1,4 @@
-from data_tools.localization import TemporalLocalization
+from data_tools.localization import TemporalLocalization # type: ignore
 from db.telemetrydb.protocols import TimeProvider
 from datetime import datetime, timedelta, timezone
 from influxdb_client import InfluxDBClient
@@ -73,6 +73,12 @@ class RealtimeIngressQuerier:
 
     @staticmethod
     def _flux_time(dt: datetime) -> str:
+        """ Creates a timestamp for Flux, query language of InfluxDB
+
+        :param datetime dt: original timestamp
+        :raises ValueError: Timestamp must be timezone aware
+        :return str: Timestamp for Flux
+        """        
         if dt.tzinfo is None:
             raise ValueError("timestamp must be timezone-aware")
         return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -83,7 +89,12 @@ class RealtimeIngressQuerier:
         )
         return field_filter
 
-    def _build_last_value_query(self, stop_time: datetime):
+    def _build_last_value_query(self, stop_time: datetime) -> str:
+        """ Creates the InfluxDB query for the 10 seconds before the stop time
+
+        :param datetime stop_time: Stop time for the query
+        :return str: Influx DB query
+        """        
         stop_flux = self._flux_time(stop_time - self._timezone_fix)
         start_time = self._flux_time(stop_time - self._timezone_fix - timedelta(seconds=10))
 
@@ -98,6 +109,11 @@ class RealtimeIngressQuerier:
                     '''.strip()
 
     def _process_query(self, query: str):
+        """ Processes the InfluxDB query and returns a list of fields alongside their values and time.
+
+        :param str query: InfluxDB query
+        :return dict[str, dict[str, Any] | None]: List of fields alongside their values and time
+        """        
         _out: dict[str, dict[str, Any] | None] = {
             _field: None for _field in self._fields
         }
@@ -125,6 +141,10 @@ class RealtimeIngressQuerier:
         return _out
 
     def get_last_values(self) -> dict[str, dict[str, Any] | None]:
+        """ Returns the latest values from InfluxDB
+
+        :return dict[str, dict[str, Any] | None]: List of fields alongside their values and time
+        """        
         query = self._build_last_value_query(self.now())
         out = self._process_query(query)
         return out
