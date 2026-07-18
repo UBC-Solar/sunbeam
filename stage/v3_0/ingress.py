@@ -9,10 +9,10 @@ from stage.stage import Stage
 class Ingress(Stage):
     inputs: ClassVar[list[str]] = []
 
-    def __init__(self, output_signals: list[str], frequency_hz: float, time_provider: TimeProvider, bucket: str = None, organization: str = None, token: str = None, url: str = None) -> None:
+    def __init__(self, output_signals: list[str], frequency: float, time_provider: TimeProvider, bucket: str = None, organization: str = None, token: str = None, url: str = None) -> None:
         super().__init__()
         self._output_signals = output_signals
-        self._frequency_hz = frequency_hz
+        self._frequency = frequency
 
         self._localized_output_signals = []
         self._localized_signal_to_signal = {}
@@ -33,7 +33,7 @@ class Ingress(Stage):
 
     @property
     def frequency(self) -> float:
-        return self._frequency_hz
+        return self._frequency
 
     @property
     def outputs(self) -> list[str]:
@@ -41,7 +41,7 @@ class Ingress(Stage):
 
     @property
     def stage_name(self):
-        return f"Ingress_{self._frequency_hz}Hz"
+        return f"Ingress_{self._frequency}Hz"
 
     def run(self, input_frame: FrameView) -> Frame:
         new_frame = Frame.from_view(input_frame)

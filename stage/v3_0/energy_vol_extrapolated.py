@@ -10,7 +10,7 @@ class EnergyVOLExtrapolated(Stage):
     stage_name: ClassVar[str] = "EnergyVOLExtrapolated"
     inputs: ClassVar[list[str]] = [CanonicalName.MinimumModuleVoltage]
     outputs: ClassVar[list[str]] = [CanonicalName.EnergyVOLExtrapolated]
-    frequency_hz: ClassVar[float] = 10
+    frequency: ClassVar[float] = 10
 
     def __init__(self, **kwargs):
         config_path = Path(__file__).parent / "energy" / "battery_configuration.toml"

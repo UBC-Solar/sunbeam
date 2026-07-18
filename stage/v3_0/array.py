@@ -12,7 +12,7 @@ class Array(Stage):
         CanonicalName.MPPTInputCurrentB,
     ]
     outputs: ClassVar[list[str]] = [CanonicalName.ArrayPower]
-    frequency_hz: ClassVar[float] = 4
+    frequency: ClassVar[float] = 4
 
     def run(self, input_frame: FrameView) -> Frame:
         new_frame = Frame.from_view(input_frame)

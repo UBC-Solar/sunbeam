@@ -8,7 +8,7 @@ class IntegratedPackPower(Stage):
     stage_name: ClassVar[str] = "IntegratedPackPower"
     inputs: ClassVar[list[str]] = [CanonicalName.PackPower]
     outputs: ClassVar[list[str]] = [CanonicalName.IntegratedPackPower]
-    frequency_hz: ClassVar[float] = 5 
+    frequency: ClassVar[float] = 5 
 
     def __init__(self, **kwargs):
         self.total_energy = 0
@@ -20,7 +20,7 @@ class IntegratedPackPower(Stage):
         seconds_per_hour = 3600
 
         if self.last_timestamp is None:
-            dt = 1.0 / self.frequency_hz # for the first tick, estimate the period as we don't have two timestamps yet
+            dt = 1.0 / self.frequency # for the first tick, estimate the period as we don't have two timestamps yet
         else:
             dt = (input_frame.timestamp -  self.last_timestamp).total_seconds()
 

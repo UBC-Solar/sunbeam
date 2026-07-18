@@ -14,7 +14,7 @@ class LatitudeLongitude(Stage):
     stage_name: ClassVar[str] = "LatitudeLongitude"
     inputs: ClassVar[list[str]] = [CanonicalName.LatitudeRaw, CanonicalName.LongitudeRaw]
     outputs: ClassVar[list[str]] = [CanonicalName.LatitudeFiltered, CanonicalName.LongitudeFiltered]
-    frequency_hz: ClassVar[float] = 3
+    frequency: ClassVar[float] = 3
 
     def __init__(self, event_name: str | None = None, **kwargs):
         self.min_lat = self.max_lat = self.min_lon = self.max_lon = None
