@@ -108,7 +108,10 @@ class OrchestratedWorkerControl(WorkerControl):
             logger.warning("Failed to report metrics to server", exc_info=True)
 
     def complete(self, *, success: bool, message: Optional[str] = None) -> None:
-        self._client.complete(success=success, message=message)
+        try:
+            self._client.complete(success=success, message=message)
+        except requests.exceptions.RequestException:
+            logger.warning("Failed to report completion to server", exc_info=True)
 
     def _snapshot(self) -> tuple[Optional[str], Optional[str]]:
         with self._lock:
@@ -122,7 +125,7 @@ class OrchestratedWorkerControl(WorkerControl):
             now = time.monotonic()
 
             try:
-                if now - last_permission >= self._permission_interval_s:
+                if not self._stop_event.is_set() and now - last_permission >= self._permission_interval_s:
                     try:
                         permission = self._client.permission()
                     except requests.exceptions.ConnectionError:

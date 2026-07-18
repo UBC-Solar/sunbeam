@@ -5,6 +5,7 @@ services:
     image: timescale/timescaledb:2.14.2-pg16
     container_name: sunbeam-db
     restart: unless-stopped
+    init: true
     environment:
       POSTGRES_DB: telemetry
       POSTGRES_USER: telemetry
@@ -23,6 +24,7 @@ services:
     networks:
       - sunbeam-net
     container_name: sunbeam-server
+    init: true
     environment:
       PYTHONUNBUFFERED: "1"
     depends_on:
@@ -39,6 +41,7 @@ services:
     networks:
       - sunbeam-net
     container_name: sunbeam-dashboard
+    init: true
     build:
       context: ./dashboard
       dockerfile: Dockerfile
