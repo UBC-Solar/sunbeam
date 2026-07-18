@@ -1,5 +1,4 @@
 import logging
-import os
 import socket
 import uuid
 from collections.abc import Iterator
@@ -10,11 +9,12 @@ import docker
 from docker.errors import DockerException
 from sqlalchemy.orm import Session
 
+from config.context import Context
 from db.sunbeamdb.models import TERMINAL_WORKER_STATUSES, Event, WorkerRun, WorkerStatus
-from orchestration.services.metrics_cache import MetricsCache
+from server.services.metrics_cache import MetricsCache
 from stage.stage_library import StageLibrary
 
-logger = logging.getLogger("sunbeam.orchestrator")
+logger = logging.getLogger("sunbeam.server")
 
 
 def utcnow() -> datetime:
@@ -25,12 +25,7 @@ class WorkerService:
     def __init__(self) -> None:
         self._docker = docker.from_env()
         self._library = StageLibrary()
-
-        self._worker_network = os.environ.get("SUNBEAM_WORKER_NETWORK")
-        self._server_url = os.environ.get(
-            "SUNBEAM_WORKER_SERVER_URL",
-            "http://orchestrator:8000",
-        )
+        self._worker_network = Context().sunbeam_broker.worker_network
 
     def _validate_pipeline_edition(self, pipeline_edition: str) -> None:
         editions = list(self._library.pipeline_editions)
@@ -82,7 +77,6 @@ class WorkerService:
             "SUNBEAM_WORKER_RUN_ID": str(worker.id),
             "SUNBEAM_EVENT_NAME": event_name,
             "SUNBEAM_PIPELINE_EDITION": pipeline_edition,
-            "SUNBEAM_ORCHESTRATOR_URL": self._server_url,
             "SUNBEAM_CONFIGURATION_PROFILE": "debug",
         }
 
@@ -140,7 +134,7 @@ class WorkerService:
         worker.stop_requested = True
         worker.stop_requested_at = utcnow()
         worker.status = WorkerStatus.STOP_REQUESTED
-        worker.status_message = "Stop requested by orchestrator."
+        worker.status_message = "Stop requested by server."
 
         db.commit()
         db.refresh(worker)
@@ -159,7 +153,11 @@ class WorkerService:
         status_message: str | None,
         host: str | None,
     ) -> WorkerRun | None:
-        worker = db.get(WorkerRun, worker_id)
+        # Locked so this can't race the watchdog's own read-modify-write on
+        # the same row (see WatchdogService._resolve): whichever of the two
+        # commits first wins, and the other sees the committed terminal
+        # status on its own (post-lock) re-check and backs off.
+        worker = db.get(WorkerRun, worker_id, with_for_update=True)
         if worker is None:
             return None
 

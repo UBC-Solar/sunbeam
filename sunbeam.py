@@ -6,8 +6,6 @@ from sqlalchemy import create_engine
 from pipeline import Executor
 import argparse
 import logging
-import tomllib
-import config
 import os
 
 logger = logging.getLogger("sunbeam.worker")
@@ -30,7 +28,7 @@ class Sunbeam:
         resolved_control = control or ServerlessWorkerControl()
         is_orchestrated = isinstance(resolved_control, OrchestratedWorkerControl)
 
-        results = run_preflight_checks(self._engine, check_orchestrator=is_orchestrated)
+        results = run_preflight_checks(self._engine, check_server=is_orchestrated)
         failures = [r for r in results if not r.ok]
 
         if failures:
@@ -41,7 +39,7 @@ class Sunbeam:
                 resolved_control.complete(success=False, message=message)
             except Exception:
                 logger.warning(
-                    "Failed to report preflight failure to orchestrator", exc_info=True,
+                    "Failed to report preflight failure to server", exc_info=True,
                 )
 
             raise SystemExit(1)
@@ -112,11 +110,8 @@ if __name__ == "__main__":
     else:
         is_serverless = args.serverless
 
-    with open(config.CONTEXT_PATH, "rb") as f:
-        config_dict = tomllib.load(f)
-
-        service_type = ServiceType.Worker if is_worker else ServiceType.Client
-        Context.from_config(config_dict, service_type, configuration_profile)
+    service_type = ServiceType.Worker if is_worker else ServiceType.Client
+    Context.load(service_type, configuration_profile)
 
     logger.info(
         "Resolved worker configuration: %s",

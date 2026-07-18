@@ -22,7 +22,7 @@ class WorkerControl(ABC):
 
 class ServerlessWorkerControl(WorkerControl):
     """
-    Used when running locally without the orchestrator.
+    Used when running locally without the server.
     """
 
     def start(self) -> None:
@@ -105,7 +105,7 @@ class OrchestratedWorkerControl(WorkerControl):
         try:
             self._client.report_metrics(payload)
         except requests.exceptions.RequestException:
-            logger.warning("Failed to report metrics to orchestrator", exc_info=True)
+            logger.warning("Failed to report metrics to server", exc_info=True)
 
     def complete(self, *, success: bool, message: Optional[str] = None) -> None:
         self._client.complete(success=success, message=message)
@@ -127,7 +127,7 @@ class OrchestratedWorkerControl(WorkerControl):
                         permission = self._client.permission()
                     except requests.exceptions.ConnectionError:
                         permission = WorkerPermission(
-                            reason="Failed to connect to orchestrator.",
+                            reason="Failed to connect to server.",
                             allowed=False,
                         )
 
@@ -138,7 +138,7 @@ class OrchestratedWorkerControl(WorkerControl):
 
                         with self._lock:
                             self._status_message = (
-                                permission.reason or "Stop requested by orchestrator."
+                                permission.reason or "Stop requested by server."
                             )
 
                 if now - last_heartbeat >= self._heartbeat_interval_s:
@@ -149,7 +149,7 @@ class OrchestratedWorkerControl(WorkerControl):
 
             except Exception:
                 # Important design choice:
-                # Do NOT automatically kill the worker if the orchestrator is briefly unreachable.
+                # Do NOT automatically kill the worker if the server is briefly unreachable.
                 # Just keep trying. You can make this stricter later.
                 logger.exception("Worker control loop error")
 

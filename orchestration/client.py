@@ -25,7 +25,7 @@ class OrchestratorClient:
         raw_worker_id = worker_run_id or os.environ.get("SUNBEAM_WORKER_RUN_ID")
 
         if not self._base_url:
-            raise ValueError("Missing SUNBEAM_ORCHESTRATOR_URL")
+            raise ValueError("Missing sunbeam_broker configuration (check context.toml)")
 
         if raw_worker_id is None:
             raise ValueError("Missing SUNBEAM_WORKER_RUN_ID")

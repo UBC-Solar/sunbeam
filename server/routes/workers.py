@@ -7,8 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from db.sunbeamdb.models import WorkerRun, WorkerStatus
-from orchestration.deps import get_db
-from orchestration.schemas import (
+from server.deps import get_db
+from server.schemas import (
     LaunchWorkerRequest,
     WorkerCompleteRequest,
     WorkerHeartbeatRequest,
@@ -17,15 +17,24 @@ from orchestration.schemas import (
     WorkerPermissionResponse,
     WorkerRunRead,
 )
-from orchestration.services.worker_service import WorkerService
+from server.services.worker_service import WorkerService
 
-logger = logging.getLogger("sunbeam.orchestrator")
+logger = logging.getLogger("sunbeam.server")
 
 router = APIRouter(prefix="/workers", tags=["workers"])
 
 
+_worker_service: WorkerService | None = None
+
+
 def get_worker_service() -> WorkerService:
-    return WorkerService()
+    # A fresh WorkerService() opens its own docker.from_env() client that is
+    # never closed, so it must not be re-created per request. Reuse one for
+    # the lifetime of the process instead.
+    global _worker_service
+    if _worker_service is None:
+        _worker_service = WorkerService()
+    return _worker_service
 
 
 @router.get("", response_model=list[WorkerRunRead])

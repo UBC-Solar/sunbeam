@@ -126,7 +126,7 @@ class Executor:
             elif self._control.should_stop():
                 self._control.complete(
                     success=False,
-                    message="Worker stopped by orchestrator.",
+                    message="Worker stopped by server.",
                 )
                 logger.info("Stopped.")
 

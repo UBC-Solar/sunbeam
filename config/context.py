@@ -1,8 +1,12 @@
 import dataclasses
+import pathlib
+import tomllib
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from sqlalchemy import URL
+
+_CONTEXT_PATH = pathlib.Path(__file__).parent / "context.toml"
 
 
 def _redacted_dict(instance, secret_fields: set[str]) -> dict:
@@ -45,6 +49,7 @@ class SunbeamDB:
 class SunbeamBroker:
     broker_url: str
     broker_port: int
+    worker_network: str | None = None
 
     def build_url(self) -> str:
         return f"http://{self.broker_url}:{self.broker_port}"
@@ -94,6 +99,30 @@ class Context:
         )
 
         return ctx
+
+    @classmethod
+    def load(
+        cls,
+        service: ServiceType,
+        configuration_type: str | None = None,
+    ) -> "Context":
+        """
+        Load context.toml and configure the singleton, unless it has already
+        been configured and no explicit configuration_type override is given
+        (in which case the existing configuration is returned as-is). This
+        lets any module reach a ready-to-use Context on its own, without
+        needing to repeat the tomllib-load boilerplate or coordinate with
+        whichever code path configures Context first.
+        """
+        ctx = cls()
+
+        if ctx._sunbeam_db is not None and configuration_type is None:
+            return ctx
+
+        with open(_CONTEXT_PATH, "rb") as f:
+            config_dict = tomllib.load(f)
+
+        return cls.from_config(config_dict, service, configuration_type)
 
     @property
     def sunbeam_db(self) -> SunbeamDB:

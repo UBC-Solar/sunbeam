@@ -1,7 +1,7 @@
-from orchestration.routes import events, workers, pipeline_editions
-from orchestration.services.watchdog_service import WatchdogService
-from orchestration.preflight import check_docker, check_postgres
-from orchestration.db import engine as db_engine
+from server.routes import events, workers, pipeline_editions
+from server.services.watchdog_service import WatchdogService
+from server.preflight import check_docker, check_postgres
+from server.db import engine as db_engine
 from config import VehicleManager, EventManager, SignalManager
 from fastapi.middleware.cors import CORSMiddleware
 from config.context import Context, ServiceType
@@ -12,11 +12,9 @@ from db import create_schema
 from docker.errors import DockerException
 from fastapi import FastAPI, HTTPException
 from typing import Mapping
-import tomllib
 import pathlib
 import logging
 from contextlib import asynccontextmanager
-import config
 import docker
 
 logging.basicConfig(
@@ -24,7 +22,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 
-logger = logging.getLogger("sunbeam.orchestrator")
+logger = logging.getLogger("sunbeam.server")
 
 _watchdog: WatchdogService | None = None
 
@@ -50,7 +48,7 @@ async def lifespan(app: FastAPI):
     _watchdog.stop()
     on_shutdown()
 
-app = FastAPI(title="Sunbeam Orchestrator", lifespan=lifespan)
+app = FastAPI(title="Sunbeam Server", lifespan=lifespan)
 
 
 PROJECT_ROOT = pathlib.Path(__file__).parent.parent.absolute()
@@ -97,14 +95,11 @@ def on_shutdown():
     pass
 
 def on_startup() -> None:
-    with open(config.CONTEXT_PATH, "rb") as f:
-        config_dict = tomllib.load(f)
-        Context.from_config(config_dict, ServiceType.Broker)
+    Context.load(ServiceType.Broker)
 
-    logger.info("Resolved orchestrator configuration: %s", Context().describe())
+    logger.info("Resolved server configuration: %s", Context().describe())
 
-    database_url = Context().sunbeam_db.build_url()
-    engine = create_engine(database_url, echo=False)
+    engine = create_engine(Context().sunbeam_db.build_url(), echo=False)
 
     check_postgres(engine)
     check_docker()

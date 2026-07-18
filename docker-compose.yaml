@@ -19,21 +19,17 @@ services:
       timeout: 5s
       retries: 10
 
-  orchestrator:
+  server:
     networks:
       - sunbeam-net
-    container_name: sunbeam-orchestrator
+    container_name: sunbeam-server
     environment:
       PYTHONUNBUFFERED: "1"
-      SUNBEAM_DATABASE_URL: postgresql+psycopg://telemetry:telemetry@db:5432/telemetry
-      SUNBEAM_WORKER_NETWORK: sunbeam-net
-      SUNBEAM_WORKER_SERVER_URL: http://orchestrator:8000
-      SUNBEAM_WORKER_DB_URL: postgresql+psycopg://telemetry:telemetry@db:5432/telemetry
     depends_on:
       - db
     build:
       context: .
-      dockerfile: orchestration/Dockerfile
+      dockerfile: server/Dockerfile
     ports:
       - "8000:8000"
     volumes:
@@ -51,7 +47,7 @@ services:
     environment:
       VITE_API_BASE_URL: http://localhost:8000
     depends_on:
-      - orchestrator
+      - server
 
 volumes:
   telemetry_db_data:

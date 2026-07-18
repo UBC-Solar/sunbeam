@@ -42,7 +42,7 @@ class LoggingOutputManager:
     Headless equivalent of RichOutputManager: instead of redrawing a table in
     place, periodically emits a plain log line (which Docker captures
     correctly regardless of TTY) and pushes the same snapshot to the
-    orchestrator via the worker's control channel.
+    server via the worker's control channel.
     """
 
     def __init__(self, timing, control, *, interval_s: float = 5.0):

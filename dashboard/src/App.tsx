@@ -70,7 +70,7 @@ function App() {
       <h1>Sunbeam Orchestrator</h1>
       <p className="subtitle">Launch and monitor pipeline workers.</p>
 
-      {error && <div className="error-banner">Couldn't reach the orchestrator: {error}</div>}
+      {error && <div className="error-banner">Couldn't reach the server: {error}</div>}
       {!loaded && !error && <p className="text-muted">Loading…</p>}
 
       {loaded && (

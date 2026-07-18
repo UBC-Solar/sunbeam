@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from db.sunbeamdb.models import Event
-from orchestration.deps import get_db
+from server.deps import get_db
 
 
 router = APIRouter(prefix="/events", tags=["events"])
