@@ -228,9 +228,8 @@ class SeededEvent:
     signal_ids: dict[str, int]
 
 
-@pytest.fixture
-def seeded_event(engine) -> SeededEvent:
-    """A vehicle, an unprocessed event, and two signals ('speed', 'power')."""
+def seed_basic_event(engine) -> SeededEvent:
+    """Insert a vehicle, an unprocessed event, and two signals ('speed', 'power')."""
     with Session(engine) as session:
         vehicle = Vehicle(name="TestVehicle", description="test")
         session.add(vehicle)
@@ -269,3 +268,8 @@ def seeded_event(engine) -> SeededEvent:
             vehicle_id=vehicle.id,
             signal_ids=signal_ids,
         )
+
+
+@pytest.fixture
+def seeded_event(engine) -> SeededEvent:
+    return seed_basic_event(engine)

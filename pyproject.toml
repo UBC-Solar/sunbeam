@@ -44,6 +44,7 @@ test = [
     "fastapi>=0.138.0",
     "httpx2>=0.1",
     "docker>=7.1.0",
+    "testcontainers>=4.8",
 ]
 
 [tool.uv]
@@ -61,3 +62,7 @@ conflicts = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+    "postgres: needs a real Postgres via Docker; excluded by default, run with `pytest -m postgres`",
+]
+addopts = "-m 'not postgres'"
