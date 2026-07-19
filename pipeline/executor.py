@@ -2,58 +2,77 @@ from db.sunbeamdb.writer import EventWriter
 from db.sunbeamdb.queued_writer import QueuedEventWriter
 from sqlalchemy import Engine
 
+from pipeline.pipeline import Pipeline
 from pipeline.pipeline_generator import PipelineGenerator
+from pipeline.protocols import FrameWriter
 from config import EventManager
 from stage.stage_library import StageLibrary
 from pipeline.timing import TimingStats
 from pipeline.scheduler import Scheduler
 from pipeline.output import RichOutputManager, LoggingOutputManager
-from datetime import datetime
 from state.state import State
 import logging
 import threading
+import time
+from collections.abc import Callable
 from typing import Optional
 
 from orchestration.control import ServerlessWorkerControl, OrchestratedWorkerControl, WorkerControl
 
 logger = logging.getLogger("sunbeam.worker")
 
+
+def build_event_pipelines(
+        event_name: str,
+        event_manager: Optional[EventManager] = None,
+        stage_library: Optional[StageLibrary] = None,
+) -> tuple[list[Pipeline], list[Pipeline]]:
+    """
+    Build the compute and ingress pipelines for an event from its
+    configuration (events.toml + stage registry).
+    """
+    event_manager = event_manager or EventManager()
+    event_datetime = event_manager.get_event_date(event_name)
+    pipeline_stage_names = event_manager.get_stages_for_event(event_name)
+    stage_library = stage_library or StageLibrary(event_manager.get_event_pipeline_edition(event_name))
+
+    pipeline_stage_definitions = stage_library.get_stages_by_names(pipeline_stage_names)
+    kwargs = {"event_name": event_name}
+    pipeline_stages = [stage(**kwargs) for stage in pipeline_stage_definitions]
+
+    logger.info(
+        "Loaded %d stages for event %r: %s",
+        len(pipeline_stages), event_name, pipeline_stage_names,
+    )
+
+    return PipelineGenerator.generate_pipeline_from_nodes(
+        pipeline_stages,
+        event_datetime.date(),
+        stage_library=stage_library
+    )
+
+
 class Executor:
     def __init__(
             self,
-            event_name: str,
-            engine: Engine,
-            reprocess: bool = False,
-            control: Optional[WorkerControl] = None
+            pipelines: list[Pipeline],
+            ingress_pipelines: list[Pipeline],
+            writer: FrameWriter,
+            control: Optional[WorkerControl] = None,
+            *,
+            output_manager=None,
+            monotonic_ns: Callable[[], int] = time.monotonic_ns,
+            sleep: Callable[[float], None] = time.sleep,
     ):
         self._control = control or ServerlessWorkerControl()
-
-        writer = EventWriter(event_name, engine, reprocess=reprocess)
-        self._writer = QueuedEventWriter(writer)
-
-        event_manager = EventManager()
-        event_datetime: datetime = event_manager.get_event_date(event_name)
-        pipeline_stage_names = event_manager.get_stages_for_event(event_name)
-        stage_library = StageLibrary(event_manager.get_event_pipeline_edition(event_name))
-
-        pipeline_stage_definitions = stage_library.get_stages_by_names(pipeline_stage_names)
-        kwargs = {"event_name": event_name}
-        pipeline_stages = [stage(**kwargs) for stage in pipeline_stage_definitions]
-
-        logger.info(
-            "Loaded %d stages for event %r: %s",
-            len(pipeline_stages), event_name, pipeline_stage_names,
-        )
-
-        self._pipelines, self._ingress_pipelines = PipelineGenerator.generate_pipeline_from_nodes(
-            pipeline_stages,
-            event_datetime.date(),
-            stage_library=stage_library
-        )
+        self._writer = writer
+        self._pipelines = pipelines
+        self._ingress_pipelines = ingress_pipelines
+        self._output_manager = output_manager
         self._state = State()
 
         logger.info(
-            "Generated %d compute pipeline(s) and %d ingress pipeline(s): %s",
+            "Executor got %d compute pipeline(s) and %d ingress pipeline(s): %s",
             len(self._pipelines), len(self._ingress_pipelines),
             [p.name for p in [*self._pipelines, *self._ingress_pipelines]],
         )
@@ -65,11 +84,30 @@ class Executor:
 
         self._timing = TimingStats(pipelines_by_name)
         self._stopped = False
-        self._compute_scheduler = Scheduler(self._pipelines, observer=self._timing)
-        self._ingress_scheduler = Scheduler(self._ingress_pipelines, observer=self._timing)
+        self._compute_scheduler = Scheduler(
+            self._pipelines, observer=self._timing,
+            monotonic_ns=monotonic_ns, sleep=sleep,
+        )
+        self._ingress_scheduler = Scheduler(
+            self._ingress_pipelines, observer=self._timing,
+            monotonic_ns=monotonic_ns, sleep=sleep,
+        )
 
         self._ingress_crashed = threading.Event()
         self._ingress_crash_message: Optional[str] = None
+
+    @classmethod
+    def from_event(
+            cls,
+            event_name: str,
+            engine: Engine,
+            reprocess: bool = False,
+            control: Optional[WorkerControl] = None,
+    ) -> "Executor":
+        writer = QueuedEventWriter(EventWriter(event_name, engine, reprocess=reprocess))
+        pipelines, ingress_pipelines = build_event_pipelines(event_name)
+
+        return cls(pipelines, ingress_pipelines, writer, control)
 
     def is_stopped(self) -> bool:
         return self._stopped
@@ -94,6 +132,15 @@ class Executor:
             self._ingress_crash_message = str(exc)
             self._ingress_crashed.set()
 
+    def _resolve_output_manager(self):
+        if self._output_manager is not None:
+            return self._output_manager
+
+        if isinstance(self._control, OrchestratedWorkerControl):
+            return LoggingOutputManager(self._timing, self._control)
+
+        return RichOutputManager(self._timing)
+
     def run(self):
         logger.info("Starting worker control.")
         self._control.start()
@@ -102,10 +149,7 @@ class Executor:
         ingress_thread = threading.Thread(target=self._run_ingress_scheduler, daemon=True)
         ingress_thread.start()
 
-        if isinstance(self._control, OrchestratedWorkerControl):
-            output_manager_cm = LoggingOutputManager(self._timing, self._control)
-        else:
-            output_manager_cm = RichOutputManager(self._timing)
+        output_manager_cm = self._resolve_output_manager()
 
         try:
             logger.info("Starting compute scheduler.")
@@ -146,6 +190,10 @@ class Executor:
             raise
 
         finally:
+            # Whatever ended the compute scheduler (server stop, ingress
+            # crash, or a compute exception), tell the ingress scheduler to
+            # exit too — otherwise the join below waits out its full timeout.
+            self._control.request_stop()
             self._control.stop()
-            # Only works well if ingress scheduler can actually exit.
             ingress_thread.join(timeout=5)
+            self._writer.close()

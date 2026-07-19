@@ -2,11 +2,11 @@ from collections.abc import Generator
 
 from sqlalchemy.orm import Session
 
-from server.db import SessionLocal
+from server.db import get_session_factory
 
 
 def get_db() -> Generator[Session, None, None]:
-    db = SessionLocal()
+    db = get_session_factory()()
     try:
         yield db
     finally:

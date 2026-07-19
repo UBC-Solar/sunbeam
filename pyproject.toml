@@ -35,6 +35,17 @@ v3_0 = [
 ]
 v3_1 = []
 
+[dependency-groups]
+# Everything the full test suite needs on top of the executor+v3_0 extras:
+# server-side tests exercise FastAPI routes and mock the Docker SDK.
+test = [
+    "pytest>=9.1.1",
+    "pytest-mock>=3.15.1",
+    "fastapi>=0.138.0",
+    "httpx2>=0.1",
+    "docker>=7.1.0",
+]
+
 [tool.uv]
 conflicts = [
     [

@@ -20,7 +20,7 @@ class OrchestratorClient:
         base_url: Optional[str] = None,
         worker_run_id: Optional[str | uuid.UUID] = None,
     ) -> None:
-        self._base_url = Context().sunbeam_broker.build_url()
+        self._base_url = base_url or Context().sunbeam_broker.build_url()
 
         raw_worker_id = worker_run_id or os.environ.get("SUNBEAM_WORKER_RUN_ID")
 

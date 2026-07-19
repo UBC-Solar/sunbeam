@@ -14,6 +14,7 @@ class WorkerControl(ABC):
     def start(self) -> None: ...
     def stop(self) -> None: ...
     def should_stop(self) -> bool: ...
+    def request_stop(self, reason: Optional[str] = None) -> None: ...
     def set_stage(self, stage: Optional[str]) -> None: ...
     def set_message(self, message: Optional[str]) -> None: ...
     def heartbeat_now(self, *, status: str = "running") -> None: ...
@@ -25,6 +26,9 @@ class ServerlessWorkerControl(WorkerControl):
     Used when running locally without the server.
     """
 
+    def __init__(self) -> None:
+        self._stop_requested = threading.Event()
+
     def start(self) -> None:
         pass
 
@@ -32,7 +36,10 @@ class ServerlessWorkerControl(WorkerControl):
         pass
 
     def should_stop(self) -> bool:
-        return False
+        return self._stop_requested.is_set()
+
+    def request_stop(self, reason: Optional[str] = None) -> None:
+        self._stop_requested.set()
 
     def set_stage(self, stage: Optional[str]) -> None:
         pass
@@ -57,10 +64,12 @@ class OrchestratedWorkerControl(WorkerControl):
         *,
         heartbeat_interval_s: float = 1.0,
         permission_interval_s: float = 1.0,
+        poll_interval_s: float = 0.1,
     ) -> None:
         self._client = client
         self._heartbeat_interval_s = heartbeat_interval_s
         self._permission_interval_s = permission_interval_s
+        self._poll_interval_s = poll_interval_s
 
         self._stop_event = threading.Event()
         self._shutdown_event = threading.Event()
@@ -84,6 +93,17 @@ class OrchestratedWorkerControl(WorkerControl):
 
     def should_stop(self) -> bool:
         return self._stop_event.is_set()
+
+    def request_stop(self, reason: Optional[str] = None) -> None:
+        """
+        Stop initiated locally by the worker itself (e.g. a crashed scheduler),
+        as opposed to a stop the server requested via the permission poll.
+        """
+        self._stop_event.set()
+
+        if reason is not None:
+            with self._lock:
+                self._status_message = reason
 
     def set_stage(self, stage: Optional[str]) -> None:
         with self._lock:
@@ -156,4 +176,4 @@ class OrchestratedWorkerControl(WorkerControl):
                 # Just keep trying. You can make this stricter later.
                 logger.exception("Worker control loop error")
 
-            time.sleep(0.1)
+            time.sleep(self._poll_interval_s)

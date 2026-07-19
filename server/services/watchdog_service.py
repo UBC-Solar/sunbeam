@@ -6,7 +6,7 @@ import docker
 from docker.errors import DockerException
 
 from db.sunbeamdb.models import TERMINAL_WORKER_STATUSES, WorkerRun, WorkerStatus
-from server.db import SessionLocal
+from server.db import get_session_factory
 from server.services.metrics_cache import MetricsCache
 
 logger = logging.getLogger("sunbeam.server.watchdog")
@@ -37,12 +37,17 @@ class WatchdogService:
     def __init__(
         self,
         *,
+        docker_client=None,
+        session_factory=None,
         poll_interval_s: float = 5.0,
         heartbeat_timeout_s: float = 10.0,
         startup_grace_s: float = 60.0,
         stop_grace_s: float = 30.0,
     ) -> None:
-        self._docker = docker.from_env()
+        self._docker = docker_client if docker_client is not None else docker.from_env()
+        # A zero-arg callable returning a Session; resolved lazily so tests
+        # never touch the real database configuration.
+        self._session_factory = session_factory
         self._poll_interval_s = poll_interval_s
         self._heartbeat_timeout_s = heartbeat_timeout_s
         self._startup_grace_s = startup_grace_s
@@ -71,8 +76,12 @@ class WatchdogService:
 
             self._shutdown_event.wait(self._poll_interval_s)
 
+    def _make_session(self):
+        factory = self._session_factory or get_session_factory()
+        return factory()
+
     def _sweep(self) -> None:
-        db = SessionLocal()
+        db = self._make_session()
         try:
             workers = (
                 db.query(WorkerRun)

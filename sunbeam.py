@@ -44,7 +44,7 @@ class Sunbeam:
 
             raise SystemExit(1)
 
-        executor = Executor(
+        executor = Executor.from_event(
             event_name,
             self._engine,
             reprocess=reprocess,

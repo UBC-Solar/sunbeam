@@ -13,20 +13,25 @@ from sqlalchemy import (
     Text,
     func,
     UniqueConstraint,
-    Enum
+    Enum,
+    Uuid,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID
 import uuid
 
 class Base(DeclarativeBase):
     pass
 
 
+# BIGINT on Postgres; plain INTEGER on SQLite, where only "INTEGER PRIMARY
+# KEY" columns get rowid autoincrement semantics.
+BigIntegerPK = BigInteger().with_variant(Integer, "sqlite")
+
+
 class Vehicle(Base):
     __tablename__ = "vehicle"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigIntegerPK, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
@@ -41,7 +46,7 @@ class EventStatus(enum.Enum):
 class Event(Base):
     __tablename__ = "event"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigIntegerPK, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicle.id"), nullable=False)
 
@@ -58,7 +63,7 @@ class Event(Base):
 class Signal(Base):
     __tablename__ = "signal"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigIntegerPK, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     unit: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     source: Mapped[str] = mapped_column(String(32), nullable=False)  # raw, derived
@@ -146,8 +151,10 @@ class WorkerRun(Base):
 
     __tablename__ = "worker_run"
 
+    # sqlalchemy.Uuid is dialect-agnostic: native UUID on Postgres, CHAR(32)
+    # elsewhere (e.g. SQLite in tests).
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4,
     )

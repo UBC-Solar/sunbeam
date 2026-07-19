@@ -1,7 +1,7 @@
 from server.routes import events, workers, pipeline_editions
 from server.services.watchdog_service import WatchdogService
 from server.preflight import check_docker, check_postgres
-from server.db import engine as db_engine
+from server.db import get_engine
 from config import VehicleManager, EventManager, SignalManager
 from fastapi.middleware.cors import CORSMiddleware
 from config.context import Context, ServiceType
@@ -48,22 +48,8 @@ async def lifespan(app: FastAPI):
     _watchdog.stop()
     on_shutdown()
 
-app = FastAPI(title="Sunbeam Server", lifespan=lifespan)
-
 
 PROJECT_ROOT = pathlib.Path(__file__).parent.parent.absolute()
-
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
 def build_workers() -> Mapping[str, PipelineWorker]:
@@ -115,10 +101,9 @@ def on_startup() -> None:
     build_workers()
 
 
-@app.get("/health")
 def health() -> dict[str, str]:
     try:
-        with db_engine.connect() as conn:
+        with get_engine().connect() as conn:
             conn.execute(text("SELECT 1"))
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"PostgreSQL unavailable: {exc}")
@@ -135,6 +120,31 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-app.include_router(events.router)
-app.include_router(workers.router)
-app.include_router(pipeline_editions.router)
+def create_app(lifespan=lifespan) -> FastAPI:
+    """
+    Build the FastAPI application. Tests can pass lifespan=None to skip the
+    Postgres/Docker startup checks and override dependencies instead.
+    """
+    app = FastAPI(title="Sunbeam Server", lifespan=lifespan)
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    app.get("/health")(health)
+
+    app.include_router(events.router)
+    app.include_router(workers.router)
+    app.include_router(pipeline_editions.router)
+
+    return app
+
+
+app = create_app()

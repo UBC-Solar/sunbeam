@@ -1,4 +1,4 @@
-from sqlalchemy import select, Engine
+from sqlalchemy import select, insert, Engine
 from sqlalchemy.orm import Session
 from db.sunbeamdb.models import Event, EventStatus, Signal, AlignedSample
 from state.frame import FrameView
@@ -30,18 +30,25 @@ class EventWriter:
             self._event_name = event_name
 
     def write_frame(self, frame: FrameView):
-        with Session(self._engine) as session:
-            i = 0
-            for signal, value in frame:
-                sample = AlignedSample(
-                    event_id=self._event_id,
-                    ts=frame.timestamp,
-                    signal_id=self._signal_names_to_id[signal],
-                    value_f64=value
-                )
-                session.add(sample)
-                i += 1
+        self.write_frames([frame])
 
+    def write_frames(self, frames: list[FrameView]):
+        rows = [
+            {
+                "event_id": self._event_id,
+                "ts": frame.timestamp,
+                "signal_id": self._signal_names_to_id[signal],
+                "value_f64": value,
+            }
+            for frame in frames
+            for signal, value in frame
+        ]
+
+        if not rows:
+            return
+
+        with Session(self._engine) as session:
+            session.execute(insert(AlignedSample), rows)
             session.commit()
 
     def __del__(self):

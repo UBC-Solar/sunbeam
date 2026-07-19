@@ -21,11 +21,26 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+_UNSET = object()
+
+
 class WorkerService:
-    def __init__(self) -> None:
-        self._docker = docker.from_env()
-        self._library = StageLibrary()
-        self._worker_network = Context().sunbeam_broker.worker_network
+    def __init__(
+        self,
+        docker_client=None,
+        *,
+        library: StageLibrary | None = None,
+        worker_network: str | None = _UNSET,
+    ) -> None:
+        self._docker = docker_client if docker_client is not None else docker.from_env()
+        self._library = library or StageLibrary()
+        # None is a valid override (no network), so only fall back to the
+        # configured Context when the caller passed nothing at all.
+        self._worker_network = (
+            Context().sunbeam_broker.worker_network
+            if worker_network is _UNSET
+            else worker_network
+        )
 
     def _validate_pipeline_edition(self, pipeline_edition: str) -> None:
         editions = list(self._library.pipeline_editions)
@@ -46,9 +61,9 @@ class WorkerService:
         pipeline_edition: str,
     ) -> WorkerRun:
         event = db.get(Event, event_id)
-        event_name = event.name
         if event is None:
             raise ValueError(f"No event exists with id={event_id}")
+        event_name = event.name
 
         self._validate_pipeline_edition(pipeline_edition)
 

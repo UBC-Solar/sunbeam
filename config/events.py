@@ -9,6 +9,17 @@ import tomllib
 from datetime import datetime
 
 
+def _as_datetime(value) -> datetime | None:
+    """
+    events.toml stores timestamps as quoted ISO strings, which tomllib returns
+    as str. Parse them before they reach a DateTime column: psycopg happens to
+    coerce strings, but other backends (and SQLite in tests) reject them.
+    """
+    if value is None or isinstance(value, datetime):
+        return value
+    return datetime.fromisoformat(value)
+
+
 class EventManager:
     def __init__(self):
         with open(EVENTS_PATH, "rb") as f:
@@ -34,8 +45,8 @@ class EventManager:
                     session,
                     name=raw_event["name"],
                     vehicle_id=vehicle.id,
-                    starts_at=raw_event["starts_at"],
-                    ends_at=raw_event.get("ends_at"),
+                    starts_at=_as_datetime(raw_event["starts_at"]),
+                    ends_at=_as_datetime(raw_event.get("ends_at")),
                     description=raw_event["description"],
                     pipeline_edition=raw_event["pipeline_edition"]
                 )
