@@ -8,3 +8,13 @@ data/
 **/*.log
 **/*.bin
 **/__pycache__/
+
+# database files
+db/mongo_data
+db/pg_data
+
+# to help with development
+/sunbeam_old
+
+# tests
+.coverage

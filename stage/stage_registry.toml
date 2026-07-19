@@ -5,10 +5,6 @@ name = "Brightside 2024"
 module = "stage.v3_0.ingress"
 class = "Ingress"
 
-[v3_0.Power]
-module = "stage.v3_0.power"
-class = "Power"
-
 [v3_0.Efficiency]
 module = "stage.v3_0.efficiency"
 class = "Efficiency"
@@ -16,3 +12,31 @@ class = "Efficiency"
 [v3_0.MotorSpeed]
 module = "stage.v3_0.motor_speed"
 class = "MotorSpeed"
+
+[v3_0.Array]
+module = "stage.v3_0.array"
+class = "Array"
+
+[v3_0.MotorPower]
+module = "stage.v3_0.motor_power"
+class = "MotorPower"
+
+[v3_0.PackPower]
+module = "stage.v3_0.pack_power"
+class = "PackPower"
+
+[v3_0.IntegratedPackPower]
+module = "stage.v3_0.integrated_pack_power"
+class = "IntegratedPackPower"
+
+[v3_0.EnergyVOLExtrapolated]
+module = "stage.v3_0.energy_vol_extrapolated"
+class = "EnergyVOLExtrapolated"
+
+[v3_0.EnergyFromIntegratedPower]
+module = "stage.v3_0.energy_from_integrated_power"
+class = "EnergyFromIntegratedPower"
+
+[v3_0.LatitudeLongitude]
+module = "stage.v3_0.latitude_longitude"
+class = "LatitudeLongitude"
