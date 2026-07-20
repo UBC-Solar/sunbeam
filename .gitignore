@@ -20,3 +20,4 @@ db/pg_data
 
 # tests
 .coverage
+*.egg-info/

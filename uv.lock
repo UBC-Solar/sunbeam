@@ -5,8 +5,8 @@ conflicts = [[
     { package = "sunbeam", extra = "v3-0" },
     { package = "sunbeam", extra = "v3-1" },
 ], [
-    { package = "sunbeam", extra = "broker" },
     { package = "sunbeam", extra = "executor" },
+    { package = "sunbeam", extra = "server" },
 ]]
 
 [[package]]
@@ -47,7 +47,7 @@ version = "4.14.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "idna" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-7-sunbeam-broker' and extra == 'extra-7-sunbeam-executor') or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-server') or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/61/cc/a381afa6efea9f496eff839d4a6a1aed3bfafc7b3ab4b0d1b243a12573dd/anyio-4.14.2.tar.gz", hash = "sha256:cfa139f3ed1a23ee8f88a145ddb5ac7605b8bbfd8592baacd7ce3d8bb4313c7f", size = 260176, upload-time = "2026-07-12T20:29:07.082Z" }
 wheels = [
@@ -300,7 +300,7 @@ name = "docker"
 version = "7.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pywin32", marker = "sys_platform == 'win32' or (extra == 'extra-7-sunbeam-broker' and extra == 'extra-7-sunbeam-executor') or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
+    { name = "pywin32", marker = "sys_platform == 'win32' or (extra == 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-server') or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
     { name = "requests" },
     { name = "urllib3" },
 ]
@@ -433,7 +433,7 @@ dependencies = [
     { name = "httpcore2" },
     { name = "idna" },
     { name = "truststore" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-7-sunbeam-broker' and extra == 'extra-7-sunbeam-executor') or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-server') or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a3/4a/129b2e21b90ac2985d3928d96792bccc39bc6dfe796c5eee2d8ec06d4105/httpx2-2.7.0.tar.gz", hash = "sha256:8b30709aed5c8465b0dd3b95c09ce301c8f79e7e7a2d00ab0af551e0d0375b07", size = 94487, upload-time = "2026-07-14T20:40:02.318Z" }
 wheels = [
@@ -684,7 +684,7 @@ version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ast-serialize" },
-    { name = "librt", marker = "platform_python_implementation != 'PyPy' or (extra == 'extra-7-sunbeam-broker' and extra == 'extra-7-sunbeam-executor') or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
+    { name = "librt", marker = "platform_python_implementation != 'PyPy' or (extra == 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-server') or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
     { name = "mypy-extensions" },
     { name = "pathspec" },
     { name = "typing-extensions" },
@@ -900,8 +900,8 @@ name = "psycopg"
 version = "3.3.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "(python_full_version < '3.13' and extra == 'extra-7-sunbeam-broker') or (python_full_version < '3.13' and extra == 'extra-7-sunbeam-executor') or (python_full_version < '3.13' and extra == 'extra-7-sunbeam-v3-0') or (extra == 'extra-7-sunbeam-broker' and extra == 'extra-7-sunbeam-executor') or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
-    { name = "tzdata", marker = "(sys_platform == 'win32' and extra == 'extra-7-sunbeam-broker') or (sys_platform == 'win32' and extra == 'extra-7-sunbeam-executor') or (sys_platform == 'win32' and extra == 'extra-7-sunbeam-v3-0') or (sys_platform != 'win32' and extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1') or (extra == 'extra-7-sunbeam-broker' and extra == 'extra-7-sunbeam-executor') or (extra == 'extra-7-sunbeam-broker' and extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
+    { name = "typing-extensions", marker = "(python_full_version < '3.13' and extra == 'extra-7-sunbeam-executor') or (python_full_version < '3.13' and extra == 'extra-7-sunbeam-server') or (python_full_version < '3.13' and extra == 'extra-7-sunbeam-v3-0') or (extra == 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-server') or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
+    { name = "tzdata", marker = "(sys_platform == 'win32' and extra == 'extra-7-sunbeam-executor') or (sys_platform == 'win32' and extra == 'extra-7-sunbeam-server') or (sys_platform == 'win32' and extra == 'extra-7-sunbeam-v3-0') or (sys_platform != 'win32' and extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1') or (extra == 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-server') or (extra == 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/db/2f/cb91e5502ec9de1de6f1b76cfbf69531932725361168bb06963620c77e2e/psycopg-3.3.4.tar.gz", hash = "sha256:e21207764952cff81b6b8bdacad9a3939f2793367fdac2987b3aac36a651b5bc", size = 165799, upload-time = "2026-05-01T23:31:55.179Z" }
 wheels = [
@@ -1059,7 +1059,7 @@ name = "pytest"
 version = "9.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-7-sunbeam-broker' and extra == 'extra-7-sunbeam-executor') or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
+    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-server') or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
     { name = "iniconfig" },
     { name = "packaging" },
     { name = "pluggy" },
@@ -1075,7 +1075,7 @@ name = "pytest-cov"
 version = "7.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "coverage", marker = "(extra == 'extra-7-sunbeam-broker' and extra == 'extra-7-sunbeam-executor') or (extra != 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-v3-0') or (extra != 'extra-7-sunbeam-broker' and extra == 'extra-7-sunbeam-v3-0')" },
+    { name = "coverage", marker = "(extra == 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-server') or (extra != 'extra-7-sunbeam-server' and extra == 'extra-7-sunbeam-v3-0') or (extra != 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-v3-0')" },
     { name = "pluggy" },
     { name = "pytest" },
 ]
@@ -1301,7 +1301,7 @@ name = "sqlalchemy"
 version = "2.0.49"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "greenlet", marker = "platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64' or (extra == 'extra-7-sunbeam-broker' and extra == 'extra-7-sunbeam-executor') or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
+    { name = "greenlet", marker = "platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64' or (extra == 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-server') or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
     { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/09/45/461788f35e0364a8da7bda51a1fe1b09762d0c32f12f63727998d85a873b/sqlalchemy-2.0.49.tar.gz", hash = "sha256:d15950a57a210e36dd4cec1aac22787e2a4d57ba9318233e2ef8b2daf9ff2d5f", size = 9898221, upload-time = "2026-04-03T16:38:11.704Z" }
@@ -1335,7 +1335,7 @@ version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-7-sunbeam-broker' and extra == 'extra-7-sunbeam-executor') or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-server') or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/eb/e3/7c1dc7381d9f8ab7d854328ebfa884e62cb3f3d8549ddfd37c7814f42afa/starlette-1.3.1.tar.gz", hash = "sha256:05d0213193f2fbaae60e2ecb593b4add4262ad4e46536b54abe36f11a71724e0", size = 2703240, upload-time = "2026-06-12T09:23:11.602Z" }
 wheels = [
@@ -1348,7 +1348,15 @@ version = "0.1.0"
 source = { virtual = "." }
 
 [package.optional-dependencies]
-broker = [
+executor = [
+    { name = "networkx" },
+    { name = "psycopg" },
+    { name = "psycopg-binary" },
+    { name = "rich" },
+    { name = "sqlalchemy" },
+    { name = "ubc-solar-data-tools" },
+]
+server = [
     { name = "alembic" },
     { name = "coolname" },
     { name = "docker" },
@@ -1360,14 +1368,6 @@ broker = [
     { name = "sqlalchemy" },
     { name = "ubc-solar-data-tools" },
     { name = "uvicorn" },
-]
-executor = [
-    { name = "networkx" },
-    { name = "psycopg" },
-    { name = "psycopg-binary" },
-    { name = "rich" },
-    { name = "sqlalchemy" },
-    { name = "ubc-solar-data-tools" },
 ]
 v3-0 = [
     { name = "influxdb-client" },
@@ -1394,30 +1394,30 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "alembic", marker = "extra == 'broker'", specifier = ">=1.16" },
-    { name = "coolname", marker = "extra == 'broker'", specifier = ">=5.0.0" },
-    { name = "docker", marker = "extra == 'broker'", specifier = ">=7.1.0" },
-    { name = "fastapi", marker = "extra == 'broker'", specifier = ">=0.138.0" },
+    { name = "alembic", marker = "extra == 'server'", specifier = ">=1.16" },
+    { name = "coolname", marker = "extra == 'server'", specifier = ">=5.0.0" },
+    { name = "docker", marker = "extra == 'server'", specifier = ">=7.1.0" },
+    { name = "fastapi", marker = "extra == 'server'", specifier = ">=0.138.0" },
     { name = "influxdb-client", marker = "extra == 'v3-0'", specifier = ">=1.50.0" },
     { name = "networkx", marker = "extra == 'executor'", specifier = ">=3.6.1" },
-    { name = "psycopg", marker = "extra == 'broker'", specifier = ">=3.3.4" },
     { name = "psycopg", marker = "extra == 'executor'", specifier = ">=3.3.4" },
+    { name = "psycopg", marker = "extra == 'server'", specifier = ">=3.3.4" },
     { name = "psycopg", marker = "extra == 'v3-0'", specifier = ">=3.3.4" },
-    { name = "psycopg-binary", marker = "extra == 'broker'", specifier = ">=3.3.4" },
     { name = "psycopg-binary", marker = "extra == 'executor'", specifier = ">=3.3.4" },
-    { name = "pydantic", marker = "extra == 'broker'", specifier = ">=2.13.4" },
+    { name = "psycopg-binary", marker = "extra == 'server'", specifier = ">=3.3.4" },
+    { name = "pydantic", marker = "extra == 'server'", specifier = ">=2.13.4" },
     { name = "pytest", marker = "extra == 'v3-0'", specifier = ">=9.1.1" },
     { name = "pytest-cov", marker = "extra == 'v3-0'", specifier = ">=7.1.0" },
     { name = "pytest-mock", marker = "extra == 'v3-0'", specifier = ">=3.15.1" },
-    { name = "pyzmq", marker = "extra == 'broker'", specifier = ">=27.1.0" },
+    { name = "pyzmq", marker = "extra == 'server'", specifier = ">=27.1.0" },
     { name = "rich", marker = "extra == 'executor'", specifier = ">=15.0.0" },
-    { name = "sqlalchemy", marker = "extra == 'broker'", specifier = ">=2.0.49" },
     { name = "sqlalchemy", marker = "extra == 'executor'", specifier = ">=2.0.49" },
-    { name = "ubc-solar-data-tools", marker = "extra == 'broker'" },
+    { name = "sqlalchemy", marker = "extra == 'server'", specifier = ">=2.0.49" },
     { name = "ubc-solar-data-tools", marker = "extra == 'executor'", specifier = ">=2.0.1" },
-    { name = "uvicorn", marker = "extra == 'broker'", specifier = ">=0.49.0" },
+    { name = "ubc-solar-data-tools", marker = "extra == 'server'" },
+    { name = "uvicorn", marker = "extra == 'server'", specifier = ">=0.49.0" },
 ]
-provides-extras = ["broker", "executor", "v3-0", "v3-1"]
+provides-extras = ["server", "executor", "v3-0", "v3-1"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1506,7 +1506,7 @@ dependencies = [
     { name = "pytz" },
     { name = "requests" },
     { name = "scipy" },
-    { name = "solcast", marker = "extra == 'extra-7-sunbeam-broker' or extra == 'extra-7-sunbeam-executor' or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
+    { name = "solcast", marker = "extra == 'extra-7-sunbeam-executor' or extra == 'extra-7-sunbeam-server' or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
     { name = "sqlalchemy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ca/c4/4dd908fc7c814e7d5c44e66e4a8e26390b86ddf42c97373d197e6f7048ac/ubc_solar_data_tools-2.0.1.tar.gz", hash = "sha256:55d0dac3be91374e21599e3e67c7fdf9ccd3815aa7ef76f793b82ca883b46c37", size = 258337, upload-time = "2026-07-18T21:58:04.198Z" }

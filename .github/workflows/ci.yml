@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  # The broker and executor extras conflict; the test/dev groups carry the
+  # The server and executor extras conflict; the test/dev groups carry the
   # server-side packages (fastapi, docker) the test suite needs.
   UV_SYNC_ARGS: --extra executor --extra v3_0 --group test --group dev
 

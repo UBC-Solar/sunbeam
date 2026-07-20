@@ -22,7 +22,7 @@ def upgrade_database(engine: Engine, lock_timeout: str = "10s") -> None:
     the baseline first, then upgrade normally. Once every deployment has been
     stamped, the shim never triggers again and can eventually be deleted.
     """
-    # Imported lazily: alembic ships with the broker extra, and this module
+    # Imported lazily: alembic ships with the server extra, and this module
     # must stay importable in worker environments that do not install it.
     from alembic import command
     from alembic.config import Config

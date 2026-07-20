@@ -23,7 +23,7 @@ def _database_url() -> str:
       1. config.attributes["sunbeam_database_url"] (programmatic callers,
          e.g. server startup passing its own engine's URL)
       2. SUNBEAM_DATABASE_URL environment variable (CI, ad-hoc targets)
-      3. The broker configuration from context.toml (normal operation)
+      3. The server configuration from context.toml (normal operation)
     """
     url = config.attributes.get("sunbeam_database_url")
     if url:
@@ -36,7 +36,7 @@ def _database_url() -> str:
     from config.context import Context, ServiceType
 
     return (
-        Context.load(ServiceType.Broker)
+        Context.load(ServiceType.Server)
         .sunbeam_db.build_url()
         .render_as_string(hide_password=False)
     )

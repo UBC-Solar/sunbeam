@@ -1,12 +1,12 @@
 # API reference
 
-The broker (`server/main.py`, FastAPI) exposes four route groups:
+The server (`server/main.py`, FastAPI) exposes four route groups:
 `/events`, `/workers`, `/pipeline-editions`, and the telemetry data API
 (`/events/{event_name}/signals*`, also mounted under `/events`). All
 request/response bodies are JSON (Pydantic models in `server/schemas.py`)
 except the two SSE endpoints, which are `text/event-stream`.
 
-Base URL is whatever `context.toml`'s `[client].sunbeam-broker` resolves
+Base URL is whatever `context.toml`'s `[client].sunbeam-server` resolves
 to for your environment — `http://localhost:8000` for a local
 `docker compose up` or CLI run against the default profile. FastAPI's
 interactive docs are also always available at `/docs` (Swagger) and

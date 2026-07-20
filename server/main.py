@@ -81,7 +81,7 @@ def on_shutdown():
     pass
 
 def on_startup() -> None:
-    Context.load(ServiceType.Broker)
+    Context.load(ServiceType.Server)
 
     logger.info("Resolved server configuration: %s", Context().describe())
 

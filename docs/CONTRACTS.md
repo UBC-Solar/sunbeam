@@ -69,10 +69,10 @@ sharing a Python dependency — which is exactly why `server`'s test suite
 (`tests/infrastructure/test_worker_service.py`,
 `test_watchdog_service.py`) never imports `orchestration` either, and why
 a worker container's image never installs `server`'s dependencies (the
-`broker`/`executor` `uv` extras are mutually exclusive — see
+`server`/`executor` `uv` extras are mutually exclusive — see
 [`USAGE.md`](USAGE.md#dependency-groups-and-why-they-exist)). The same
 logic is why `server` has no edge to `pipeline` or `state` at all: the
-broker never runs a pipeline, so it has nothing to import from either.
+server never runs a pipeline, so it has nothing to import from either.
 
 `pipeline` and `server` are the two modules nothing else imports — they're
 each assembled into one of the two entrypoints described in the next
@@ -91,7 +91,7 @@ imports `server`, and (as above) `server` never imports `pipeline`,
                                                              │  /events/{name}/data (query + stream)
                                                              ▼
 ┌──────────────────┐     HTTP: register,          ┌───────────────────────┐  Docker API: launch,
-│     Worker       │     heartbeat,               │       Broker          │  inspect logs, kill    ┌────────────────┐
+│     Worker       │     heartbeat,               │       Server          │  inspect logs, kill    ┌────────────────┐
 │  (sunbeam.py,    │◄─── permission, ──────────►  │   (server/, one       │◄──────────────────────►│  Docker daemon │
 │  one process     │     complete, metrics        │    FastAPI process)   │                        └────────────────┘
 │  per running     │     (skipped entirely        └─────────┬─────────────┘ 
@@ -113,34 +113,34 @@ imports `server`, and (as above) `server` never imports `pipeline`,
 Two relationships worth spelling out because they don't fit neatly as a
 single arrow above: when a worker is launched from the dashboard rather
 than run by hand, the "Worker" box is a **container the Docker daemon is
-running on the Broker's behalf** — the "Docker API" arrow is how the
-Broker *creates, inspects, and kills* that container, not a separate
+running on the Server's behalf** — the "Docker API" arrow is how the
+Server *creates, inspects, and kills* that container, not a separate
 process with its own connections; the worker process inside still talks to
-Postgres/InfluxDB and to the Broker exactly as drawn. And the Broker and
+Postgres/InfluxDB and to the Server exactly as drawn. And the Server and
 every Worker connect to Postgres **directly and independently** — the
-Broker is not a proxy for worker writes; `aligned_sample` rows never pass
-through the Broker process at all. See
+Server is not a proxy for worker writes; `aligned_sample` rows never pass
+through the Server process at all. See
 [`USAGE.md`](USAGE.md#the-three-ways-a-cli-worker-can-run) for the three
 ways a worker can come to exist (dashboard-launched container,
-by-hand-and-registered, or fully `--serverless` with no Broker contact),
+by-hand-and-registered, or fully `--serverless` with no Server contact),
 and [`API.md`](API.md#workers) for the HTTP calls behind the "HTTP:
 register, heartbeat, ..." arrow above, narrated as one lifecycle in the
 `orchestration` section just below.
 
-`sunbeam.py` (worker entrypoint) and `server/main.py` (broker entrypoint)
+`sunbeam.py` (worker entrypoint) and `server/main.py` (server entrypoint)
 are the two processes that assemble these modules; nothing in the import
 graph above imports either of them.
 
 ## `config`
 
 **Owns:** loading `*.toml` files into typed Python objects, and the
-process-wide `Context` singleton that answers "what database/broker am I
+process-wide `Context` singleton that answers "what database/server am I
 configured to talk to right now."
 
 **Provides:**
 - `Context` (`config/context.py`) — a singleton loaded once per process via
-  `Context.load(ServiceType.{Client,Worker,Broker}, configuration_type=None)`.
-  `ServiceType` selects which `[client]` / `[worker]` / `[broker]` block of
+  `Context.load(ServiceType.{Client,Worker,Server}, configuration_type=None)`.
+  `ServiceType` selects which `[client]` / `[worker]` / `[server]` block of
   `context.toml` to read; `configuration_type` selects `debug` vs
   `production` within that block (defaults to `context.toml`'s
   `[main].default_config`). After the first `.load()`, later calls with
@@ -185,6 +185,85 @@ the schema evolves):
 | `worker_run` | One row per worker process, ever — the orchestration/supervision record described in the paragraph below and in full in [`API.md`](API.md#workers). `kind` distinguishes a Docker-launched worker from a self-registered one (see [`USAGE.md`](USAGE.md#the-three-ways-a-cli-worker-can-run)). | Belongs to an `event`. |
 | `raw_sample` | Unaligned, as-ingested telemetry — one row per `(event, signal, timestamp)` as it arrived, with ingest metadata (`source_message_type`, `source_sequence`). Schema exists and is migrated/hypertabled, but **nothing in this repo currently writes to it** — no code constructs a `RawSample` today; treat it as reserved for a future raw-ingestion path rather than an active part of the pipeline. | TimescaleDB hypertable, chunked on `ts`. |
 | `aligned_sample` | **The actual pipeline output** — one row per `(event, signal, timestamp)` for every value a stage or ingress produced, written by every running worker via `EventWriter`/`QueuedEventWriter`. This is what the telemetry query and stream API (`server/routes/data.py`) reads back out. | TimescaleDB hypertable, chunked on `ts`, indexed on `(event_id, signal_id, ts DESC)` and `(event_id, ts DESC)` — exactly the access patterns `server/services/data_service.py` queries. |
+
+**TimescaleDB** 
+
+Sunbeam only has one database, and all the telemetry data goes into one table, `aligned_sample`. This might seem scary at first as we intend to use Sunbeam for **all** of UBC Solar's driving data, stretching from 2024 to now. 
+A naive search through every row for a specific data point is obviously O(n) with respect to the table size (where n is the number of rows), and so this is obviously unfeasible as the database grows. As such, we have an index on the `(event_id, signal_id, timestamp)` such that querying a specific datapoint (or a range) resolves as `O(log(n))` instead; much more feasible for even an enormous table.
+However, the index must fit in memory for it to be helpful, which, again, becomes infeasible as the database grows over the years. As such, we use `timescaledb`, a PostgreSQL extension, to deliberately break the `aligned_sample` table into chunks in the backend. Notably, queries do not, and need not, know about the chunking, and can treat the table as one; the extension routes queries for a timestamp to the correct chunk using metadata that it stores.
+Additionally, `timescaledb` optimizes writing to the table such that appending new rows in the expected fashion (monotonically increasing timestamps) is as fast as possible. 
+
+`raw_sample` and `aligned_sample` are the two tables that
+actually accumulate telemetry, and both are declared as TimescaleDB
+**hypertables** rather than plain Postgres tables. TimescaleDB is a
+Postgres extension (`CREATE EXTENSION timescaledb`, run once per database
+— both `db/sunbeamdb/init_db.py`'s `create_schema` and the Alembic
+baseline migration do this before anything else) that transparently splits
+one logical table into many physical **chunks**, each covering a
+contiguous slice of time, while every other part of the codebase —
+SQLAlchemy models, `EventWriter`, every query in `server/services/
+data_service.py` — continues to read and write it as an ordinary table
+through ordinary SQL. Converting a table is one call:
+`SELECT create_hypertable('aligned_sample', 'ts', chunk_time_interval =>
+INTERVAL '1 day', if_not_exists => TRUE)` (see the baseline migration and
+`init_db.py` for both calls; `if_not_exists => TRUE` is what makes it safe
+to run against an already-converted table, which is why both `create_schema`
+and a rerun `alembic upgrade` never fail on this step).
+
+Why bother, concretely, for this workload: telemetry is high-volume,
+append-mostly, and almost every read is a bounded time window (see
+`resolve_time_window` — literally every query the data API runs is
+"between two timestamps," "since a timestamp," or "the last N seconds").
+Chunking is what makes both sides of that fast at a scale a single giant
+table wouldn't stay fast at: writes only ever touch the current (usually
+tiny, always-in-memory) chunk's indexes rather than one gigantic index
+that keeps growing forever, and a windowed read lets Postgres's planner
+skip straight to the handful of chunks that overlap the requested range
+(**chunk exclusion**) instead of scanning or index-seeking across the
+table's entire history. It also means bulk lifecycle operations — dropping
+very old data, or compressing it — are, in principle, whole-chunk
+operations rather than row-by-row deletes; Sunbeam doesn't currently
+configure a retention or compression policy, so this is a capability
+available if the data volume ever calls for it, not something already
+running.
+
+**Things this choice obligates you to get right:**
+- **The chunk interval is a real tuning knob, not a constant to ignore.**
+  Both hypertables use `chunk_time_interval => INTERVAL '1 day'`. Too
+  small (say, minutes) and you accumulate a huge number of chunks, each
+  with its own planning/metadata overhead, which eventually costs more
+  than it saves. Too large (say, months) and the *current* chunk — the
+  one every live worker is actively writing into — grows large enough
+  that its indexes stop comfortably fitting in memory, which is exactly
+  the write-amplification problem hypertables exist to avoid in the first
+  place. One day is a reasonable default at today's scale (one vehicle,
+  one realtime event at a time); revisit it if the signal count, sample
+  frequency, or number of concurrently-running events grows by an order
+  of magnitude, or if query patterns shift toward very long (multi-month)
+  windows, which now touch proportionally more chunks.
+- **This is why the sample tables have composite primary keys instead of
+  a simple `id` column.** TimescaleDB requires every unique or primary key
+  constraint on a hypertable to include its partitioning column — here,
+  `ts`. That's the reason `AlignedSample`/`RawSample` are declared with
+  `PrimaryKeyConstraint("event_id", "signal_id", "ts", ...)` rather than
+  an autoincrementing surrogate key like every other table in the schema:
+  it isn't a stylistic inconsistency, it's a hard requirement of the
+  storage engine underneath them. Keep this in mind before "simplifying"
+  either table's primary key in a future migration.
+- **The Postgres image matters.** `docker-compose.yaml` runs
+  `timescale/timescaledb:2.14.2-pg16`, not plain `postgres`. Swapping it
+  for a vanilla Postgres image makes the `CREATE EXTENSION timescaledb`
+  step — and therefore every migration after the baseline — fail outright,
+  since the extension's shared library isn't present in the image at all.
+- **SQLite (the default test suite) cannot express any of this** — no
+  extensions, no hypertables, no chunk exclusion. `tests/infrastructure/`
+  builds its schema straight from the SQLAlchemy metadata and gets a
+  perfectly ordinary table; the hypertable conversion, the extension
+  bootstrap, and the composite-key requirement are only exercised by the
+  Postgres-marked suite (`tests/postgres/test_schema.py`; see
+  [`ALEMBIC.md`](ALEMBIC.md) and the [README](../README.md#running-the-tests)).
+  If you change anything about the hypertable setup, that's where the test
+  belongs — SQLite will pass regardless of whether the change is correct.
 
 **Contract:**
 - `db.sunbeamdb.models` is the single source of truth for the schema. Both
@@ -281,21 +360,21 @@ writer, and the `WorkerControl`).
 interface `Executor` drives — `should_stop`, `set_stage`, `complete`,
 etc.), its two/three implementations (`ServerlessWorkerControl`,
 `OrchestratedWorkerControl`), `OrchestratorClient` (the HTTP client that
-talks to the broker's `/workers/*` routes), and `bootstrap.build_control`
+talks to the server's `/workers/*` routes), and `bootstrap.build_control`
 (decides which `WorkerControl` a worker process should use — see
 [`USAGE.md`](USAGE.md) for the three resulting modes).
 
 **The control loop, concretely.** Once `Executor.run()` starts an
 `OrchestratedWorkerControl`, it spawns one background thread
-(`_run_control_loop`) that owns all contact with the broker for the rest
+(`_run_control_loop`) that owns all contact with the server for the rest
 of the worker's life — the scheduler threads never block on network I/O,
 they only ever check `control.should_stop()`, a plain in-memory flag. While
 that flag is unset, each iteration of the control thread (it wakes up
 roughly every 100ms) does two things on independent ~1-second timers:
 **asks permission** — polls `GET /workers/{id}/permission`; a `false`
-response (the broker requested a stop, or the worker is already in a
-terminal state) sets the local stop flag and stores the broker's `reason`
-as the worker's status message, and the *same thing happens* if the broker
+response (the server requested a stop, or the worker is already in a
+terminal state) sets the local stop flag and stores the server's `reason`
+as the worker's status message, and the *same thing happens* if the server
 is simply unreachable (a connection error is treated as "not allowed to
 continue," never as "assume everything's fine") — and **sends a
 heartbeat** — `POST /workers/{id}/heartbeat`, status `"running"`, carrying
@@ -303,9 +382,9 @@ whatever `current_stage` the executor last reported via
 `control.set_stage(...)` (called every time a pipeline produces output).
 The instant the stop flag flips — from a denied permission poll, or from a
 purely **local** stop such as a crashed ingress pipeline calling
-`request_stop()` directly, which never round-trips through the broker at
+`request_stop()` directly, which never round-trips through the server at
 all — both the permission poll and the heartbeat stop firing entirely; the
-worker simply goes quiet on this channel from the broker's point of view
+worker simply goes quiet on this channel from the server's point of view
 until it reports terminal status. Separately, and on a much slower cadence
 (every ~5 seconds, driven by the scheduler's `on_tick` callback rather than
 the control thread), the executor's output manager assembles a **metrics**
@@ -318,7 +397,7 @@ exits for any reason, `Executor.run()` calls `control.complete(success=,
 message=)` exactly once, `POST`ing to `/workers/{id}/complete`, before
 tearing down the control thread — this is the one call in the whole loop
 that always fires regardless of *why* the worker is stopping, and it's
-what the broker actually uses to mark the run terminal (a worker that goes
+what the server actually uses to mark the run terminal (a worker that goes
 quiet without ever calling `complete` is instead caught later by
 `WatchdogService`'s heartbeat-timeout sweep — see
 [`API.md`](API.md#workers) and `server/services/watchdog_service.py`).
@@ -339,7 +418,7 @@ quiet without ever calling `complete` is instead caught later by
 
 ## `server`
 
-**Owns:** the FastAPI broker process — the `WorkerRun`/`Event`/`Signal`
+**Owns:** the FastAPI server process — the `WorkerRun`/`Event`/`Signal`
 tables' authoritative writer, Docker container lifecycle for launched
 workers, the `WatchdogService` that reconciles worker state against
 container reality, and the read-only telemetry query/stream API
@@ -364,7 +443,7 @@ container reality, and the read-only telemetry query/stream API
   to Docker.
 - `server` imports `stage` (only `StageLibrary`, to discover pipeline
   editions and validate them — see `PipelineService`) and `db`. It does
-  *not* import `pipeline`, `state`, or `orchestration` — the broker never
+  *not* import `pipeline`, `state`, or `orchestration` — the server never
   runs a pipeline itself, only launches and supervises worker processes
   that do.
 

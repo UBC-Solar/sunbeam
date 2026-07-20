@@ -40,7 +40,7 @@ def build_control(serverless: bool, event_name: str) -> WorkerControl:
     except requests.exceptions.ConnectionError as exc:
         raise SystemExit(
             f"Could not register with the Sunbeam server at "
-            f"{Context().sunbeam_broker.build_url()}: {exc}\n"
+            f"{Context().sunbeam_server.build_url()}: {exc}\n"
             f"Is the server running? To run without a server, pass --serverless."
         ) from exc
 

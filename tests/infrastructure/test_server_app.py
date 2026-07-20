@@ -1,6 +1,6 @@
 import pytest
 
-# Server modules need the broker extra (fastapi, docker). Skip cleanly in
+# These tests need the `server` uv extra (fastapi, docker). Skip cleanly in
 # executor/worker environments where those are not installed.
 pytest.importorskip("fastapi")
 pytest.importorskip("docker")

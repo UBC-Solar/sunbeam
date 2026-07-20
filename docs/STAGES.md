@@ -203,7 +203,7 @@ convention, not enforced — but there is no reason to break it.
    runs for that event — no error, it's just absent from the graph.
 4. **If it depends on a new third-party package**, add that package to the
    pipeline edition's `[project.optional-dependencies]` extra in
-   `pyproject.toml` (e.g. `v3_0 = [...]`), *not* to `executor` or `broker`.
+   `pyproject.toml` (e.g. `v3_0 = [...]`), *not* to `executor` or `server`.
    This is the reason editions are separate `uv` extras at all — see
    [`USAGE.md`](USAGE.md#why-per-edition-dependency-groups) for the full
    rationale. If your stage needs nothing new, skip this step.

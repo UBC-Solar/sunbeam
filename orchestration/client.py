@@ -20,12 +20,12 @@ class OrchestratorClient:
         base_url: Optional[str] = None,
         worker_run_id: Optional[str | uuid.UUID] = None,
     ) -> None:
-        self._base_url = base_url or Context().sunbeam_broker.build_url()
+        self._base_url = base_url or Context().sunbeam_server.build_url()
 
         raw_worker_id = worker_run_id or os.environ.get("SUNBEAM_WORKER_RUN_ID")
 
         if not self._base_url:
-            raise ValueError("Missing sunbeam_broker configuration (check context.toml)")
+            raise ValueError("Missing sunbeam_server configuration (check context.toml)")
 
         if raw_worker_id is None:
             raise ValueError("Missing SUNBEAM_WORKER_RUN_ID")
@@ -44,7 +44,7 @@ class OrchestratorClient:
         Register this process as an external worker: the server creates the
         WorkerRun and issues its ID, and the returned client speaks for it.
         """
-        resolved_base_url = base_url or Context().sunbeam_broker.build_url()
+        resolved_base_url = base_url or Context().sunbeam_server.build_url()
 
         response = requests.post(
             f"{resolved_base_url}/workers/register",

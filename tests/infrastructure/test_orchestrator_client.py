@@ -26,23 +26,23 @@ def worker_id():
 
 @pytest.fixture
 def client(worker_id):
-    return OrchestratorClient(base_url="http://broker:9000", worker_run_id=worker_id)
+    return OrchestratorClient(base_url="http://server:9000", worker_run_id=worker_id)
 
 
 class TestClientConstruction:
     def test_explicit_base_url_and_worker_id(self, client, worker_id):
-        assert client._base_url == "http://broker:9000"
+        assert client._base_url == "http://server:9000"
         assert client._worker_run_id == str(worker_id)
 
     def test_worker_id_from_environment(self, monkeypatch):
         monkeypatch.setenv("SUNBEAM_WORKER_RUN_ID", "env-worker-id")
-        client = OrchestratorClient(base_url="http://broker:9000")
+        client = OrchestratorClient(base_url="http://server:9000")
         assert client._worker_run_id == "env-worker-id"
 
     def test_missing_worker_id_raises(self, monkeypatch):
         monkeypatch.delenv("SUNBEAM_WORKER_RUN_ID", raising=False)
         with pytest.raises(ValueError, match="SUNBEAM_WORKER_RUN_ID"):
-            OrchestratorClient(base_url="http://broker:9000")
+            OrchestratorClient(base_url="http://server:9000")
 
 
 class TestClientRequests:
@@ -58,7 +58,7 @@ class TestClientRequests:
         client.heartbeat(status="running", current_stage="ingress", status_message="ok")
 
         url, payload = calls[0]
-        assert url == f"http://broker:9000/workers/{worker_id}/heartbeat"
+        assert url == f"http://server:9000/workers/{worker_id}/heartbeat"
         assert payload["status"] == "running"
         assert payload["current_stage"] == "ingress"
         assert payload["status_message"] == "ok"
@@ -66,7 +66,7 @@ class TestClientRequests:
 
     def test_permission_parses_response(self, client, worker_id, monkeypatch):
         def fake_get(url, timeout=None):
-            assert url == f"http://broker:9000/workers/{worker_id}/permission"
+            assert url == f"http://server:9000/workers/{worker_id}/permission"
             return FakeResponse({"allowed": False, "reason": "stop", "stop_requested": True})
 
         monkeypatch.setattr("orchestration.client.requests.get", fake_get)
@@ -88,7 +88,7 @@ class TestClientRequests:
         client.complete(success=True, message="all done")
 
         url, payload = calls[0]
-        assert url == f"http://broker:9000/workers/{worker_id}/complete"
+        assert url == f"http://server:9000/workers/{worker_id}/complete"
         assert payload == {"success": True, "message": "all done"}
 
     def test_report_metrics_posts_payload(self, client, worker_id, monkeypatch):
@@ -103,7 +103,7 @@ class TestClientRequests:
         client.report_metrics({"idle_pct": 12.5})
 
         url, payload = calls[0]
-        assert url == f"http://broker:9000/workers/{worker_id}/metrics"
+        assert url == f"http://server:9000/workers/{worker_id}/metrics"
         assert payload == {"idle_pct": 12.5}
 
     def test_register_posts_and_returns_ready_client(self, monkeypatch):
@@ -119,17 +119,17 @@ class TestClientRequests:
         client = OrchestratorClient.register(
             event_name="realtime",
             pipeline_edition="v3_0",
-            base_url="http://broker:9000",
+            base_url="http://server:9000",
         )
 
         url, payload = calls[0]
-        assert url == "http://broker:9000/workers/register"
+        assert url == "http://server:9000/workers/register"
         assert payload["event_name"] == "realtime"
         assert payload["pipeline_edition"] == "v3_0"
         assert "host" in payload
 
         assert client._worker_run_id == issued_id
-        assert client._base_url == "http://broker:9000"
+        assert client._base_url == "http://server:9000"
 
     def test_register_http_error_propagates(self, monkeypatch):
         monkeypatch.setattr(
@@ -141,7 +141,7 @@ class TestClientRequests:
             OrchestratorClient.register(
                 event_name="nope",
                 pipeline_edition="v3_0",
-                base_url="http://broker:9000",
+                base_url="http://server:9000",
             )
 
     def test_http_error_propagates(self, client, monkeypatch):

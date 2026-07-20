@@ -36,10 +36,10 @@ TEST_CONFIG = {
                 "debug_time": "2026-07-01T00:00:00",
             }
         },
-        "sunbeam-broker": {
+        "sunbeam-server": {
             "test": {
-                "broker_url": "localhost",
-                "broker_port": 8000,
+                "server_url": "localhost",
+                "server_port": 8000,
                 "worker_network": None,
             }
         },
@@ -279,7 +279,7 @@ def seeded_event(engine) -> SeededEvent:
 def api_client(session_factory):
     """
     TestClient over create_app with the SQLite session and a fake Docker
-    client injected. Imports lazily so environments without the broker test
+    client injected. Imports lazily so environments without the server test
     deps can still collect this conftest.
     """
     pytest.importorskip("fastapi")

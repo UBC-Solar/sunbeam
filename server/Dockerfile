@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y build-essential git && rm -rf /var/lib/
 
 COPY pyproject.toml uv.lock ./
 RUN pip install uv
-RUN uv sync --locked --extra broker
+RUN uv sync --locked --extra server
 
 COPY . .
 

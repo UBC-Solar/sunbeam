@@ -38,7 +38,7 @@ class WorkerService:
         # None is a valid override (no network), so only fall back to the
         # configured Context when the caller passed nothing at all.
         self._worker_network = (
-            Context().sunbeam_broker.worker_network
+            Context().sunbeam_server.worker_network
             if worker_network is _UNSET
             else worker_network
         )

@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12, <3.14"
 
 [project.optional-dependencies]
-broker = [
+server = [
     "alembic>=1.16",
     "coolname>=5.0.0",
     "docker>=7.1.0",
@@ -60,7 +60,7 @@ conflicts = [
       { extra = "v3_1" },
     ],
     [
-        { extra = "broker"},
+        { extra = "server"},
         { extra = "executor"}
     ]
 ]

@@ -13,7 +13,7 @@ def get_engine() -> Engine:
     global _engine
     if _engine is None:
         _engine = create_engine(
-            Context.load(ServiceType.Broker).sunbeam_db.build_url(),
+            Context.load(ServiceType.Server).sunbeam_db.build_url(),
             echo=False,
             pool_pre_ping=True,
         )

@@ -45,18 +45,18 @@ class SunbeamDB:
 
 
 @dataclass
-class SunbeamBroker:
-    broker_url: str
-    broker_port: int
+class SunbeamServer:
+    server_url: str
+    server_port: int
     worker_network: str | None = None
 
     def build_url(self) -> str:
-        return f"http://{self.broker_url}:{self.broker_port}"
+        return f"http://{self.server_url}:{self.server_port}"
 
 
 class ServiceType(StrEnum):
     Client = "client"
-    Broker = "broker"
+    Server = "server"
     Worker = "worker"
 
 
@@ -65,14 +65,14 @@ class Context:
 
     _sunbeam_db: "SunbeamDB | None"
     _telemetry_db: "TelemetryDB | None"
-    _sunbeam_broker: "SunbeamBroker | None"
+    _sunbeam_server: "SunbeamServer | None"
 
     def __new__(cls) -> "Context":
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._sunbeam_db = None
             cls._instance._telemetry_db = None
-            cls._instance._sunbeam_broker = None
+            cls._instance._sunbeam_server = None
         return cls._instance
 
     @classmethod
@@ -97,8 +97,8 @@ class Context:
             **service_config_dict["telemetrydb"][configuration_type]
         )
 
-        ctx._sunbeam_broker = SunbeamBroker(
-            **service_config_dict["sunbeam-broker"][configuration_type]
+        ctx._sunbeam_server = SunbeamServer(
+            **service_config_dict["sunbeam-server"][configuration_type]
         )
 
         return ctx
@@ -140,10 +140,10 @@ class Context:
         return self._telemetry_db
 
     @property
-    def sunbeam_broker(self) -> SunbeamBroker:
-        if self._sunbeam_broker is None:
-            raise RuntimeError("Sunbeam broker has not been configured.")
-        return self._sunbeam_broker
+    def sunbeam_server(self) -> SunbeamServer:
+        if self._sunbeam_server is None:
+            raise RuntimeError("Sunbeam server has not been configured.")
+        return self._sunbeam_server
 
     def describe(self) -> dict:
         """
@@ -153,5 +153,5 @@ class Context:
         return {
             "sunbeam_db": _redacted_dict(self.sunbeam_db, {"database_password"}),
             "telemetry_db": _redacted_dict(self.telemetry_db, {"token"}),
-            "sunbeam_broker": dataclasses.asdict(self.sunbeam_broker),
+            "sunbeam_server": dataclasses.asdict(self.sunbeam_server),
         }

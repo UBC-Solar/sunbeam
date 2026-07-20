@@ -28,7 +28,7 @@ class TestBuildControl:
         def fake_register(cls=None, *, event_name, pipeline_edition, base_url=None):
             registrations.append((event_name, pipeline_edition))
             return OrchestratorClient(
-                base_url="http://broker:9000", worker_run_id=uuid.uuid4()
+                base_url="http://server:9000", worker_run_id=uuid.uuid4()
             )
 
         monkeypatch.setattr(OrchestratorClient, "register", fake_register)

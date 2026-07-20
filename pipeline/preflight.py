@@ -72,7 +72,7 @@ def _check_telemetry_db() -> PreflightResult:
 
 
 def _check_server() -> PreflightResult:
-    base_url = Context().sunbeam_broker.build_url()
+    base_url = Context().sunbeam_server.build_url()
 
     try:
         response = requests.get(f"{base_url}/health", timeout=3)
