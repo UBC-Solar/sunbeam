@@ -2,14 +2,17 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import create_engine, pool
+from sqlalchemy import create_engine, pool, text
 
 from db.sunbeamdb.models import Base
 
 config = context.config
 
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+# Apply alembic.ini's logging config only for CLI runs. Programmatic callers
+# (server startup) set configure_logger=False: fileConfig would otherwise
+# disable every already-created logger and mute the application's own logs.
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 
@@ -55,7 +58,17 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     connectable = create_engine(_database_url(), poolclass=pool.NullPool)
 
+    # Bound how long DDL waits for locks: a migration blocked behind another
+    # session (e.g. something idle-in-transaction on the table) should fail
+    # loudly, not hang startup forever. lock_timeout only limits lock WAITING,
+    # so long-running migrations themselves are unaffected. Overridable via
+    # config.attributes for a deliberate slow migration.
+    lock_timeout = config.attributes.get("lock_timeout", "10s")
+
     with connectable.connect() as connection:
+        connection.execute(text(f"SET lock_timeout = '{lock_timeout}'"))
+        connection.commit()  # end the autobegun tx; the setting is session-scoped
+
         context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
