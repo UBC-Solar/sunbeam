@@ -2,7 +2,6 @@ import dataclasses
 import pathlib
 import tomllib
 from dataclasses import dataclass
-from datetime import datetime
 from enum import StrEnum
 from sqlalchemy import URL
 
@@ -63,6 +62,10 @@ class ServiceType(StrEnum):
 
 class Context:
     _instance: "Context | None" = None
+
+    _sunbeam_db: "SunbeamDB | None"
+    _telemetry_db: "TelemetryDB | None"
+    _sunbeam_broker: "SunbeamBroker | None"
 
     def __new__(cls) -> "Context":
         if cls._instance is None:

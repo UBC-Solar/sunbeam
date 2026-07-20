@@ -32,6 +32,35 @@ class OrchestratorClient:
 
         self._worker_run_id = str(raw_worker_id)
 
+    @classmethod
+    def register(
+        cls,
+        *,
+        event_name: str,
+        pipeline_edition: str,
+        base_url: Optional[str] = None,
+    ) -> "OrchestratorClient":
+        """
+        Register this process as an external worker: the server creates the
+        WorkerRun and issues its ID, and the returned client speaks for it.
+        """
+        resolved_base_url = base_url or Context().sunbeam_broker.build_url()
+
+        response = requests.post(
+            f"{resolved_base_url}/workers/register",
+            json={
+                "event_name": event_name,
+                "pipeline_edition": pipeline_edition,
+                "host": socket.gethostname(),
+            },
+            timeout=5,
+        )
+        response.raise_for_status()
+
+        worker_run_id = response.json()["id"]
+
+        return cls(base_url=resolved_base_url, worker_run_id=worker_run_id)
+
     def heartbeat(
         self,
         *,

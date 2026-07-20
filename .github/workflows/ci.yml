@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # The broker and executor extras conflict; the test/dev groups carry the
+  # server-side packages (fastapi, docker) the test suite needs.
+  UV_SYNC_ARGS: --extra executor --extra v3_0 --group test --group dev
+
+jobs:
+  lint:
+    name: Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          enable-cache: true
+      - run: uv sync $UV_SYNC_ARGS
+      - run: uv run --no-sync ruff check .
+
+  typecheck:
+    name: Mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          enable-cache: true
+      - run: uv sync $UV_SYNC_ARGS
+      - run: uv run --no-sync mypy .
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          enable-cache: true
+      - run: uv sync $UV_SYNC_ARGS
+      - run: uv run --no-sync pytest -q
+
+  test-postgres:
+    name: Tests (Postgres)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          enable-cache: true
+      - run: uv sync $UV_SYNC_ARGS
+      # Locking, timezone, and migration tests against a real TimescaleDB
+      # via testcontainers (Docker is available on ubuntu runners).
+      - run: uv run --no-sync pytest -m postgres -q

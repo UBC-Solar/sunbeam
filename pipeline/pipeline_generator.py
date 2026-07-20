@@ -1,5 +1,5 @@
 from config.context import Context, TelemetryDB
-from db.telemetrydb.realtime_ingress import DebugTimeProvider
+from db.telemetrydb.realtime_ingress import DebugTimeProvider, TimeProvider
 from stage.stage import Stage
 import networkx as nx
 from pipeline.pipeline import Pipeline
@@ -152,10 +152,11 @@ class PipelineGenerator:
 
         ingress_nodes: list[Stage] = []
         for frequency, signals in signal_bins.items():
+            time_provider: TimeProvider
             if telemetry_db.debug:
                 time_provider = DebugTimeProvider(start_time=datetime.fromisoformat(telemetry_db.debug_time))
             else:
-                time_provider = datetime
+                time_provider = datetime  # type: ignore[assignment]
 
             ingress_nodes.append(
                 ingress_node(

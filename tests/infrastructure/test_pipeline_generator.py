@@ -8,7 +8,7 @@ from pipeline.pipeline_generator import (
     same_rate_components,
 )
 from stage.stage import Stage
-from state.frame import Frame, FrameView
+from state.frame import Frame
 
 
 def make_stage(name: str, inputs: list[str], outputs: list[str], frequency: float) -> Stage:

@@ -1,4 +1,5 @@
 from pipeline.protocols import RunnablePipeline
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 import threading
 
@@ -39,7 +40,9 @@ class StageTimingStats:
 
 @dataclass
 class TimingStats:
-    pipelines_by_name: dict[str, RunnablePipeline]
+    # Mapping (not dict) so callers can pass dicts of concrete Pipeline
+    # subtypes without variance errors.
+    pipelines_by_name: Mapping[str, RunnablePipeline]
 
     idle_ns: int = 0
     pipeline_ns: dict[str, int] = field(default_factory=lambda: defaultdict(int))

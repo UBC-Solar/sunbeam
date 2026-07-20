@@ -3,14 +3,15 @@ import socket
 import uuid
 from collections.abc import Iterator
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 import docker
 from docker.errors import DockerException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from config.context import Context
-from db.sunbeamdb.models import TERMINAL_WORKER_STATUSES, Event, WorkerRun, WorkerStatus
+from db.sunbeamdb.models import TERMINAL_WORKER_STATUSES, Event, WorkerKind, WorkerRun, WorkerStatus
 from server.services.metrics_cache import MetricsCache
 from stage.stage_library import StageLibrary
 
@@ -21,7 +22,7 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-_UNSET = object()
+_UNSET: Any = object()
 
 
 class WorkerService:
@@ -134,6 +135,46 @@ class WorkerService:
         logger.info(
             "Launched worker %s for event %r (%s) as container %s",
             worker.id, event_name, pipeline_edition, container_name,
+        )
+
+        return worker
+
+    def register_worker(
+        self,
+        db: Session,
+        *,
+        event_name: str,
+        pipeline_edition: str,
+        host: str | None,
+    ) -> WorkerRun:
+        """
+        Register an externally launched worker (e.g. sunbeam.py run by hand).
+        The server issues the WorkerRun ID; the worker is supervised via
+        heartbeats only, since there is no container to inspect or kill.
+        """
+        event = db.scalar(select(Event).where(Event.name == event_name))
+        if event is None:
+            raise ValueError(f"No event exists with name {event_name!r}")
+
+        self._validate_pipeline_edition(pipeline_edition)
+
+        worker = WorkerRun(
+            event_id=event.id,
+            pipeline_edition=pipeline_edition,
+            image_tag=None,
+            kind=WorkerKind.EXTERNAL,
+            status=WorkerStatus.STARTING,
+            host=host,
+            started_at=utcnow(),
+        )
+
+        db.add(worker)
+        db.commit()
+        db.refresh(worker)
+
+        logger.info(
+            "Registered external worker %s for event %r (%s) on host %s",
+            worker.id, event_name, pipeline_edition, host,
         )
 
         return worker

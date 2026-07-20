@@ -42,8 +42,8 @@ def pg_admin_engine(pg_container):
 
 
 @pytest.fixture
-def pg_engine(pg_container, pg_admin_engine):
-    """A brand-new database with the full production schema."""
+def pg_blank_engine(pg_container, pg_admin_engine):
+    """A brand-new database with no schema at all."""
     db_name = f"sunbeam_test_{next(_db_counter)}"
 
     with pg_admin_engine.connect() as conn:
@@ -52,12 +52,17 @@ def pg_engine(pg_container, pg_admin_engine):
     base_url = pg_container.get_connection_url()
     engine = create_engine(base_url.rsplit("/", 1)[0] + f"/{db_name}")
 
-    create_schema(engine)
-
     yield engine
 
     engine.dispose()
     # The container is thrown away at session end; no need to drop databases.
+
+
+@pytest.fixture
+def pg_engine(pg_blank_engine):
+    """A brand-new database with the full production schema."""
+    create_schema(pg_blank_engine)
+    return pg_blank_engine
 
 
 @pytest.fixture

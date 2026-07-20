@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
-from db.sunbeamdb.models import WorkerStatus
+from db.sunbeamdb.models import WorkerKind, WorkerStatus
 
 
 class LaunchWorkerRequest(BaseModel):
@@ -15,8 +15,9 @@ class WorkerRunRead(BaseModel):
     id: uuid.UUID
     event_id: int
     pipeline_edition: str
-    image_tag: str
+    image_tag: str | None
     status: WorkerStatus
+    kind: WorkerKind
 
     host: str | None
     container_id: str | None
@@ -47,10 +48,9 @@ class WorkerPermissionResponse(BaseModel):
 
 
 class WorkerRegisterRequest(BaseModel):
-    event_id: int
+    event_name: str
     pipeline_edition: str
     host: str | None = None
-    container_id: str | None = None
 
 
 class WorkerCompleteRequest(BaseModel):
@@ -76,11 +76,23 @@ class PipelineMetric(BaseModel):
     stages: list[StageMetric] = []
 
 
+class WriterQueueStats(BaseModel):
+    queue_depth: int
+    queue_capacity: int
+    queue_high_water: int
+    frames_enqueued: int
+    frames_written: int
+    batches_flushed: int
+    avg_flush_ms: float
+    max_flush_ms: float
+
+
 class WorkerMetricsReport(BaseModel):
     idle_pct: float
     busy_pct: float
     writer_ms: float
     pipelines: list[PipelineMetric] = []
+    writer_queue: WriterQueueStats | None = None
 
 
 class WorkerMetricsRead(WorkerMetricsReport):

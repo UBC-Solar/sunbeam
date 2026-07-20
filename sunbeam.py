@@ -1,5 +1,5 @@
-from orchestration.control import WorkerControl, ServerlessWorkerControl, OrchestratedWorkerControl
-from orchestration.client import OrchestratorClient
+from orchestration.bootstrap import build_control
+from orchestration.control import ServerlessWorkerControl, OrchestratedWorkerControl
 from config.context import Context, ServiceType
 from pipeline.preflight import run_preflight_checks
 from sqlalchemy import create_engine
@@ -53,13 +53,6 @@ class Sunbeam:
         executor.run()
 
 
-def build_control(serverless: bool) -> WorkerControl:
-    if not serverless:
-        return OrchestratedWorkerControl(OrchestratorClient())
-    else:
-        return ServerlessWorkerControl()
-
-
 def parse_args():
     parser = argparse.ArgumentParser(description="Run Sunbeam pipeline executor.")
 
@@ -73,8 +66,11 @@ def parse_args():
     parser.add_argument(
         "--serverless",
         action="store_true",
-        default=os.environ.get("SUNBEAM_SERVERLESS", "false").lower() == "false",
-        help="Run in serverless mode.",
+        # Note: orchestrated is the default. A hand-run worker registers
+        # itself with the server; --serverless (or SUNBEAM_SERVERLESS=true)
+        # opts out entirely.
+        default=os.environ.get("SUNBEAM_SERVERLESS", "false").lower() == "true",
+        help="Run without the Sunbeam server (no registration, no heartbeats).",
     )
 
     parser.add_argument(
@@ -134,7 +130,7 @@ if __name__ == "__main__":
     if event_name is None:
         raise RuntimeError("Event name not set.")
 
-    control = build_control(is_serverless)
+    control = build_control(is_serverless, args.event_name)
 
     sunbeam = Sunbeam()
     sunbeam.run(

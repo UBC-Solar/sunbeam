@@ -1,5 +1,4 @@
 from data_tools.localization import CanonicalName
-from state.frame import FrameView
 from stage.v3_0.latitude_longitude import LatitudeLongitude
 import pytest
 

@@ -10,12 +10,12 @@ class EventWriter:
         self._event_name = event_name
         self._signal_names_to_id: dict[str, int] = {}
 
-        self._event_id = None
+        self._event_id: int | None = None
         self._read_event_id()
         self._read_signal_ids()
 
         with Session(self._engine) as session:
-            event = session.execute(select(Event).where(Event.name == self._event_name)).scalar_one_or_none()
+            event = self._get_event(session)
 
             # if event.status == EventStatus.PROCESSED or event.status == EventStatus.ONGOING:
             #     if event.status == EventStatus.PROCESSED and reprocess:
@@ -28,6 +28,14 @@ class EventWriter:
             session.commit()
 
             self._event_name = event_name
+
+    def _get_event(self, session: Session) -> Event:
+        event = session.execute(select(Event).where(Event.name == self._event_name)).scalar_one_or_none()
+
+        if event is None:
+            raise ValueError(f"Event {self._event_name!r} does not exist in the database.")
+
+        return event
 
     def write_frame(self, frame: FrameView):
         self.write_frames([frame])
@@ -56,15 +64,14 @@ class EventWriter:
 
     def close(self):
         with Session(self._engine) as session:
-            event = session.execute(select(Event).where(Event.name == self._event_name)).scalar_one_or_none()
+            event = self._get_event(session)
 
             event.status = EventStatus.PROCESSED
             session.commit()
 
     def _read_event_id(self):
         with Session(self._engine) as session:
-            event = session.execute(select(Event).where(Event.name == self._event_name)).scalar_one_or_none()
-            self._event_id = event.id
+            self._event_id = self._get_event(session).id
 
     def _read_signal_ids(self):
         with Session(self._engine) as session:

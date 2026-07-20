@@ -1,7 +1,6 @@
 import threading
 
 from db.sunbeamdb.queued_writer import QueuedEventWriter
-from tests.infrastructure.conftest import wait_until
 
 
 class FakeBatchWriter:
@@ -84,6 +83,40 @@ class TestQueuedEventWriter:
 
         flushed = [frame for batch in inner.batches for frame in batch]
         assert flushed == list(range(total))
+
+    def test_stats_track_counts_and_flush_timings(self):
+        inner = FakeBatchWriter()
+        writer = QueuedEventWriter(inner, batch_size=4, flush_interval_s=0.01)
+
+        for i in range(10):
+            writer.write_frame(i)
+        writer.close()
+
+        stats = writer.stats()
+        assert stats["frames_enqueued"] == 10
+        assert stats["frames_written"] == 10
+        assert stats["queue_depth"] == 0
+        assert stats["batches_flushed"] >= 3
+        assert stats["queue_high_water"] >= 1
+        assert stats["avg_flush_ms"] >= 0.0
+        assert stats["max_flush_ms"] >= stats["avg_flush_ms"]
+
+    def test_stats_keys_match_metrics_schema(self):
+        inner = FakeBatchWriter()
+        writer = QueuedEventWriter(inner)
+        writer.close()
+
+        expected = {
+            "queue_depth",
+            "queue_capacity",
+            "queue_high_water",
+            "frames_enqueued",
+            "frames_written",
+            "batches_flushed",
+            "avg_flush_ms",
+            "max_flush_ms",
+        }
+        assert set(writer.stats()) == expected
 
     def test_no_empty_flush_on_idle_interval(self):
         inner = FakeBatchWriter()

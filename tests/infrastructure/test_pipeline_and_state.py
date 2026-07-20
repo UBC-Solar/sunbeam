@@ -153,6 +153,49 @@ class TestPipelineRun:
         assert snapshot["calls"] == {"Source": 1, "Doubler": 1}
 
 
+class TestNotReadyGrace:
+    def test_transient_not_ready_is_tolerated(self, timestamp):
+        pipeline = Pipeline(
+            build_node_graph([OrphanStage()]), frequency=10.0, not_ready_grace_s=10.0
+        )
+
+        # Repeated not-ready runs inside the grace period stay silent.
+        assert list(pipeline.run(State(), timestamp)) == []
+        assert list(pipeline.run(State(), timestamp)) == []
+
+    def test_persistent_not_ready_raises_after_grace(self, timestamp):
+        import time
+
+        pipeline = Pipeline(
+            build_node_graph([OrphanStage()]), frequency=10.0, not_ready_grace_s=0.05
+        )
+
+        list(pipeline.run(State(), timestamp))
+        time.sleep(0.06)
+
+        with pytest.raises(RuntimeError, match="missing input 'never_produced'"):
+            list(pipeline.run(State(), timestamp))
+
+    def test_successful_run_resets_the_grace_clock(self, timestamp):
+        import time
+
+        pipeline = Pipeline(
+            build_node_graph([DoublerStage()]), frequency=10.0, not_ready_grace_s=0.05
+        )
+        state = State()
+
+        list(pipeline.run(state, timestamp))
+
+        # The input arrives before the grace expires; the pipeline recovers.
+        source = Pipeline(build_node_graph([SourceStage()]), frequency=10.0)
+        list(source.run(state, timestamp))
+        assert len(list(pipeline.run(state, timestamp))) == 1
+
+        # A prior stall must not poison later runs.
+        time.sleep(0.06)
+        assert len(list(pipeline.run(state, timestamp))) == 1
+
+
 class TestStageContract:
     def test_subclass_must_declare_classvars(self):
         with pytest.raises(TypeError, match="must override 'stage_name'"):

@@ -106,6 +106,44 @@ class TestClientRequests:
         assert url == f"http://broker:9000/workers/{worker_id}/metrics"
         assert payload == {"idle_pct": 12.5}
 
+    def test_register_posts_and_returns_ready_client(self, monkeypatch):
+        issued_id = str(uuid.uuid4())
+        calls = []
+
+        def fake_post(url, json=None, timeout=None):
+            calls.append((url, json))
+            return FakeResponse({"id": issued_id, "status": "starting"})
+
+        monkeypatch.setattr("orchestration.client.requests.post", fake_post)
+
+        client = OrchestratorClient.register(
+            event_name="realtime",
+            pipeline_edition="v3_0",
+            base_url="http://broker:9000",
+        )
+
+        url, payload = calls[0]
+        assert url == "http://broker:9000/workers/register"
+        assert payload["event_name"] == "realtime"
+        assert payload["pipeline_edition"] == "v3_0"
+        assert "host" in payload
+
+        assert client._worker_run_id == issued_id
+        assert client._base_url == "http://broker:9000"
+
+    def test_register_http_error_propagates(self, monkeypatch):
+        monkeypatch.setattr(
+            "orchestration.client.requests.post",
+            lambda url, json=None, timeout=None: FakeResponse(status_code=400),
+        )
+
+        with pytest.raises(requests.exceptions.HTTPError):
+            OrchestratorClient.register(
+                event_name="nope",
+                pipeline_edition="v3_0",
+                base_url="http://broker:9000",
+            )
+
     def test_http_error_propagates(self, client, monkeypatch):
         monkeypatch.setattr(
             "orchestration.client.requests.post",

@@ -147,6 +147,14 @@ TERMINAL_WORKER_STATUSES = {
     WorkerStatus.LOST,
 }
 
+
+class WorkerKind(enum.Enum):
+    # Launched by the server as a Docker container it supervises.
+    CONTAINER = "container"
+    # A process that registered itself (e.g. sunbeam.py run by hand); the
+    # server supervises it via heartbeats only and cannot force-kill it.
+    EXTERNAL = "external"
+
 class WorkerRun(Base):
 
     __tablename__ = "worker_run"
@@ -164,11 +172,18 @@ class WorkerRun(Base):
     )
 
     pipeline_edition: Mapped[str] = mapped_column(String(32), nullable=False)
-    image_tag: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Null for external workers, which have no image.
+    image_tag: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     status: Mapped[WorkerStatus] = mapped_column(
         Enum(WorkerStatus),
         nullable=False,
         default=WorkerStatus.REQUESTED,
+    )
+    kind: Mapped[WorkerKind] = mapped_column(
+        Enum(WorkerKind),
+        nullable=False,
+        default=WorkerKind.CONTAINER,
+        server_default="CONTAINER",
     )
 
     host: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

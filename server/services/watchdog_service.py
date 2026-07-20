@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import docker
 from docker.errors import DockerException
 
-from db.sunbeamdb.models import TERMINAL_WORKER_STATUSES, WorkerRun, WorkerStatus
+from db.sunbeamdb.models import TERMINAL_WORKER_STATUSES, WorkerKind, WorkerRun, WorkerStatus
 from server.db import get_session_factory
 from server.services.metrics_cache import MetricsCache
 
@@ -122,6 +122,10 @@ class WatchdogService:
     def _check_worker(self, db, worker: WorkerRun) -> None:
         now = utcnow()
 
+        if worker.kind == WorkerKind.EXTERNAL:
+            self._check_external_worker(db, worker, now)
+            return
+
         if worker.container_id is None:
             age_s = (now - worker.created_at).total_seconds()
             if age_s > self._startup_grace_s:
@@ -177,6 +181,31 @@ class WatchdogService:
             if (now - last_seen).total_seconds() > self._heartbeat_timeout_s:
                 self._resolve(db, worker, WorkerStatus.LOST, "Worker stopped heartbeating.")
                 return
+
+        if worker.status in (WorkerStatus.REQUESTED, WorkerStatus.STARTING):
+            if (now - worker.created_at).total_seconds() > self._startup_grace_s:
+                self._resolve(db, worker, WorkerStatus.LOST, "Worker never became healthy.")
+
+    def _check_external_worker(self, db, worker: WorkerRun, now: datetime) -> None:
+        """
+        A self-registered worker has no container: there is nothing to inspect
+        and nothing to kill, so supervision is heartbeats and grace periods only.
+        """
+        if worker.status in (WorkerStatus.STOP_REQUESTED, WorkerStatus.STOPPING):
+            requested_at = worker.stop_requested_at or worker.created_at
+            if (now - requested_at).total_seconds() > self._stop_grace_s:
+                self._resolve(
+                    db, worker, WorkerStatus.LOST,
+                    "External worker did not stop within the grace period "
+                    "(no container to kill).",
+                )
+                return
+
+        if worker.status in HEARTBEATING_STATUSES:
+            last_seen = worker.last_heartbeat_at or worker.created_at
+            if (now - last_seen).total_seconds() > self._heartbeat_timeout_s:
+                self._resolve(db, worker, WorkerStatus.LOST, "Worker stopped heartbeating.")
+            return
 
         if worker.status in (WorkerStatus.REQUESTED, WorkerStatus.STARTING):
             if (now - worker.created_at).total_seconds() > self._startup_grace_s:

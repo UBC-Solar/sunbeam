@@ -1,5 +1,4 @@
 import uuid
-from datetime import timedelta
 
 import pytest
 
@@ -7,7 +6,7 @@ pytest.importorskip("docker")
 
 from docker.errors import DockerException, NotFound
 
-from db.sunbeamdb.models import WorkerRun, WorkerStatus
+from db.sunbeamdb.models import WorkerKind, WorkerRun, WorkerStatus
 from server.services.metrics_cache import MetricsCache
 from server.services.worker_service import WorkerService
 from tests.infrastructure.conftest import naive_utcnow
@@ -139,6 +138,62 @@ class TestLaunchWorker:
     def test_launch_unknown_event_rejected(self, service, db, seeded_event):
         with pytest.raises(ValueError, match="No event exists"):
             service.launch_worker(db, event_id=999_999, pipeline_edition="v3_0")
+
+
+class TestRegisterWorker:
+    def test_register_creates_external_worker(self, service, db, seeded_event):
+        worker = service.register_worker(
+            db,
+            event_name=seeded_event.event_name,
+            pipeline_edition="v3_0",
+            host="joshuas-laptop",
+        )
+
+        assert worker.kind == WorkerKind.EXTERNAL
+        assert worker.status == WorkerStatus.STARTING
+        assert worker.event_id == seeded_event.event_id
+        assert worker.image_tag is None
+        assert worker.container_id is None
+        assert worker.host == "joshuas-laptop"
+        assert worker.started_at is not None
+
+    def test_registered_worker_can_heartbeat_and_complete(self, service, db, seeded_event):
+        worker = service.register_worker(
+            db,
+            event_name=seeded_event.event_name,
+            pipeline_edition="v3_0",
+            host=None,
+        )
+
+        heartbeated = service.heartbeat(
+            db,
+            worker_id=worker.id,
+            status=WorkerStatus.RUNNING,
+            current_stage="compute",
+            status_message=None,
+            host=None,
+        )
+        assert heartbeated.status == WorkerStatus.RUNNING
+
+        completed = service.complete(
+            db, worker_id=worker.id, success=True, message="done"
+        )
+        assert completed.status == WorkerStatus.COMPLETED
+
+    def test_register_unknown_event_rejected(self, service, db, seeded_event):
+        with pytest.raises(ValueError, match="No event exists"):
+            service.register_worker(
+                db, event_name="no-such-event", pipeline_edition="v3_0", host=None
+            )
+
+    def test_register_unknown_edition_rejected(self, service, db, seeded_event):
+        with pytest.raises(ValueError, match="Unknown pipeline edition"):
+            service.register_worker(
+                db,
+                event_name=seeded_event.event_name,
+                pipeline_edition="nope",
+                host=None,
+            )
 
 
 class TestHeartbeat:

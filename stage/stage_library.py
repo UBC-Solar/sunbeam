@@ -12,7 +12,7 @@ class StageLibrary:
                 self._raw_data = tomllib.load(f)
                 self._pipeline_editions = self._raw_data.keys()
 
-                self._stage_registry = {}
+                self._stage_registry: dict[str, dict[str, str]] = {}
                 if pipeline_edition:
                     self.set_pipeline_edition(pipeline_edition)
 
@@ -24,7 +24,7 @@ class StageLibrary:
             raise ValueError(
                 f"Pipeline edition {pipeline_edition!r} not found. Must be one of {', '.join(self._pipeline_editions)}")
 
-        self._stage_registry: dict[str, dict[str, str]] = self._raw_data[pipeline_edition]
+        self._stage_registry = self._raw_data[pipeline_edition]
 
     def get_stage_by_name(self, stage_name: str) -> type[Stage]:
         if stage_name not in self._stage_registry:

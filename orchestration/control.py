@@ -2,7 +2,7 @@ import requests
 
 from orchestration.client import OrchestratorClient, WorkerPermission
 from typing import Optional
-from abc import ABC
+from abc import ABC, abstractmethod
 import logging
 import threading
 import time
@@ -11,14 +11,31 @@ logger = logging.getLogger("sunbeam.worker.control")
 
 
 class WorkerControl(ABC):
+    @abstractmethod
     def start(self) -> None: ...
+
+    @abstractmethod
     def stop(self) -> None: ...
+
+    @abstractmethod
     def should_stop(self) -> bool: ...
+
+    @abstractmethod
     def request_stop(self, reason: Optional[str] = None) -> None: ...
+
+    @abstractmethod
     def set_stage(self, stage: Optional[str]) -> None: ...
+
+    @abstractmethod
     def set_message(self, message: Optional[str]) -> None: ...
+
+    @abstractmethod
     def heartbeat_now(self, *, status: str = "running") -> None: ...
+
+    @abstractmethod
     def report_metrics(self, payload: dict) -> None: ...
+
+    @abstractmethod
     def complete(self, *, success: bool, message: Optional[str] = None) -> None: ...
 
 class ServerlessWorkerControl(WorkerControl):

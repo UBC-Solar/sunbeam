@@ -143,6 +143,47 @@ class TestLaunchRoute:
         assert "No event exists" in response.json()["detail"]
 
 
+class TestRegisterRoute:
+    def test_register_returns_external_worker(self, client, seeded_event):
+        response = client.post(
+            "/workers/register",
+            json={
+                "event_name": seeded_event.event_name,
+                "pipeline_edition": "v3_0",
+                "host": "joshuas-laptop",
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["kind"] == "external"
+        assert body["status"] == "starting"
+        assert body["image_tag"] is None
+        assert body["host"] == "joshuas-laptop"
+
+        # The issued ID immediately works for the rest of the lifecycle.
+        worker_id = body["id"]
+        permission = client.get(f"/workers/{worker_id}/permission").json()
+        assert permission["allowed"] is True
+
+    def test_register_unknown_event_is_400(self, client):
+        response = client.post(
+            "/workers/register",
+            json={"event_name": "no-such-event", "pipeline_edition": "v3_0"},
+        )
+
+        assert response.status_code == 400
+        assert "No event exists" in response.json()["detail"]
+
+    def test_register_unknown_edition_is_400(self, client, seeded_event):
+        response = client.post(
+            "/workers/register",
+            json={"event_name": seeded_event.event_name, "pipeline_edition": "nope"},
+        )
+
+        assert response.status_code == 400
+
+
 class TestListWorkersRoute:
     def test_lists_all_workers(self, client, make_worker):
         make_worker(status=WorkerStatus.RUNNING)

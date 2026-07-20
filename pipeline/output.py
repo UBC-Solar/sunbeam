@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 from rich.console import Console
 from rich.live import Live
@@ -18,7 +19,7 @@ class RichOutputManager:
         self._timing = timing
         self._interval_s = interval_s
         self._console = Console()
-        self._live = None
+        self._live: Optional[Live] = None
 
     def __enter__(self):
         self._live = Live(console=self._console, refresh_per_second=4)
@@ -45,10 +46,13 @@ class LoggingOutputManager:
     server via the worker's control channel.
     """
 
-    def __init__(self, timing, control, *, interval_s: float = 5.0):
+    def __init__(self, timing, control, *, interval_s: float = 5.0, writer_stats=None):
         self._timing = timing
         self._control = control
         self._interval_s = interval_s
+        # Optional zero-arg callable returning the frame writer's queue/flush
+        # statistics (see QueuedEventWriter.stats).
+        self._writer_stats = writer_stats
 
     def __enter__(self):
         return self
@@ -62,14 +66,28 @@ class LoggingOutputManager:
 
         payload = self._timing.metrics_payload_and_reset()
 
+        if self._writer_stats is not None:
+            payload["writer_queue"] = self._writer_stats()
+
         pipeline_summary = ", ".join(
             f"{p['name']}={p['avg_ms']:.2f}ms/tick" for p in payload["pipelines"]
         )
+
+        queue_summary = ""
+        if "writer_queue" in payload:
+            wq = payload["writer_queue"]
+            queue_summary = (
+                f" queue={wq['queue_depth']}/{wq['queue_capacity']}"
+                f" (hwm {wq['queue_high_water']})"
+                f" flush_avg={wq['avg_flush_ms']:.2f}ms"
+            )
+
         logger.info(
-            "timing idle=%.1f%% busy=%.1f%% writer=%.2fms %s",
+            "timing idle=%.1f%% busy=%.1f%% writer=%.2fms%s %s",
             payload["idle_pct"],
             payload["busy_pct"],
             payload["writer_ms"],
+            queue_summary,
             pipeline_summary,
         )
 

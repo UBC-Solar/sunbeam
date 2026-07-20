@@ -15,6 +15,7 @@ from server.schemas import (
     WorkerMetricsRead,
     WorkerMetricsReport,
     WorkerPermissionResponse,
+    WorkerRegisterRequest,
     WorkerRunRead,
 )
 from server.services.worker_service import WorkerService
@@ -71,6 +72,23 @@ def launch_worker(
             db,
             event_id=payload.event_id,
             pipeline_edition=payload.pipeline_edition,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/register", response_model=WorkerRunRead)
+def register_worker(
+    payload: WorkerRegisterRequest,
+    db: Session = Depends(get_db),
+    service: WorkerService = Depends(get_worker_service),
+):
+    try:
+        return service.register_worker(
+            db,
+            event_name=payload.event_name,
+            pipeline_edition=payload.pipeline_edition,
+            host=payload.host,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

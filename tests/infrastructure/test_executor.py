@@ -108,6 +108,55 @@ class TestExecutorComputeCrash:
         assert elapsed < 4.0
 
 
+class TestExecutorCompletion:
+    def test_signal_completion_reports_success(self, fake_clock):
+        holder = {}
+        writer = RecordingWriter(
+            on_write=lambda n: holder["executor"].signal_completion() if n >= 5 else None
+        )
+        executor, writer, control = make_executor(fake_clock, writer=writer)
+        holder["executor"] = executor
+
+        executor.run()
+
+        assert control.completions == [(True, "Pipeline completed.")]
+        assert writer.closed
+        assert control.stopped
+
+
+class TestExecutorIngressThreads:
+    def test_each_ingress_pipeline_gets_scheduled(self, fake_clock):
+        control = FakeControl()
+        ingress = [FakePipeline("ingress-a", 50.0), FakePipeline("ingress-b", 50.0)]
+        writer = RecordingWriter(
+            on_write=lambda n: control.request_stop()
+            if all(p.run_count > 0 for p in ingress)
+            else None
+        )
+        executor, writer, control = make_executor(
+            fake_clock, ingress=ingress, writer=writer, control=control
+        )
+
+        executor.run()
+
+        assert ingress[0].run_count > 0
+        assert ingress[1].run_count > 0
+
+    def test_crash_in_one_ingress_thread_fails_the_worker(self, fake_clock):
+        ingress = [
+            FakePipeline("ingress-ok", 50.0),
+            FakePipeline("ingress-bad", 50.0, fail_after=1),
+        ]
+        executor, writer, control = make_executor(fake_clock, ingress=ingress)
+
+        executor.run()
+
+        assert len(control.completions) == 1
+        success, message = control.completions[0]
+        assert success is False
+        assert message.startswith("Ingress pipeline crashed:")
+
+
 class TestExecutorDefaults:
     def test_default_control_is_serverless(self, fake_clock):
         from orchestration.control import ServerlessWorkerControl

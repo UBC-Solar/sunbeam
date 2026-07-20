@@ -4,8 +4,8 @@ default_config = "debug"
 # Client
 
 [client.sunbeam-broker]
-debug = { broker_url = "server", broker_port = 8000 }
-production = { broker_url = "server", broker_port = 8000 }
+debug = { broker_url = "localhost", broker_port = 8000 }
+production = { broker_url = "localhost", broker_port = 8000 }
 
 [client.sunbeamdb]
 debug = {database_host_ip = "localhost", database_port = 5432, database_name = "telemetry", database_username = "telemetry",  database_password = "telemetry" }

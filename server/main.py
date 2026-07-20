@@ -2,13 +2,13 @@ from server.routes import events, workers, pipeline_editions
 from server.services.watchdog_service import WatchdogService
 from server.preflight import check_docker, check_postgres
 from server.db import get_engine
+from server.migrations import upgrade_database
 from config import VehicleManager, EventManager, SignalManager
 from fastapi.middleware.cors import CORSMiddleware
 from config.context import Context, ServiceType
 from stage.stage_library import StageLibrary
 from sqlalchemy import create_engine, text
 from dataclasses import dataclass
-from db import create_schema
 from docker.errors import DockerException
 from fastapi import FastAPI, HTTPException
 from typing import Mapping
@@ -90,7 +90,7 @@ def on_startup() -> None:
     check_postgres(engine)
     check_docker()
 
-    create_schema(engine)
+    upgrade_database(engine)
 
     VehicleManager().sync_vehicles(engine)
     EventManager().sync_events(engine)

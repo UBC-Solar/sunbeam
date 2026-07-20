@@ -1,5 +1,4 @@
 from data_tools.localization import CanonicalName
-from state.frame import FrameView
 from stage.v3_0.energy_from_integrated_power import EnergyFromIntegratedPower
 import pytest
 

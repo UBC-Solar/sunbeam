@@ -7,6 +7,7 @@ requires-python = ">=3.12, <3.14"
 
 [project.optional-dependencies]
 broker = [
+    "alembic>=1.16",
     "coolname>=5.0.0",
     "docker>=7.1.0",
     "fastapi>=0.138.0",
@@ -46,6 +47,11 @@ test = [
     "docker>=7.1.0",
     "testcontainers>=4.8",
 ]
+dev = [
+    "ruff>=0.14",
+    "mypy>=1.19",
+    "alembic>=1.16",
+]
 
 [tool.uv]
 conflicts = [
@@ -57,6 +63,39 @@ conflicts = [
         { extra = "broker"},
         { extra = "executor"}
     ]
+]
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["dashboard", "data"]
+
+[tool.ruff.lint.per-file-ignores]
+# Constants must be defined before the submodule imports that read them back.
+"config/__init__.py" = ["E402"]
+# Re-exports.
+"**/__init__.py" = ["F401"]
+# Imports legitimately follow pytest.importorskip(...) guards.
+"tests/**" = ["E402"]
+
+[tool.mypy]
+ignore_missing_imports = true
+implicit_optional = true
+check_untyped_defs = true
+explicit_package_bases = true
+exclude = ["dashboard/", "data/", "build/"]
+
+[[tool.mypy.overrides]]
+# Tests deliberately pass fakes where concrete types are declared and lean on
+# assertions rather than narrowing; keep them checked but not pedantic.
+module = "tests.*"
+disable_error_code = [
+    "union-attr",
+    "arg-type",
+    "list-item",
+    "var-annotated",
+    "return-value",
+    "operator",
+    "assignment",
 ]
 
 [tool.pytest.ini_options]

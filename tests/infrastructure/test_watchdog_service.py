@@ -5,7 +5,7 @@ import pytest
 
 pytest.importorskip("docker")
 
-from db.sunbeamdb.models import WorkerRun, WorkerStatus
+from db.sunbeamdb.models import WorkerKind, WorkerRun, WorkerStatus
 from server.services.metrics_cache import MetricsCache
 from server.services.watchdog_service import WatchdogService
 from tests.infrastructure.conftest import naive_utcnow
@@ -49,14 +49,16 @@ def make_worker(session_factory, seeded_event):
         heartbeat_age_s: float | None = None,
         stop_requested_age_s: float | None = None,
         container_id: str | None = None,
+        kind=WorkerKind.CONTAINER,
     ) -> uuid.UUID:
         now = naive_utcnow()
         worker = WorkerRun(
             event_id=seeded_event.event_id,
             pipeline_edition="v3_0",
-            image_tag="sunbeam-worker:v3_0",
+            image_tag="sunbeam-worker:v3_0" if kind == WorkerKind.CONTAINER else None,
             status=status,
             container_id=container_id,
+            kind=kind,
             created_at=now - timedelta(seconds=age_s),
             last_heartbeat_at=(
                 now - timedelta(seconds=heartbeat_age_s)
@@ -235,6 +237,72 @@ class TestStartupGrace:
         container = add_container(fake_docker, status="running")
         worker_id = make_worker(
             status=WorkerStatus.STARTING, container_id=container.id, age_s=5
+        )
+
+        watchdog._sweep()
+
+        assert get_worker(worker_id).status == WorkerStatus.STARTING
+
+
+class TestExternalWorkers:
+    """Self-registered workers: no container to inspect, heartbeats only."""
+
+    def test_healthy_external_worker_is_not_marked_lost(
+        self, watchdog, make_worker, get_worker
+    ):
+        # A container-kind worker without a container would be LOST after the
+        # startup grace; an external worker with fresh heartbeats must not be.
+        worker_id = make_worker(
+            kind=WorkerKind.EXTERNAL, age_s=300, heartbeat_age_s=1
+        )
+
+        watchdog._sweep()
+
+        assert get_worker(worker_id).status == WorkerStatus.RUNNING
+
+    def test_external_worker_heartbeat_timeout_is_lost(
+        self, watchdog, make_worker, get_worker
+    ):
+        worker_id = make_worker(kind=WorkerKind.EXTERNAL, heartbeat_age_s=60)
+
+        watchdog._sweep()
+
+        worker = get_worker(worker_id)
+        assert worker.status == WorkerStatus.LOST
+        assert "stopped heartbeating" in worker.status_message
+
+    def test_external_worker_ignoring_stop_is_lost_not_killed(
+        self, watchdog, make_worker, get_worker
+    ):
+        worker_id = make_worker(
+            kind=WorkerKind.EXTERNAL,
+            status=WorkerStatus.STOP_REQUESTED,
+            heartbeat_age_s=1,
+            stop_requested_age_s=60,
+        )
+
+        watchdog._sweep()
+
+        worker = get_worker(worker_id)
+        assert worker.status == WorkerStatus.LOST
+        assert "no container to kill" in worker.status_message
+
+    def test_external_worker_that_never_started_is_lost_after_grace(
+        self, watchdog, make_worker, get_worker
+    ):
+        worker_id = make_worker(
+            kind=WorkerKind.EXTERNAL, status=WorkerStatus.STARTING, age_s=120
+        )
+
+        watchdog._sweep()
+
+        assert get_worker(worker_id).status == WorkerStatus.LOST
+
+    def test_external_worker_within_startup_grace_left_alone(
+        self, watchdog, make_worker, get_worker
+    ):
+        worker_id = make_worker(
+            kind=WorkerKind.EXTERNAL, status=WorkerStatus.STARTING, age_s=5
         )
 
         watchdog._sweep()
