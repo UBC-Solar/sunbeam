@@ -63,7 +63,7 @@ def build_workers() -> Mapping[str, PipelineWorker]:
 
         client.images.build(
             path=str(PROJECT_ROOT),
-            dockerfile="dockerfiles/worker.Dockerfile",
+            dockerfile="pipeline/Dockerfile",
             tag=tag,
             rm=True,
             buildargs={

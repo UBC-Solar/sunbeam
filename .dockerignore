@@ -5,3 +5,4 @@ fs_data
 .venv
 .github
 docs
+*.egg-info
