@@ -1,4 +1,4 @@
-from server.routes import events, workers, pipeline_editions
+from server.routes import data, debug, events, workers, pipeline_editions
 from server.services.watchdog_service import WatchdogService
 from server.preflight import check_docker, check_postgres
 from server.db import get_engine
@@ -143,6 +143,8 @@ def create_app(lifespan=lifespan) -> FastAPI:
     app.include_router(events.router)
     app.include_router(workers.router)
     app.include_router(pipeline_editions.router)
+    app.include_router(data.router)
+    app.include_router(debug.router)
 
     return app
 

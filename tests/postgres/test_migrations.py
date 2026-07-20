@@ -141,6 +141,43 @@ class TestServerStartupUpgrade:
         assert vehicles == 1
         assert kind_column == 1
 
+    def test_blocked_migration_fails_loudly_instead_of_hanging(self, alembic_config):
+        from sqlalchemy import create_engine
+
+        from server.migrations import BASELINE_REVISION, upgrade_database
+
+        config, url = alembic_config
+        command.upgrade(config, BASELINE_REVISION)
+
+        engine = create_engine(url)
+        blocker = engine.connect()
+        try:
+            # An open transaction holding the table lock - the shape of an
+            # 'idle in transaction' session sitting on worker_run.
+            blocker.execute(text("LOCK TABLE worker_run IN ACCESS EXCLUSIVE MODE"))
+
+            with pytest.raises(RuntimeError, match="pg_blocking_pids"):
+                upgrade_database(engine, lock_timeout="500ms")
+        finally:
+            blocker.rollback()
+            blocker.close()
+            engine.dispose()
+
+    def test_startup_upgrade_preserves_application_logging(self, pg_blank_engine):
+        # fileConfig(alembic.ini) with default arguments disables every
+        # already-created logger, which silenced the whole server after
+        # startup migrations.
+        import logging
+
+        from server.migrations import upgrade_database
+
+        probe = logging.getLogger("sunbeam.server")
+        assert not probe.disabled
+
+        upgrade_database(pg_blank_engine)
+
+        assert not probe.disabled
+
     def test_startup_upgrade_is_idempotent(self, pg_blank_engine):
         from server.migrations import upgrade_database
 

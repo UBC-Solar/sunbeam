@@ -2,6 +2,7 @@ import logging
 import pathlib
 
 from sqlalchemy import Engine, inspect
+from sqlalchemy.exc import OperationalError
 
 logger = logging.getLogger("sunbeam.server")
 
@@ -12,7 +13,7 @@ REPO_ROOT = pathlib.Path(__file__).parent.parent
 BASELINE_REVISION = "f3f709edb0e7"
 
 
-def upgrade_database(engine: Engine) -> None:
+def upgrade_database(engine: Engine, lock_timeout: str = "10s") -> None:
     """
     Bring the database to the newest Alembic revision.
 
@@ -31,6 +32,9 @@ def upgrade_database(engine: Engine) -> None:
     config.attributes["sunbeam_database_url"] = engine.url.render_as_string(
         hide_password=False
     )
+    # Keep the server's logging configuration; see alembic/env.py.
+    config.attributes["configure_logger"] = False
+    config.attributes["lock_timeout"] = lock_timeout
 
     tables = set(inspect(engine).get_table_names())
 
@@ -42,4 +46,15 @@ def upgrade_database(engine: Engine) -> None:
         command.stamp(config, BASELINE_REVISION)
 
     logger.info("Running database migrations (alembic upgrade head).")
-    command.upgrade(config, "head")
+    try:
+        command.upgrade(config, "head")
+    except OperationalError as exc:
+        if "lock timeout" in str(exc).lower():
+            raise RuntimeError(
+                f"Database migration waited more than {lock_timeout} for a "
+                f"lock: another session is holding a lock on a table being "
+                f"migrated (often an 'idle in transaction' connection). "
+                f"Inspect pg_stat_activity / pg_blocking_pids(pid) to find "
+                f"and terminate it, then restart the server."
+            ) from exc
+        raise

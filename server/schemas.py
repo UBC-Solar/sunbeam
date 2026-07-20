@@ -34,6 +34,31 @@ class WorkerRunRead(BaseModel):
     failure_reason: str | None
 
 
+class SignalInfo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    unit: str | None
+    frequency: float | None
+    source: str
+
+
+class SignalDataResponse(BaseModel):
+    event_name: str
+    signal: str
+    unit: str | None
+    frequency: float | None
+
+    start: datetime
+    end: datetime
+    count: int
+    truncated: bool
+
+    # Columnar, ascending; timestamps are epoch milliseconds.
+    timestamps: list[int]
+    values: list[float | None]
+
+
 class WorkerHeartbeatRequest(BaseModel):
     status: WorkerStatus = WorkerStatus.RUNNING
     current_stage: str | None = None

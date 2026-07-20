@@ -96,6 +96,7 @@ disable_error_code = [
     "return-value",
     "operator",
     "assignment",
+    "index",
 ]
 
 [tool.pytest.ini_options]

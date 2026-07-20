@@ -273,3 +273,40 @@ def seed_basic_event(engine) -> SeededEvent:
 @pytest.fixture
 def seeded_event(engine) -> SeededEvent:
     return seed_basic_event(engine)
+
+
+@pytest.fixture
+def api_client(session_factory):
+    """
+    TestClient over create_app with the SQLite session and a fake Docker
+    client injected. Imports lazily so environments without the broker test
+    deps can still collect this conftest.
+    """
+    pytest.importorskip("fastapi")
+    pytest.importorskip("docker")
+
+    from fastapi.testclient import TestClient
+
+    from server.deps import get_db, get_db_session_factory
+    from server.main import create_app
+    from server.routes.workers import get_worker_service
+    from server.services.worker_service import WorkerService
+    from tests.infrastructure.test_worker_service import FakeDockerClient
+
+    app = create_app(lifespan=None)
+
+    def override_get_db():
+        db = session_factory()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    service = WorkerService(FakeDockerClient(), worker_network=None)
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_db_session_factory] = lambda: session_factory
+    app.dependency_overrides[get_worker_service] = lambda: service
+
+    with TestClient(app) as client:
+        yield client

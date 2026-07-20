@@ -58,6 +58,45 @@ class TestAwareDatetimeRoundTrips:
         assert abs(datetime.now(timezone.utc) - stored) < timedelta(seconds=30)
 
 
+class TestDataQueryTimezones:
+    def test_window_in_any_offset_matches_utc(
+        self, pg_engine, pg_session_factory, pg_seeded_event
+    ):
+        from sqlalchemy.orm import Session
+
+        from db.sunbeamdb.models import AlignedSample
+        from server.services.data_service import get_signal, query_samples
+
+        base = datetime(2026, 7, 20, 12, 0, 0, tzinfo=timezone.utc)
+        with Session(pg_engine) as session:
+            for i in range(5):
+                session.add(
+                    AlignedSample(
+                        event_id=pg_seeded_event.event_id,
+                        ts=base + timedelta(seconds=i),
+                        signal_id=pg_seeded_event.signal_ids["speed"],
+                        value_f64=float(i),
+                    )
+                )
+            session.commit()
+
+        pacific = timezone(timedelta(hours=-7))
+        start_utc = base + timedelta(seconds=1)
+        end_utc = base + timedelta(seconds=4)
+
+        with pg_session_factory() as db:
+            signal = get_signal(db, pg_seeded_event.event_name, "speed")
+
+            utc_result = query_samples(db, signal, start_utc, end_utc)
+            offset_result = query_samples(
+                db, signal, start_utc.astimezone(pacific), end_utc.astimezone(pacific)
+            )
+
+        # Same instants expressed in a different offset select the same rows.
+        assert utc_result == offset_result
+        assert utc_result[1] == [1.0, 2.0, 3.0]
+
+
 class TestWatchdogWithAwareClock:
     def test_startup_grace_arithmetic_with_aware_datetimes(
         self, pg_session_factory, pg_seeded_event
