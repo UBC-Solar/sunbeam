@@ -10,7 +10,7 @@ For what a "worker" is actually doing once it's running, see
 [`STAGES.md`](STAGES.md). For the HTTP/SSE surface the server exposes, see
 [`API.md`](API.md).
 
-## Dependency groups, and why they exist
+## Dependency Groups, and Why
 
 `pyproject.toml` defines several `uv` **extras**
 (`[project.optional-dependencies]`) and **groups** (`[dependency-groups]`).
@@ -34,7 +34,7 @@ Two conflict rules in `[tool.uv].conflicts` are load-bearing:
   resolve a lockfile that asks for both at once.
 - **`v3_0` and `v3_1` are mutually exclusive.** See below.
 
-### Why per-edition dependency groups
+### Per-Edition Dependency Groups
 
 This is the one worth internalizing: **a pipeline edition's stage code can
 depend on arbitrary third-party packages, and different editions may need
@@ -65,7 +65,7 @@ When you add a new stage that needs a new package, the dependency goes in
 `networkx` is a rare example, since pipeline graph-building is
 edition-independent).
 
-### Common `uv sync` invocations
+### Common `uv sync` Invocations
 
 ```bash
 # Running the server locally (no worker code)
@@ -77,6 +77,8 @@ uv sync --extra executor --extra v3_0
 # Everything: worker + tests + lint/type tooling (what CI runs)
 uv sync --extra executor --extra v3_0 --group test --group dev
 ```
+
+As a reminder, `--extra` is for controlling what parts of the repository you are going to be running and is intended for users. `--group` is for controlling development tools and is intended for developers. In a package, `--extra` are installable by end users while `--group` is not. The difference between them is more theoretical than practical. 
 
 `uv run <script>` and `uv run pytest` automatically use whatever
 environment the last `uv sync` produced — you don't re-specify extras on
@@ -128,7 +130,7 @@ Once it's up:
    a crashed or unresponsive container gets marked `lost`/`failed`
    automatically even if it never calls back.
 
-### Debug data viewer
+### Debug Data Viewer
 
 `http://localhost:8000/debug/viewer` is a minimal, throwaway page for
 watching the SSE telemetry stream (`GET /events/{event}/data/stream`) work
@@ -139,7 +141,7 @@ client protocol** (see the comment block at the top of
 widget consuming that stream; delete `server/routes/debug.py` and
 `server/static/` once that's built.
 
-### Rebuilding after a code change
+### Rebuilding
 
 `docker compose up --build` rebuilds all three images. If you've only
 changed pipeline/stage code, `docker compose up --build server` alone is
@@ -221,7 +223,7 @@ If no server is reachable in this mode, the worker exits immediately with
 a message telling you to either start the server or pass `--serverless` —
 it never silently falls back to serverless.
 
-### Preflight checks
+### Preflight Checks
 
 Before doing anything else, both `Sunbeam.run()` (CLI) and worker container
 startup run `pipeline/preflight.py`'s checks: can it reach the Sunbeam
@@ -232,7 +234,7 @@ can it reach the server's `/health` endpoint. A failed preflight reports
 failure to the server (if reachable) and exits with a nonzero status before
 ever building a pipeline; look here first if a worker won't start.
 
-## Configuration profiles (`debug` vs `production`)
+## Configuration Profiles (`debug` vs `production`)
 
 `config/context.toml` has three top-level blocks — `[client]`, `[worker]`,
 `[server]` — one per `ServiceType`, each with a `debug` and `production`

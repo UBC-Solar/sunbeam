@@ -1,4 +1,4 @@
-# Alembic quick guide
+# Alembic Quick Guide
 
 Sunbeam uses [Alembic](https://alembic.sqlalchemy.org/) to version the
 Postgres/TimescaleDB schema. This is a practical how-to for this repo
@@ -7,9 +7,9 @@ non-obvious things this codebase does with it (a pre-Alembic-database
 transition shim, and a lock timeout so a blocked migration fails loudly
 instead of hanging server startup).
 
-## The mental model
+## Introduction
 
-Your schema's history is a chain of migration files in
+The schema's history is a chain of migration files in
 `alembic/versions/`. Each file has a random ID, an `upgrade()` and a
 `downgrade()`, and a pointer to its parent (`down_revision`). Every
 database carries a one-row bookkeeping table, `alembic_version`, recording
@@ -50,7 +50,7 @@ export SUNBEAM_DATABASE_URL="postgresql+psycopg://user:pass@host:5432/dbname"
 uv run alembic upgrade head
 ```
 
-## Server startup runs migrations automatically
+## Automatic Migrations
 
 `server/main.py`'s `on_startup` calls `server/migrations.py`'s
 `upgrade_database(engine)` — the server always brings its database to
@@ -58,7 +58,7 @@ uv run alembic upgrade head
 `alembic upgrade head` against a database the server manages; it happens
 every time the server (re)starts, and is a no-op when already at `head`.
 
-### The pre-Alembic transition shim
+### Alembic Transition
 
 If you have a database from before this repo used Alembic (i.e. one built
 by the old `create_schema()`), it has the full baseline schema but no
@@ -81,7 +81,7 @@ uv run alembic stamp f3f709edb0e7
 uv run alembic upgrade head
 ```
 
-### Blocked migrations fail loudly
+### Migration Failures
 
 Every migration connection sets Postgres's `lock_timeout` to 10 seconds
 before running (`alembic/env.py`, overridable via
@@ -94,7 +94,7 @@ fails after 10 seconds with a message telling you to inspect
 `pg_blocking_pids(pid)` and terminate the offending session, rather than
 hanging indefinitely.
 
-## Day-to-day workflow: changing the schema
+## Changing the Schema
 
 Say you add a column to `Event` in `db/sunbeamdb/models.py`:
 
@@ -138,7 +138,7 @@ its first draft:
 Simple column/table/index additions that don't touch any of the above,
 autogenerate gets right essentially every time.
 
-## Commands you'll actually use
+## Commands Quick Guide
 
 ```bash
 uv run alembic current            # what revision is this DB at?
@@ -149,7 +149,7 @@ uv run alembic upgrade --sql head # print the SQL, execute nothing - review befo
 uv run alembic heads              # should print exactly ONE id (see below)
 ```
 
-## Data migrations
+## Data Migrations
 
 Migrations can move data, not just DDL:
 
@@ -164,7 +164,7 @@ Keep these idempotent where practical. Anything touching `raw_sample` or
 extra care: prefer batched raw SQL, and think about how long the migration
 holds locks given the `lock_timeout` behavior above.
 
-## Working with a team / merging branches
+## Merging
 
 Migration files are code: committed, reviewed alongside the model change
 that motivated them, and never edited after being applied anywhere that

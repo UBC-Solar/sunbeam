@@ -1,4 +1,4 @@
-# API reference
+# API Reference
 
 The server (`server/main.py`, FastAPI) exposes four route groups:
 `/events`, `/workers`, `/pipeline-editions`, and the telemetry data API
@@ -117,7 +117,6 @@ non-terminal statuses only.
 Server-launches a Docker container. This is what the dashboard calls.
 
 ```json
-// request
 {"event_id": 2, "pipeline_edition": "v3_0"}
 ```
 
@@ -139,7 +138,6 @@ the run ID; this is the only way a `kind: "external"` `WorkerRun` gets
 created.
 
 ```json
-// request
 {"event_name": "realtime", "pipeline_edition": "v3_0", "host": "joshuas-laptop"}
 ```
 
@@ -152,7 +150,6 @@ Called periodically by the worker's `OrchestratedWorkerControl` (roughly
 every second). Not something you call manually in normal use.
 
 ```json
-// request
 {"status": "running", "current_stage": "Array", "status_message": null, "host": "a1b2c3d4e5f6"}
 ```
 
@@ -265,7 +262,7 @@ Every top-level table key in `stage/stage_registry.toml` — see
 
 ---
 
-## Telemetry data
+## Telemetry Data
 
 Two distinct endpoints for two distinct use cases — **don't reach for one
 where the other fits**: the query endpoint is for post-mortem analysis over

@@ -8,7 +8,7 @@ TimescaleDB/Postgres database — while a server orchestrates worker
 processes, supervises their lifecycle, and serves both the orchestration
 API and a read/stream API for the derived data.
 
-## Architecture, in one paragraph
+## Architecture, Briefly
 
 A **worker** process (`sunbeam.py`) runs one event's pipeline: it reads
 `config/events.toml` to find which stages an event needs, builds a
@@ -25,7 +25,7 @@ over REST and Server-Sent Events for dashboards. See
 [`docs/CONTRACTS.md`](docs/CONTRACTS.md) for the full module-by-module
 breakdown and the rules that keep these pieces independently testable.
 
-## Documentation map
+## Documentation Map
 
 | Document | Covers |
 |---|---|
@@ -35,7 +35,7 @@ breakdown and the rules that keep these pieces independently testable.
 | [`docs/CONTRACTS.md`](docs/CONTRACTS.md) | The contract each module (`config`, `state`, `stage`, `pipeline`, `orchestration`, `db`, `server`) keeps with the others — what it owns, what it's allowed to assume, what must never import what. |
 | [`docs/ALEMBIC.md`](docs/ALEMBIC.md) | Database migrations: the mental model, day-to-day workflow, and this repo's specific setup (auto-migration on server startup, the pre-Alembic transition shim, the lock timeout). |
 
-## Quick start
+## Quick Start
 
 The fast path is Docker (see [`docs/USAGE.md`](docs/USAGE.md#mode-1-docker-with-the-server-and-dashboard)
 for the full explanation of what each service does):
@@ -58,19 +58,19 @@ uv sync --extra executor --extra v3_0
 uv run sunbeam.py --event_name realtime --serverless
 ```
 
-## Repository layout
+## Repository Layout
 
 ```
-config/       TOML config + Context singleton, event/vehicle/signal sync
-state/        In-memory State (signal blackboard) and Frame/FrameView
-stage/        The Stage base class, StageLibrary, and per-edition stage implementations (stage/v3_0/, ...)
-pipeline/     Graph building, scheduling, the Executor, timing/metrics
+config/         TOML config + Context singleton, event/vehicle/signal sync
+state/          In-memory State (signal blackboard) and Frame/FrameView
+stage/          The Stage base class, StageLibrary, and per-edition stage implementations
+pipeline/       Graph building, scheduling, the Executor, timing/metrics
 orchestration/  Worker<->server protocol: WorkerControl, OrchestratorClient, bootstrap
-db/           SQLAlchemy models, event/aligned-sample writers, InfluxDB readers
-server/       The FastAPI app: routes, services, the debug stream viewer
-alembic/      Database migration chain (see docs/ALEMBIC.md)
-dashboard/    The React/Vite operator dashboard
-tests/        v3_0/ (pure stage unit tests), infrastructure/ (everything else, SQLite-backed), postgres/ (marked, needs Docker)
+db/             SQLAlchemy models, event/aligned-sample writers, InfluxDB readers
+server/         The FastAPI app: routes, services, the debug stream viewer
+alembic/        Database migration chain (see docs/ALEMBIC.md)
+dashboard/      The React/Vite operator dashboard
+tests/          v3_0/ (pure stage unit tests), infrastructure/ (everything else, SQLite-backed), postgres/ (marked, needs Docker)
 ```
 
 ### Configuration Files
@@ -79,10 +79,9 @@ config/*.toml              events.toml, vehicles.toml, context.toml (deployment 
 stage/stage_registry.toml  Stage name -> class registry, per pipeline edition
 ```
 
-
 ## Development
 
-### Setting up
+### Setup
 
 Install [`uv`](https://docs.astral.sh/uv/) if you don't have it, then sync
 the extras/groups you need. For full local development (running the
@@ -96,18 +95,18 @@ See [`docs/USAGE.md`](docs/USAGE.md#dependency-groups-and-why-they-exist)
 for what each extra/group is for and why `server`/`executor` and
 `v3_0`/`v3_1` are mutually exclusive.
 
-### Linting and type checking
+### Linting and Type Checking
 
 ```bash
-uv run ruff check .      # lint
+uv run ruff check .        # lint
 uv run ruff check --fix .  # lint, auto-fixing what it can
-uv run mypy .             # type check
+uv run mypy .               # type check
 ```
 
 Both are configured in `pyproject.toml` (`[tool.ruff]`, `[tool.mypy]`) and
 run in CI on every push and PR (`.github/workflows/ci.yml`).
 
-### Running the tests
+### Running Tests
 
 ```bash
 uv run pytest              # the default suite: fast, no Docker/Postgres needed
@@ -130,7 +129,7 @@ CI (`.github/workflows/ci.yml`) runs all four checks — `ruff`, `mypy`, the
 default suite, and the Postgres suite — as separate parallel jobs on every
 push to `main` and every pull request.
 
-### Adding a database migration
+### Adding a Database Migration
 
 See [`docs/ALEMBIC.md`](docs/ALEMBIC.md) in full, but in short:
 

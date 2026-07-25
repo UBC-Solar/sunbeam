@@ -52,7 +52,7 @@ class Array(Stage):
 - **`inputs`** / **`outputs`** — lists of `CanonicalName` (or plain string)
   signal identifiers. These are what wire stages together — see
   "How stages become a graph" below.
-- **`frequency`** — the rate, in Hz, this stage should tick at. Stages with
+- **`frequency`** — the rate, in Hertz, this stage should tick at. Stages with
   the same frequency and no cross-rate dependency get grouped onto the same
   scheduled `Pipeline` (see below); different frequencies always run on
   separate schedules.
@@ -67,7 +67,7 @@ time** (i.e. at import), not at instantiation — forgetting one of them
 raises `TypeError` the moment the module is imported, so a broken stage
 can't accidentally reach `StageLibrary` at all.
 
-### The `run()` purity rule
+### The `run()` method
 
 `run()` should be a function of `input_frame` and the stage's own instance
 attributes (accumulators like `IntegratedPackPower.total_energy`, or
@@ -75,7 +75,7 @@ one-time config loaded in `__init__` like `LatitudeLongitude`'s track
 bounding box). It should **not** read `Context()`, hit the database, or do
 network I/O — with one deliberate exception:
 
-### The `Ingress` exception
+### The `Ingress` stage
 
 `Ingress` (`stage/v3_0/ingress.py`) is not a normal computation stage — it's
 how *external* data (from InfluxDB, via `RealtimeIngress`) enters the
@@ -101,9 +101,9 @@ automatically for whatever signals your compute stages need but no stage
 produces. You only touch `Ingress` itself if you're changing how telemetry
 enters the system (e.g. a new backing store).
 
-## How stages become a graph
+## Pipeline Construction
 
-This is `pipeline/pipeline_generator.py`, and it's worth understanding even
+This is performed by `pipeline/pipeline_generator.py`, and it's worth understanding even
 though you rarely call it directly:
 
 1. **Build a dependency graph** (`build_node_graph`): one node per stage,
@@ -126,14 +126,14 @@ though you rarely call it directly:
    slower cross-rate producer has run once) yields quietly — up to
    `not_ready_grace_s` (default 1.0s); past that, the pipeline raises,
    since a permanently-missing producer is a real bug, not a startup
-   race.
+   race. There is no deterministic order in which different pipelines run (_note: perhaps there should be!_).
 
 The upshot: **you never manually wire a pipeline together**. You write
 stages with correct `inputs`/`outputs`/`frequency`, list the stages an
 event should run in `events.toml`, and the generator does the rest — figures
 out what needs to come from ingress, groups by rate, and orders execution.
 
-### Cross-rate dependencies
+### Cross-Rate Dependencies
 
 If a 10 Hz stage depends on a signal a 2 Hz stage produces, that's a
 cross-rate edge — it's cut when building subgraphs (step 4 above), and the
@@ -145,11 +145,11 @@ ticks. If your stage design assumes otherwise (e.g. it wants to know
 *when* the slow signal last changed), that's a sign it should either share
 the slow stage's frequency or read a timestamp signal explicitly.
 
-## Pipeline editions and `stage_registry.toml`
+## Pipeline Editions and `stage_registry.toml`
 
 A **pipeline edition** (`v3_0`, `v3_1`, ...) is a named, versioned set of
 stage implementations — it exists because the vehicle's telemetry format,
-signal set, or computation logic changes between hardware generations, and
+signal set, and computation logic might change between hardware generations, and
 old recorded events still need to replay against the stage code that
 matches *their* era.
 
@@ -175,14 +175,14 @@ and resolves `get_stage_by_name("Array")` to the `Array` class via
 `events.toml` (see below) selects which top-level table
 (`[v3_0]`/`[v3_1]`/...) is used.
 
-### Directory convention
+### Directory Convention
 
 Each edition's stage implementations live in `stage/<edition>/`, e.g.
 `stage/v3_0/array.py`, `stage/v3_0/motor_power.py`. There's no code-level
 requirement that the directory name match the registry key — it's a
 convention, not enforced — but there is no reason to break it.
 
-## Adding a new stage
+## Adding A New Stage
 
 1. **Write the class** in `stage/<edition>/your_stage.py`, following the
    contract above. Look at an existing stage of similar shape first —
@@ -222,6 +222,13 @@ convention, not enforced — but there is no reason to break it.
    output (or just run the worker locally with `--serverless` and watch the
    startup log line: `Generated N compute pipeline(s) and M ingress
    pipeline(s): [...]`) if a pipeline's shape looks unexpected.
+
+## Adding A Pipeline Edition
+
+Pipeline editions need a few things to become valid. If the new version is `v6_7`. `6` is the major version number, indicating the car version, and `7` is the minor, indicating a revision of the telemetry system. Patch numbers are not used. For example, Brightside is our 3rd edition vehicle and so it's first usage in 2024 maps to `v3_0`. In 2025 some new sensors had been added allowing for new stages, hence a new revision to `v3_1`.
+1. A directory in `stage/` holding all of its stages, named according to the new version, in this case `stage/v6_7`.
+2. An entry in the `stage/stage_registry.toml` registering all of the edition's stages, using the `v6_7` identifier.
+3. A new dependency group `v6_7` declared in the `pyproject.toml`'s `[project.optional-dependencies]` table listing the dependencies that the stages require. The new entry should also be added to the group of `conflicts` in `[tool.uv]` to conflict with the existing pipeline editions to ensure only one is activated at a time.
 
 ### A note on `CanonicalName`
 

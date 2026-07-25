@@ -1,4 +1,4 @@
-# Module contracts
+# Module Contracts
 
 Sunbeam is split into modules with narrow, deliberate responsibilities. This
 document describes what each one is allowed to assume about the others — the
@@ -11,7 +11,7 @@ exist, stop and re-read the relevant section — it's usually a sign the thing
 you're building belongs somewhere else, or that the contract needs to change
 on purpose (in which case, update this file in the same PR).
 
-## How the modules fit together
+## Overview
 
 The two diagrams below answer two different questions, and are easy to
 conflate if drawn as one picture (an earlier version of this document did
@@ -80,7 +80,7 @@ diagram, never imported *by* another Sunbeam module. `pipeline` never
 imports `server`, and (as above) `server` never imports `pipeline`,
 `state`, or `orchestration` — the two processes only ever meet over HTTP.
 
-### 2. Runtime topology (who talks to whom, once running)
+### Runtime Topology
 
 ```
                                                   ┌──────────────────────┐
@@ -189,7 +189,7 @@ the schema evolves):
 **TimescaleDB** 
 
 Sunbeam only has one database, and all the telemetry data goes into one table, `aligned_sample`. This might seem scary at first as we intend to use Sunbeam for **all** of UBC Solar's driving data, stretching from 2024 to now. 
-A naive search through every row for a specific data point is obviously O(n) with respect to the table size (where n is the number of rows), and so this is obviously unfeasible as the database grows. As such, we have an index on the `(event_id, signal_id, timestamp)` such that querying a specific datapoint (or a range) resolves as `O(log(n))` instead; much more feasible for even an enormous table.
+A naive search through every row for a specific data point is obviously `O(n)` with respect to the table size (where n is the number of rows), and so this is obviously unfeasible as the database grows. As such, we have an index on the `(event_id, signal_id, timestamp)` such that querying a specific datapoint (or a range) resolves as `O(log(n))` instead; much more feasible for even an enormous table.
 However, the index must fit in memory for it to be helpful, which, again, becomes infeasible as the database grows over the years. As such, we use `timescaledb`, a PostgreSQL extension, to deliberately break the `aligned_sample` table into chunks in the backend. Notably, queries do not, and need not, know about the chunking, and can treat the table as one; the extension routes queries for a timestamp to the correct chunk using metadata that it stores.
 Additionally, `timescaledb` optimizes writing to the table such that appending new rows in the expected fashion (monotonically increasing timestamps) is as fast as possible. 
 
@@ -447,7 +447,7 @@ container reality, and the read-only telemetry query/stream API
   runs a pipeline itself, only launches and supervises worker processes
   that do.
 
-## Cross-cutting rules
+## Cross-Module Standards
 
 - **Timezone-aware datetimes only**, everywhere data crosses a module
   boundary or hits the database. `db.sunbeamdb.models` uses
