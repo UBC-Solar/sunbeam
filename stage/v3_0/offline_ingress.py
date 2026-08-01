@@ -13,10 +13,12 @@ class OfflineIngress(Stage):
     def __init__(self, output_signals: list[str], time_provider: TimeProvider, bucket: str = None, organization: str = None, token: str = None, url: str = None) -> None:
         super().__init__()
         self._output_signals = output_signals
+        self._frequency = 0
 
         self._localized_output_signals = []
         self._localized_signal_to_signal = {}
         for signal in self._output_signals:
+            print(signal) # Delete This
             field, _, _, _ = InfluxDBLanguageLocalization.localize(signal, time_provider.now(timezone.utc).date())
             self._localized_output_signals.append(field)
             self._localized_signal_to_signal[field] = signal
@@ -34,8 +36,12 @@ class OfflineIngress(Stage):
         return self._output_signals
 
     @property
+    def frequency(self):
+        return self._frequency
+
+    @property
     def stage_name(self):
-        return f"Offline_Ingress_{self._frequency}Hz"
+        return "Offline_Ingress"
 
     def run(self, input_frame: FrameView) -> Frame:
         new_frame = Frame.from_view(input_frame)

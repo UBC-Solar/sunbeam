@@ -25,9 +25,9 @@ class Scheduler:
         self._start_monotonic_ns = now_mono_ns + int(delay_s * 1_000_000_000)
 
         for pipeline in pipelines:
-            if pipeline.frequency <= 0:
+            if pipeline.frequency < 0:
                 raise ValueError(
-                    f"Pipeline frequency must be positive: {pipeline.frequency}"
+                    f"Pipeline frequency must be non-negative: {pipeline.frequency}"
                 )
 
             period_ns = round(1_000_000_000 / pipeline.frequency)

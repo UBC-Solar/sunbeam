@@ -206,7 +206,7 @@ class OfflinePipelineGenerator(PipelineGenerator):
 
             ingress_nodes.append(
                 ingress_node(
-                    output_signals=signals,
+                    output_signals=signals[1],
                     time_provider=time_provider,
                     bucket=telemetry_db.bucket,
                     organization=telemetry_db.organization,
