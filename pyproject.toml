@@ -4,15 +4,20 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12, <3.14"
-dependencies = []
 
 [project.optional-dependencies]
-broker = [
+server = [
+    "alembic>=1.16",
     "coolname>=5.0.0",
+    "docker>=7.1.0",
+    "fastapi>=0.138.0",
+    "psycopg>=3.3.4",
     "psycopg-binary>=3.3.4",
+    "pydantic>=2.13.4",
     "pyzmq>=27.1.0",
     "sqlalchemy>=2.0.49",
     "ubc-solar-data-tools",
+    "uvicorn>=0.49.0",
 ]
 executor = [
     "networkx>=3.6.1",
@@ -29,10 +34,75 @@ v3_0 = [
     "pytest-cov>=7.1.0",
     "pytest-mock>=3.15.1",
 ]
+v3_1 = []
 
-[tool.uv.sources]
-ubc-solar-data-tools = { git = "https://github.com/UBC-Solar/data_tools.git", rev = "e2d3e4bee849171a70e4f227a03819ab2e288934" }
+[dependency-groups]
+# Everything the full test suite needs on top of the executor+v3_0 extras:
+# server-side tests exercise FastAPI routes and mock the Docker SDK.
+test = [
+    "pytest>=9.1.1",
+    "pytest-mock>=3.15.1",
+    "fastapi>=0.138.0",
+    "httpx2>=0.1",
+    "docker>=7.1.0",
+    "testcontainers>=4.8",
+]
+dev = [
+    "ruff>=0.14",
+    "mypy>=1.19",
+    "alembic>=1.16",
+]
+
+[tool.uv]
+conflicts = [
+    [
+      { extra = "v3_0" },
+      { extra = "v3_1" },
+    ],
+    [
+        { extra = "server"},
+        { extra = "executor"}
+    ]
+]
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["dashboard", "data"]
+
+[tool.ruff.lint.per-file-ignores]
+# Constants must be defined before the submodule imports that read them back.
+"config/__init__.py" = ["E402"]
+# Re-exports.
+"**/__init__.py" = ["F401"]
+# Imports legitimately follow pytest.importorskip(...) guards.
+"tests/**" = ["E402"]
+
+[tool.mypy]
+ignore_missing_imports = true
+implicit_optional = true
+check_untyped_defs = true
+explicit_package_bases = true
+exclude = ["dashboard/", "data/", "build/"]
+
+[[tool.mypy.overrides]]
+# Tests deliberately pass fakes where concrete types are declared and lean on
+# assertions rather than narrowing; keep them checked but not pedantic.
+module = "tests.*"
+disable_error_code = [
+    "union-attr",
+    "arg-type",
+    "list-item",
+    "var-annotated",
+    "return-value",
+    "operator",
+    "assignment",
+    "index",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+    "postgres: needs a real Postgres via Docker; excluded by default, run with `pytest -m postgres`",
+]
+addopts = "-m 'not postgres'"

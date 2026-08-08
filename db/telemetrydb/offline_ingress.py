@@ -1,7 +1,7 @@
 from data_tools.collections import TimeSeries
 from data_tools.query import InfluxDBClient
 from datetime import datetime
-from typing import Iterable
+from typing import Iterable, Optional
 
 
 class OfflineIngress:
@@ -22,13 +22,13 @@ class OfflineIngress:
             url: str = "http://influxdb.telemetry.ubcsolar.com",
             token: str = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==",
             timeout_s: float = 1.0,
-            fields: Iterable[str] = None,
+            fields: Optional[Iterable[str]] = None,
     ):
         self._bucket = bucket
         self._organization = organization
         self._url = url
         self._token = token
-        self._fields = fields
+        self._fields = tuple(fields) if fields is not None else ()
 
         self._client = InfluxDBClient(
             url=self._url,

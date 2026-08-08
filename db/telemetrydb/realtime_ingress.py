@@ -1,7 +1,7 @@
 from data_tools.localization import TemporalLocalization
 from datetime import datetime, timedelta, timezone
 from influxdb_client import InfluxDBClient
-from typing import Any, Protocol
+from typing import Any, Optional, Protocol
 from typing import Iterable
 
 
@@ -48,19 +48,19 @@ class RealtimeIngress:
 
     def __init__(
             self,
-            bucket: str = "CAN_log",
-            organization: str = "8a0b66d77a331e96",
-            url: str = "http://influxdb.telemetry.ubcsolar.com",
-            token: str = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==",
+            bucket: Optional[str] = "CAN_log",
+            organization: Optional[str] = "8a0b66d77a331e96",
+            url: Optional[str] = "http://influxdb.telemetry.ubcsolar.com",
+            token: Optional[str] = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==",
             timeout_s: float = 1.0,
-            fields: Iterable[str] = None,
+            fields: Optional[Iterable[str]] = None,
             time_provider: TimeProvider = datetime
     ):
         self._bucket = bucket
         self._organization = organization
         self._url = url
         self._token = token
-        self._fields = fields
+        self._fields = tuple(fields) if fields is not None else ()
 
         self._client = InfluxDBClient(
             url=self._url,

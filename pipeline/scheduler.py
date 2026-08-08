@@ -8,12 +8,21 @@ import time
 
 
 class Scheduler:
-    def __init__(self, pipelines: Iterable[RunnablePipeline], observer: SchedulerObserver | None = None,):
+    def __init__(
+        self,
+        pipelines: Iterable[RunnablePipeline],
+        observer: SchedulerObserver | None = None,
+        *,
+        monotonic_ns: Callable[[], int] = time.monotonic_ns,
+        sleep: Callable[[float], None] = time.sleep,
+    ):
         self._heap: list[ScheduledRun] = []
         self._counter = itertools.count()
         self._observer = observer
+        self._monotonic_ns = monotonic_ns
+        self._sleep = sleep
 
-        now_mono_ns = time.monotonic_ns()
+        now_mono_ns = self._monotonic_ns()
         now_wall = dt.datetime.now(dt.UTC)
 
         # Start at the next whole UTC second, i.e. nice 000 ms timestamp.
@@ -52,15 +61,16 @@ class Scheduler:
         on_tick: Callable[[], None] | None = None,
         *,
         stop_on_error: bool = True,
+        should_stop: Callable[[], bool] | None = None,
     ) -> None:
-        while True:
+        while not (should_stop and should_stop()):
             scheduled = heapq.heappop(self._heap)
 
-            now_ns = time.monotonic_ns()
+            now_ns = self._monotonic_ns()
             sleep_ns = scheduled.next_run_ns - now_ns
 
             if sleep_ns > 0:
-                time.sleep(sleep_ns / 1_000_000_000)
+                self._sleep(sleep_ns / 1_000_000_000)
                 if self._observer is not None:
                     self._observer.on_idle(sleep_ns)
                 late_ns = 0
@@ -73,14 +83,14 @@ class Scheduler:
             if self._observer is not None:
                 self._observer.on_pipeline_start(pipeline_name, late_ns)
 
-            run_start_ns = time.monotonic_ns()
+            run_start_ns = self._monotonic_ns()
 
             try:
                 for frame in scheduled.pipeline.run(state, timestamp):
                     if on_output is not None:
-                        write_start_ns = time.monotonic_ns()
+                        write_start_ns = self._monotonic_ns()
                         on_output(scheduled.pipeline, frame, timestamp)
-                        write_elapsed_ns = time.monotonic_ns() - write_start_ns
+                        write_elapsed_ns = self._monotonic_ns() - write_start_ns
 
                         if self._observer is not None:
                             self._observer.on_writer_done(write_elapsed_ns)
@@ -89,7 +99,7 @@ class Scheduler:
                 if stop_on_error:
                     raise
 
-            run_elapsed_ns = time.monotonic_ns() - run_start_ns
+            run_elapsed_ns = self._monotonic_ns() - run_start_ns
 
             if self._observer is not None:
                 self._observer.on_pipeline_done(pipeline_name, run_elapsed_ns)

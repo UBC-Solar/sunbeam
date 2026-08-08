@@ -1,4 +1,5 @@
 from pipeline.protocols import RunnablePipeline
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 import threading
 
@@ -39,7 +40,9 @@ class StageTimingStats:
 
 @dataclass
 class TimingStats:
-    pipelines_by_name: dict[str, RunnablePipeline]
+    # Mapping (not dict) so callers can pass dicts of concrete Pipeline
+    # subtypes without variance errors.
+    pipelines_by_name: Mapping[str, RunnablePipeline]
 
     idle_ns: int = 0
     pipeline_ns: dict[str, int] = field(default_factory=lambda: defaultdict(int))
@@ -84,6 +87,61 @@ class TimingStats:
             renderable = self._make_table_unlocked()
             self._reset_unlocked()
             return renderable
+
+    def metrics_payload_and_reset(self) -> dict:
+        with self.lock:
+            payload = self._collect_metrics_unlocked()
+            self._reset_unlocked()
+            return payload
+
+    def _collect_metrics_unlocked(self) -> dict:
+        total_busy = sum(self.pipeline_ns.values()) + self.writer_ns
+        total = total_busy + self.idle_ns
+
+        idle_pct = 100 * self.idle_ns / total if total else 0.0
+        busy_pct = 100 * total_busy / total if total else 0.0
+
+        pipelines = []
+        for name, ns in sorted(self.pipeline_ns.items(), key=lambda x: x[1], reverse=True):
+            ticks = self.ticks[name]
+
+            pipeline = self.pipelines_by_name.get(name)
+            timing = getattr(pipeline, "timing", None)
+
+            stages = []
+            if timing is not None:
+                snapshot = timing.snapshot()
+                for stage_name, stage_ns in sorted(
+                        snapshot["total_ns"].items(),
+                        key=lambda x: x[1],
+                        reverse=True,
+                ):
+                    calls = snapshot["calls"][stage_name]
+                    stages.append({
+                        "name": stage_name,
+                        "total_ms": stage_ns / 1e6,
+                        "avg_ms": stage_ns / max(calls, 1) / 1e6,
+                        "max_ms": snapshot["max_ns"][stage_name] / 1e6,
+                        "calls": calls,
+                    })
+
+            pipelines.append({
+                "name": name,
+                "total_ms": ns / 1e6,
+                "avg_ms": ns / max(ticks, 1) / 1e6,
+                "ticks": ticks,
+                "late_now_ms": self.current_late_ns[name] / 1e6,
+                "late_max_ms": self.max_late_ns[name] / 1e6,
+                "stages": stages,
+            })
+
+        return {
+            "idle_pct": idle_pct,
+            "busy_pct": busy_pct,
+            "writer_ms": self.writer_ns / 1e6,
+            "pipelines": pipelines,
+        }
+
     def _reset_unlocked(self):
         self.idle_ns = 0
         self.pipeline_ns.clear()

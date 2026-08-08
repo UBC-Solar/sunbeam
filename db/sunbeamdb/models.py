@@ -1,9 +1,6 @@
-from __future__ import annotations
-
 import enum
 from datetime import datetime
 from typing import Optional
-
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -16,19 +13,25 @@ from sqlalchemy import (
     Text,
     func,
     UniqueConstraint,
-    Enum
+    Enum,
+    Uuid,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-
+import uuid
 
 class Base(DeclarativeBase):
     pass
 
 
+# BIGINT on Postgres; plain INTEGER on SQLite, where only "INTEGER PRIMARY
+# KEY" columns get rowid autoincrement semantics.
+BigIntegerPK = BigInteger().with_variant(Integer, "sqlite")
+
+
 class Vehicle(Base):
     __tablename__ = "vehicle"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigIntegerPK, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
@@ -43,7 +46,7 @@ class EventStatus(enum.Enum):
 class Event(Base):
     __tablename__ = "event"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigIntegerPK, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicle.id"), nullable=False)
 
@@ -60,7 +63,7 @@ class Event(Base):
 class Signal(Base):
     __tablename__ = "signal"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigIntegerPK, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     unit: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     source: Mapped[str] = mapped_column(String(32), nullable=False)  # raw, derived
@@ -115,3 +118,89 @@ class AlignedSample(Base):
             name="pk_aligned_sample",
         ),
     )
+
+class WorkerStatus(enum.Enum):
+
+    REQUESTED = "requested"
+
+    STARTING = "starting"
+
+    RUNNING = "running"
+
+    STOP_REQUESTED = "stop_requested"
+
+    STOPPING = "stopping"
+
+    COMPLETED = "completed"
+
+    FAILED = "failed"
+
+    LOST = "lost"
+
+    CANCELLED = "cancelled"
+
+
+TERMINAL_WORKER_STATUSES = {
+    WorkerStatus.COMPLETED,
+    WorkerStatus.FAILED,
+    WorkerStatus.CANCELLED,
+    WorkerStatus.LOST,
+}
+
+
+class WorkerKind(enum.Enum):
+    # Launched by the server as a Docker container it supervises.
+    CONTAINER = "container"
+    # A process that registered itself (e.g. sunbeam.py run by hand); the
+    # server supervises it via heartbeats only and cannot force-kill it.
+    EXTERNAL = "external"
+
+class WorkerRun(Base):
+
+    __tablename__ = "worker_run"
+
+    # sqlalchemy.Uuid is dialect-agnostic: native UUID on Postgres, CHAR(32)
+    # elsewhere (e.g. SQLite in tests).
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    event_id: Mapped[int] = mapped_column(
+        ForeignKey("event.id"),
+        nullable=False,
+    )
+
+    pipeline_edition: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Null for external workers, which have no image.
+    image_tag: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    status: Mapped[WorkerStatus] = mapped_column(
+        Enum(WorkerStatus),
+        nullable=False,
+        default=WorkerStatus.REQUESTED,
+    )
+    kind: Mapped[WorkerKind] = mapped_column(
+        Enum(WorkerKind),
+        nullable=False,
+        default=WorkerKind.CONTAINER,
+        server_default="CONTAINER",
+    )
+
+    host: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    container_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    container_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    current_stage: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    status_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    stop_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    stop_requested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_heartbeat_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    stopped_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    event: Mapped["Event"] = relationship()

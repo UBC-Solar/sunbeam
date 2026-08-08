@@ -11,7 +11,7 @@ class IntegratedPackPower(Stage):
     frequency: ClassVar[float] = 5 
 
     def __init__(self, **kwargs):
-        self.total_energy = 0
+        self.total_energy = 0.0
         self.last_timestamp: datetime | None = None
 
     def run(self, input_frame: FrameView) -> Frame:

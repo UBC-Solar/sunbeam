@@ -1,51 +1,140 @@
-import tomllib
-from datetime import datetime, timezone
-
-from sqlalchemy import create_engine
-
-import config
+from orchestration.bootstrap import build_control
+from orchestration.control import ServerlessWorkerControl, OrchestratedWorkerControl
 from config.context import Context, ServiceType
-from db import create_schema
-from config import VehicleManager, EventManager, SignalManager
+from pipeline.preflight import run_preflight_checks
+from sqlalchemy import create_engine
 from pipeline import Executor
+import argparse
+import logging
+import os
+
+logger = logging.getLogger("sunbeam.worker")
 
 
 class Sunbeam:
     def __init__(self):
         database_url = Context().sunbeam_db.build_url()
-
         self._engine = create_engine(database_url, echo=False)
-        create_schema(self._engine)
-        print("SunbeamDB initialized.")
-
-        self._vehicle_manager = VehicleManager()
-        self._events_manager = EventManager()
-        self._vehicles = None
-        self._events = None
-        self._signals = None
 
     def __del__(self):
         self._engine.dispose()
 
-    def start(self):
-        print("==== Syncing vehicles and events ==== ")
-        self._vehicle_manager.sync_vehicles(self._engine)
-        self._events_manager.sync_events(self._engine)
-        print("==== Vehicles and events synced. ==== \n ")
+    def run(
+        self,
+        event_name,
+        reprocess: bool = False,
+        control = None,
+    ):
+        resolved_control = control or ServerlessWorkerControl()
+        is_orchestrated = isinstance(resolved_control, OrchestratedWorkerControl)
 
-        print("==== Syncing signals ==== ")
-        SignalManager.sync_signals(self._engine)
-        print("==== Signals synced ==== \n ")
+        results = run_preflight_checks(self._engine, check_server=is_orchestrated)
+        failures = [r for r in results if not r.ok]
 
-    def run(self, event_name, reprocess: bool = False, debug: bool = False, debug_time: datetime = None):
-        executor = Executor(event_name, self._engine, reprocess=reprocess, debug=debug, debug_time=debug_time)
+        if failures:
+            message = "Preflight failed: " + "; ".join(f"{r.name}: {r.detail}" for r in failures)
+            logger.error(message)
+
+            try:
+                resolved_control.complete(success=False, message=message)
+            except Exception:
+                logger.warning(
+                    "Failed to report preflight failure to server", exc_info=True,
+                )
+
+            raise SystemExit(1)
+
+        executor = Executor.from_event(
+            event_name,
+            self._engine,
+            reprocess=reprocess,
+            control=resolved_control,
+        )
         executor.run()
 
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run Sunbeam pipeline executor.")
+
+    parser.add_argument(
+        "--event_name",
+        nargs="?",
+        default=os.environ.get("SUNBEAM_EVENT_NAME", "realtime"),
+        help="Event name to run. Defaults to SUNBEAM_EVENT_NAME or 'realtime'.",
+    )
+
+    parser.add_argument(
+        "--serverless",
+        action="store_true",
+        # Note: orchestrated is the default. A hand-run worker registers
+        # itself with the server; --serverless (or SUNBEAM_SERVERLESS=true)
+        # opts out entirely.
+        default=os.environ.get("SUNBEAM_SERVERLESS", "false").lower() == "true",
+        help="Run without the Sunbeam server (no registration, no heartbeats).",
+    )
+
+    parser.add_argument(
+        "--reprocess",
+        action="store_true",
+        default=os.environ.get("SUNBEAM_REPROCESS", "false").lower() == "true",
+        help="Reprocess an existing event.",
+    )
+
+    parser.add_argument(
+        "--configuration",
+        default=os.environ.get("SUNBEAM_CONFIGURATION_PROFILE", None),
+        help="The configuration profile to use.",
+    )
+
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    with open(config.CONTEXT_PATH, "rb") as f:
-        config_dict = tomllib.load(f)
-        Context.from_config(config_dict, ServiceType.Client)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+
+    args = parse_args()
+
+    configuration_profile = args.configuration.lower() if args.configuration else None
+
+    is_worker = "SUNBEAM_WORKER_RUN_ID" in os.environ
+
+    if is_worker:
+        is_serverless = False
+    else:
+        is_serverless = args.serverless
+
+    service_type = ServiceType.Worker if is_worker else ServiceType.Client
+    Context.load(service_type, configuration_profile)
+
+    logger.info(
+        "Resolved worker configuration: %s",
+        {
+            "service_type": service_type.value,
+            "is_serverless": is_serverless,
+            "worker_run_id": os.environ.get("SUNBEAM_WORKER_RUN_ID"),
+            "pipeline_edition": os.environ.get("SUNBEAM_PIPELINE_EDITION"),
+            "event_name": args.event_name,
+            "reprocess": args.reprocess,
+            **Context().describe(),
+        },
+    )
+
+    if "event_name" in args:
+        event_name = args.event_name
+    else:
+        event_name = os.environ.get("SUNBEAM_EVENT_NAME", None)
+
+    if event_name is None:
+        raise RuntimeError("Event name not set.")
+
+    control = build_control(is_serverless, args.event_name)
 
     sunbeam = Sunbeam()
-    sunbeam.start()
-    sunbeam.run("realtime", reprocess=True, debug=True, debug_time=datetime(2024, 7, 16, 14, 10, tzinfo=timezone.utc))
+    sunbeam.run(
+        args.event_name,
+        reprocess=args.reprocess,
+        control=control,
+    )

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sunbeam Stream Viewer</title>
+<!--
+  Throwaway debug page AND reference client for the SSE data stream.
+
+  The protocol (see server/routes/data.py):
+    GET /events/{event_name}/data/stream?signals=A,B,C
+      event: meta   - once, per-signal {signal_id, unit, frequency}
+      event: data   - columnar batches {signal: {timestamps[], values[]}}
+                      with id: <cursor> (epoch microseconds)
+      : keepalive   - comments during quiet periods (EventSource ignores them)
+
+  EventSource handles reconnection itself: after a drop it reconnects and
+  sends the last received `id:` as the Last-Event-ID header, and the server
+  resumes strictly after that cursor. No client code needed for recovery.
+-->
+<style>
+  body { font-family: ui-monospace, monospace; margin: 1.5rem; background: #111; color: #ddd; }
+  select, button { font: inherit; padding: 0.3rem 0.6rem; background: #222; color: #ddd; border: 1px solid #555; }
+  button { cursor: pointer; }
+  #status { margin-left: 1rem; color: #8c8; }
+  #meta { color: #999; margin: 0.5rem 0; }
+  canvas { background: #181818; border: 1px solid #333; margin-top: 1rem; width: 100%; height: 360px; }
+</style>
+</head>
+<body>
+<h3>Sunbeam stream viewer <small style="color:#777">(temporary debug page)</small></h3>
+
+<label>Event <select id="event"></select></label>
+<label>Signal <select id="signal"></select></label>
+<button id="connect">Connect</button>
+<button id="disconnect" disabled>Disconnect</button>
+<span id="status">idle</span>
+<div id="meta"></div>
+<canvas id="chart" width="1200" height="360"></canvas>
+
+<script>
+"use strict";
+
+const eventSelect = document.getElementById("event");
+const signalSelect = document.getElementById("signal");
+const statusEl = document.getElementById("status");
+const metaEl = document.getElementById("meta");
+const canvas = document.getElementById("chart");
+const ctx = canvas.getContext("2d");
+
+let source = null;         // the active EventSource
+let points = [];           // [epoch_ms, value] received since Connect
+
+// ---- populate the selectors from the REST API -----------------------------
+
+async function loadEvents() {
+  const events = await (await fetch("/events")).json();
+  eventSelect.innerHTML = "";
+  for (const event of events) {
+    eventSelect.add(new Option(event.name, event.name));
+  }
+  await loadSignals();
+}
+
+async function loadSignals() {
+  const eventName = eventSelect.value;
+  const signals = await (await fetch(`/events/${encodeURIComponent(eventName)}/signals`)).json();
+  signalSelect.innerHTML = "";
+  for (const signal of signals) {
+    signalSelect.add(new Option(signal.name, signal.name));
+  }
+}
+
+eventSelect.addEventListener("change", loadSignals);
+
+// ---- the streaming client -------------------------------------------------
+
+function connect() {
+  disconnect();
+  points = [];
+
+  const eventName = encodeURIComponent(eventSelect.value);
+  const signalName = signalSelect.value;
+
+  // One EventSource can carry many signals (signals=A,B,C); this demo
+  // subscribes to just the selected one.
+  source = new EventSource(
+    `/events/${eventName}/data/stream?signals=${encodeURIComponent(signalName)}`
+  );
+
+  source.addEventListener("meta", (message) => {
+    const meta = JSON.parse(message.data)[signalName];
+    metaEl.textContent =
+      `signal_id=${meta.signal_id}  unit=${meta.unit ?? "-"}  frequency=${meta.frequency ?? "-"} Hz`;
+    statusEl.textContent = "streaming";
+  });
+
+  source.addEventListener("data", (message) => {
+    const series = JSON.parse(message.data)[signalName];
+    for (let i = 0; i < series.timestamps.length; i++) {
+      points.push([series.timestamps[i], series.values[i]]);
+    }
+    statusEl.textContent =
+      `streaming - ${points.length} points, last=${points.at(-1)[1].toFixed(3)}`;
+    draw();
+  });
+
+  // Fires on connection loss too; EventSource retries by itself and resumes
+  // via Last-Event-ID, so all we do is report it.
+  source.onerror = () => { statusEl.textContent = "reconnecting..."; };
+
+  document.getElementById("disconnect").disabled = false;
+}
+
+function disconnect() {
+  if (source !== null) {
+    source.close();
+    source = null;
+  }
+  statusEl.textContent = "idle";
+  document.getElementById("disconnect").disabled = true;
+}
+
+document.getElementById("connect").addEventListener("click", connect);
+document.getElementById("disconnect").addEventListener("click", disconnect);
+
+// ---- a deliberately minimal line chart ------------------------------------
+
+function draw() {
+  const w = canvas.width, h = canvas.height, pad = 40;
+  ctx.clearRect(0, 0, w, h);
+  if (points.length < 2) return;
+
+  const t0 = points[0][0], t1 = points.at(-1)[0];
+  let vMin = Infinity, vMax = -Infinity;
+  for (const [, v] of points) { vMin = Math.min(vMin, v); vMax = Math.max(vMax, v); }
+  if (vMin === vMax) { vMin -= 1; vMax += 1; }
+
+  const x = (t) => pad + ((t - t0) / (t1 - t0)) * (w - 2 * pad);
+  const y = (v) => h - pad - ((v - vMin) / (vMax - vMin)) * (h - 2 * pad);
+
+  ctx.strokeStyle = "#444";
+  ctx.strokeRect(pad, pad, w - 2 * pad, h - 2 * pad);
+  ctx.fillStyle = "#888";
+  ctx.fillText(vMax.toFixed(2), 4, pad + 4);
+  ctx.fillText(vMin.toFixed(2), 4, h - pad);
+  ctx.fillText(new Date(t0).toISOString().slice(11, 19), pad, h - 8);
+  ctx.fillText(new Date(t1).toISOString().slice(11, 19), w - pad - 60, h - 8);
+
+  ctx.strokeStyle = "#6cf";
+  ctx.beginPath();
+  ctx.moveTo(x(points[0][0]), y(points[0][1]));
+  for (const [t, v] of points) ctx.lineTo(x(t), y(v));
+  ctx.stroke();
+}
+
+loadEvents().catch((error) => { statusEl.textContent = `failed to load events: ${error}`; });
+</script>
+</body>
+</html>

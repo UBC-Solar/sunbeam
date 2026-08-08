@@ -4,10 +4,12 @@ data/
 .vscode/
 .env
 .bin
+.claude
 
 **/*.log
 **/*.bin
 **/__pycache__/
+dashboard/node_modules
 
 # database files
 db/mongo_data
@@ -18,3 +20,4 @@ db/pg_data
 
 # tests
 .coverage
+*.egg-info/

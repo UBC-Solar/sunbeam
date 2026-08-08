@@ -1,5 +1,5 @@
 from config.context import Context, TelemetryDB
-from db.telemetrydb.realtime_ingress import DebugTimeProvider
+from db.telemetrydb.realtime_ingress import DebugTimeProvider, TimeProvider
 from stage.stage import Stage
 import networkx as nx
 from pipeline.pipeline import Pipeline
@@ -141,17 +141,22 @@ class PipelineGenerator:
         return signal_bins
 
     @staticmethod
-    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, debug: bool = False, debug_time: datetime = None) -> list[Stage]:
+    def generate_ingress_for_nodes(
+        signal_bins: dict[float, list[CanonicalName]],
+        stage_library,
+        telemetry_db: TelemetryDB | None = None,
+    ) -> list[Stage]:
         ingress_node = stage_library.get_stage_by_name("Ingress")
 
-        telemetry_db: TelemetryDB = Context().telemetry_db
+        telemetry_db = telemetry_db or Context().telemetry_db
 
         ingress_nodes: list[Stage] = []
         for frequency, signals in signal_bins.items():
-            if debug:
-                time_provider = DebugTimeProvider(start_time=debug_time)
+            time_provider: TimeProvider
+            if telemetry_db.debug:
+                time_provider = DebugTimeProvider(start_time=datetime.fromisoformat(telemetry_db.debug_time))
             else:
-                time_provider = datetime
+                time_provider = datetime  # type: ignore[assignment]
 
             ingress_nodes.append(
                 ingress_node(
@@ -177,10 +182,17 @@ class PipelineGenerator:
         return pipelines
 
     @staticmethod
-    def generate_pipeline_from_nodes(nodes: list[Stage], event_date: date, stage_library, debug: bool = False, debug_time: datetime = None) -> tuple[list[Pipeline], list[Pipeline]]:
+    def generate_pipeline_from_nodes(
+        nodes: list[Stage],
+        event_date: date,
+        stage_library,
+        telemetry_db: TelemetryDB | None = None,
+    ) -> tuple[list[Pipeline], list[Pipeline]]:
         ingress_signals = PipelineGenerator.collect_signals_for_ingress(nodes)
         signal_bins = PipelineGenerator.bin_signals_by_frequency(ingress_signals, event_date)
-        ingress_nodes = PipelineGenerator.generate_ingress_for_nodes(signal_bins, debug=debug, debug_time=debug_time, stage_library=stage_library)
+        ingress_nodes = PipelineGenerator.generate_ingress_for_nodes(
+            signal_bins, stage_library=stage_library, telemetry_db=telemetry_db
+        )
 
         ingress_pipeline = PipelineGenerator.build_pipeline_from_nodes(ingress_nodes)
         pipelines = PipelineGenerator.build_pipeline_from_nodes(nodes)
