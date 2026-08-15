@@ -30,14 +30,9 @@ class Executor:
         pipeline_stage_definitions = stage_library.get_stages_by_names(pipeline_stage_names)
         pipeline_stages = [stage() for stage in pipeline_stage_definitions]
 
-        self._pipelines, self._ingress_pipelines = RealtimePipelineGenerator.generate_pipeline_from_nodes(
-            pipeline_stages,
-            event_start_datetime,
-            event_end_datetime,
-            debug=debug,
-            debug_time=debug_time,
-            stage_library=stage_library,
-        )
+        self._pipelines, self._ingress_pipelines = None, None
+
+        
         if is_past_event:
             self._pipelines, self._ingress_pipelines = OfflinePipelineGenerator.generate_pipeline_from_nodes(
                         pipeline_stages,
@@ -46,6 +41,15 @@ class Executor:
                         debug=debug,
                         debug_time=debug_time,
                         stage_library=stage_library
+                    )
+        else:
+            self._pipelines, self._ingress_pipelines = RealtimePipelineGenerator.generate_pipeline_from_nodes(
+                        pipeline_stages,
+                        event_start_datetime,
+                        event_end_datetime,
+                        debug=debug,
+                        debug_time=debug_time,
+                        stage_library=stage_library,
                     )
         
         self._state = State()
