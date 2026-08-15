@@ -8,13 +8,14 @@ import time
 import math
 
 class Scheduler:
-    def __init__(self, pipelines: Iterable[RunnablePipeline], observer: SchedulerObserver | None = None,):
+    def __init__(self, pipelines: Iterable[RunnablePipeline], observer: SchedulerObserver | None = None, now_wall = None):
         self._heap: list[ScheduledRun] = []
         self._counter = itertools.count()
         self._observer = observer
 
         now_mono_ns = time.monotonic_ns()
-        now_wall = dt.datetime.now(dt.UTC)
+        if now_wall is None: # Reassigns now_wall if no start time is provided
+            now_wall = dt.datetime.now(dt.UTC)
 
         # Start at the next whole UTC second, i.e. nice 000 ms timestamp.
         self._start_wall_time = (now_wall + dt.timedelta(seconds=1)).replace(
@@ -70,7 +71,6 @@ class Scheduler:
             sleep_ns = scheduled.next_run_ns - now_ns
 
             if sleep_ns > 0:
-                time.sleep(sleep_ns / 1_000_000_000) # Delete probably
                 if self._observer is not None:
                     self._observer.on_idle(sleep_ns)
                 late_ns = 0

@@ -60,8 +60,13 @@ class Executor:
         }
 
         self._timing = TimingStats(pipelines_by_name)
-        self._compute_scheduler = Scheduler(self._pipelines, observer=self._timing)
-        self._ingress_scheduler = Scheduler(self._ingress_pipelines, observer=self._timing)
+
+        now_wall = None # Start time for the scheduler
+        if is_past_event:
+            now_wall = event_start_datetime
+        
+        self._compute_scheduler = Scheduler(self._pipelines, observer=self._timing, now_wall=now_wall)
+        self._ingress_scheduler = Scheduler(self._ingress_pipelines, observer=self._timing, now_wall=now_wall)
 
     def _handle_pipeline_output(self, pipeline, frame, timestamp):
         self._writer.write_frame(frame)
