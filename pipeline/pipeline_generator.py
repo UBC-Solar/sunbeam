@@ -139,7 +139,7 @@ class PipelineGenerator(ABC):
         return signal_bins
 
     @abstractmethod
-    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, debug: bool = False, debug_time: datetime = None) -> list[Stage]: ...
+    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, event_start_date: date, event_end_date: date, debug: bool = False, debug_time: datetime = None) -> list[Stage]: ...
 
     @staticmethod
     def build_pipeline_from_nodes(nodes: list[Stage]) -> list[Pipeline]:
@@ -151,10 +151,10 @@ class PipelineGenerator(ABC):
         return pipelines
 
     @classmethod
-    def generate_pipeline_from_nodes(cls, nodes: list[Stage], event_start_date: date, stage_library, debug: bool = False, debug_time: datetime = None) -> tuple[list[Pipeline], list[Pipeline]]:
+    def generate_pipeline_from_nodes(cls, nodes: list[Stage], event_start_date: date, event_end_date: date, stage_library, debug: bool = False, debug_time: datetime = None) -> tuple[list[Pipeline], list[Pipeline]]:
         ingress_signals = PipelineGenerator.collect_signals_for_ingress(nodes)
-        signal_bins = PipelineGenerator.bin_signals_by_frequency(ingress_signals, event_start_date)
-        ingress_nodes = cls.generate_ingress_for_nodes(signal_bins, debug=debug, debug_time=debug_time, stage_library=stage_library)
+        signal_bins = PipelineGenerator.bin_signals_by_frequency(ingress_signals, event_start_date.date())
+        ingress_nodes = cls.generate_ingress_for_nodes(signal_bins, debug=debug, event_start_date=event_start_date, event_end_date=event_end_date, debug_time=debug_time, stage_library=stage_library)
 
         ingress_pipeline = PipelineGenerator.build_pipeline_from_nodes(ingress_nodes)
         pipelines = PipelineGenerator.build_pipeline_from_nodes(nodes)
@@ -165,7 +165,7 @@ class PipelineGenerator(ABC):
         pass
 
 class RealtimePipelineGenerator(PipelineGenerator):
-    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, debug: bool = False, debug_time: datetime = None) -> list[Stage]:
+    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, event_start_date: date, event_end_date: date, debug: bool = False, debug_time: datetime = None) -> list[Stage]:
         ingress_node = stage_library.get_stage_by_name("Ingress")
 
         telemetry_db: TelemetryDB = Context().telemetry_db
@@ -192,7 +192,7 @@ class RealtimePipelineGenerator(PipelineGenerator):
         return ingress_nodes
     
 class OfflinePipelineGenerator(PipelineGenerator):
-    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, debug: bool = False, debug_time: datetime = None) -> list[Stage]:
+    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, event_start_date: datetime, event_end_date: datetime, debug: bool = False, debug_time: datetime = None) -> list[Stage]:
         ingress_node = stage_library.get_stage_by_name("Offline_Ingress")
 
         telemetry_db: TelemetryDB = Context().telemetry_db
@@ -208,6 +208,8 @@ class OfflinePipelineGenerator(PipelineGenerator):
                 ingress_node(
                     output_signals=signals[1],
                     time_provider=time_provider,
+                    event_start_date = event_start_date,
+                    event_end_date = event_end_date,
                     bucket=telemetry_db.bucket,
                     organization=telemetry_db.organization,
                     url=telemetry_db.database_url,

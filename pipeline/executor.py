@@ -20,6 +20,7 @@ class Executor:
 
         event_manager = EventManager()
         event_start_datetime: datetime = event_manager.get_event_start_date(event_name)
+        event_end_datetime: datetime = event_manager.get_event_end_date(event_name)
 
         is_past_event = event_manager.check_if_past_event(event_name=event_name, debug=debug)
 
@@ -29,17 +30,24 @@ class Executor:
         pipeline_stage_definitions = stage_library.get_stages_by_names(pipeline_stage_names)
         pipeline_stages = [stage() for stage in pipeline_stage_definitions]
 
-        generator_class = RealtimePipelineGenerator
-        if is_past_event:
-            generator_class = OfflinePipelineGenerator
-
-        self._pipelines, self._ingress_pipelines = generator_class.generate_pipeline_from_nodes(
+        self._pipelines, self._ingress_pipelines = RealtimePipelineGenerator.generate_pipeline_from_nodes(
             pipeline_stages,
-            event_start_datetime.date(),
+            event_start_datetime,
+            event_end_datetime,
             debug=debug,
             debug_time=debug_time,
             stage_library=stage_library,
         )
+        if is_past_event:
+            self._pipelines, self._ingress_pipelines = OfflinePipelineGenerator.generate_pipeline_from_nodes(
+                        pipeline_stages,
+                        event_start_datetime,
+                        event_end_datetime,
+                        debug=debug,
+                        debug_time=debug_time,
+                        stage_library=stage_library
+                    )
+        
         self._state = State()
 
         pipelines_by_name = {

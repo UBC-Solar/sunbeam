@@ -10,10 +10,12 @@ from stage.stage import Stage
 class OfflineIngress(Stage):
     inputs: ClassVar[list[str]] = []
 
-    def __init__(self, output_signals: list[str], time_provider: TimeProvider, bucket: str = None, organization: str = None, token: str = None, url: str = None) -> None:
+    def __init__(self, output_signals: list[str], time_provider: TimeProvider, event_start_date, event_end_date, bucket: str = None, organization: str = None, token: str = None, url: str = None) -> None:
         super().__init__()
         self._output_signals = output_signals
         self._frequency = 0
+        self._start_date = event_start_date
+        self._end_date = event_end_date
 
         self._localized_output_signals = []
         self._localized_signal_to_signal = {}
@@ -46,11 +48,11 @@ class OfflineIngress(Stage):
     def run(self, input_frame: FrameView) -> Frame:
         new_frame = Frame.from_view(input_frame)
 
-        values = self._ingress.get_last_values() # Remove this please
+        values = self._ingress.get_values_between(self._start_date, self._end_date)
 
         for field, data in values.items():
             try:
-                new_frame.write(self._localized_signal_to_signal[field], data['value'])
+                new_frame.write(self._localized_signal_to_signal[field], data)
             except TypeError:
                 pass
 

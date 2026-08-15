@@ -5,7 +5,7 @@ import datetime as dt
 import itertools
 import heapq
 import time
-
+import math
 
 class Scheduler:
     def __init__(self, pipelines: Iterable[RunnablePipeline], observer: SchedulerObserver | None = None,):
@@ -30,7 +30,10 @@ class Scheduler:
                     f"Pipeline frequency must be non-negative: {pipeline.frequency}"
                 )
 
-            period_ns = round(1_000_000_000 / pipeline.frequency)
+            if pipeline.frequency == 0:
+                period_ns = math.inf
+            else:
+                period_ns = round(1_000_000_000 / pipeline.frequency)
             heapq.heappush(
                 self._heap,
                 ScheduledRun(

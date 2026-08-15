@@ -15,12 +15,12 @@ class State:
             frame = Frame(timestamp)
 
             for signal in signals:
-                if not isinstance(signal, TimeSeries):
-                    frame.write(signal, self._values[signal])
-                    print(f"This is not a TimeSeries, value is: {signal}")
+                value = self._values[signal]
+
+                if isinstance(value, TimeSeries):
+                    frame.write(signal, value[timestamp])
                 else:
-                    frame.write(signal[timestamp], self._values[signal])
-                    print(f"This is a TimeSeries, value is: {signal}, time is: {timestamp}")
+                    frame.write(signal, value)
 
             return frame.as_view()
 

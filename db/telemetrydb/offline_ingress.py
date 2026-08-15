@@ -75,6 +75,8 @@ if __name__ == "__main__":
 
     values = reader.get_values_between(datetime(2024, 7, 16, 14, 00, tzinfo=timezone.utc), datetime(2024, 7, 16, 15, 00, tzinfo=timezone.utc))
 
+    print(values)
+
     values["TotalPackVoltage"].plot()
 
     reader.close()
