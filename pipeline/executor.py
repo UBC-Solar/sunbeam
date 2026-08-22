@@ -6,7 +6,7 @@ from pipeline.pipeline_generator import RealtimePipelineGenerator, OfflinePipeli
 from config import EventManager
 from stage.stage_library import StageLibrary
 from pipeline.timing import TimingStats
-from pipeline.scheduler import Scheduler
+from pipeline.scheduler import Scheduler, OnlineScheduler, OfflineScheduler
 from pipeline.output import OutputManager
 from datetime import datetime
 from state.state import State
@@ -32,7 +32,6 @@ class Executor:
 
         self._pipelines, self._ingress_pipelines = None, None
 
-        
         if is_past_event:
             self._pipelines, self._ingress_pipelines = OfflinePipelineGenerator.generate_pipeline_from_nodes(
                         pipeline_stages,
@@ -65,8 +64,13 @@ class Executor:
         if is_past_event:
             now_wall = event_start_datetime
         
-        self._compute_scheduler = Scheduler(self._pipelines, observer=self._timing, now_wall=now_wall)
-        self._ingress_scheduler = Scheduler(self._ingress_pipelines, observer=self._timing, now_wall=now_wall)
+        self._compute_scheduler = OnlineScheduler(self._pipelines, observer=self._timing, now_wall=now_wall)
+        self._ingress_scheduler = OnlineScheduler(self._ingress_pipelines, observer=self._timing, now_wall=now_wall)
+
+        # if is_past_event:
+        #     self._ingress_scheduler = OfflineScheduler(self._ingress_pipelines, observer=self._timing, now_wall=now_wall)
+        # else:
+        #     self._ingress_scheduler = OnlineScheduler(self._ingress_pipelines, observer=self._timing, now_wall=now_wall)
 
     def _handle_pipeline_output(self, pipeline, frame, timestamp):
         self._writer.write_frame(frame)
@@ -85,9 +89,11 @@ class Executor:
     def run(self):
         ingress_thread = threading.Thread(target=self._run_ingress_scheduler, daemon=True)
         ingress_thread.start()
+        #if isinstance(self._ingress_scheduler, OfflineScheduler):
+        #    ingress_thread.join()
 
         with OutputManager(self._timing) as output_manager:
-            self._compute_scheduler.run_forever(
+            self._compute_scheduler.run(
                 self._state,
                 on_tick=output_manager.on_tick,
                 on_output=self._handle_pipeline_output,
