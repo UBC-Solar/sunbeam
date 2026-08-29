@@ -192,13 +192,14 @@ class RealtimePipelineGenerator(PipelineGenerator):
         return ingress_nodes
     
 class OfflinePipelineGenerator(PipelineGenerator):
+    @staticmethod
     def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, event_start_date: datetime, event_end_date: datetime, debug: bool = False, debug_time: datetime = None) -> list[Stage]:
         ingress_node = stage_library.get_stage_by_name("Offline_Ingress")
 
         telemetry_db: TelemetryDB = Context().telemetry_db
 
         ingress_nodes: list[Stage] = []
-        for signals in signal_bins.items():
+        for _, signals in signal_bins.items():
             if debug:
                 time_provider = DebugTimeProvider(start_time=debug_time)
             else:
@@ -206,7 +207,7 @@ class OfflinePipelineGenerator(PipelineGenerator):
 
             ingress_nodes.append(
                 ingress_node(
-                    output_signals=signals[1],
+                    output_signals=signals,
                     time_provider=time_provider,
                     event_start_date = event_start_date,
                     event_end_date = event_end_date,
