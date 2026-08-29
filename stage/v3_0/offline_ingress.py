@@ -5,6 +5,7 @@ from state.frame import Frame, FrameView
 from datetime import timezone
 from typing import ClassVar
 from stage.stage import Stage
+import random
 
 
 class OfflineIngress(Stage):
@@ -43,7 +44,7 @@ class OfflineIngress(Stage):
 
     @property
     def stage_name(self):
-        return "Offline_Ingress"
+        return f"Offline_Ingress{random.randint(1, 1000)}"
 
     def run(self, input_frame: FrameView) -> Frame:
         new_frame = Frame.from_view(input_frame)
