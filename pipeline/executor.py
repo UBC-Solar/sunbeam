@@ -65,12 +65,11 @@ class Executor:
             now_wall = event_start_datetime
         
         self._compute_scheduler = OnlineScheduler(self._pipelines, observer=self._timing, now_wall=now_wall)
-        self._ingress_scheduler = OnlineScheduler(self._ingress_pipelines, observer=self._timing, now_wall=now_wall)
 
-        # if is_past_event:
-        #     self._ingress_scheduler = OfflineScheduler(self._ingress_pipelines, observer=self._timing, now_wall=now_wall)
-        # else:
-        #     self._ingress_scheduler = OnlineScheduler(self._ingress_pipelines, observer=self._timing, now_wall=now_wall)
+        if is_past_event:
+            self._ingress_scheduler = OfflineScheduler(self._ingress_pipelines, observer=self._timing, now_wall=now_wall)
+        else:
+            self._ingress_scheduler = OnlineScheduler(self._ingress_pipelines, observer=self._timing, now_wall=now_wall)
 
     def _handle_pipeline_output(self, pipeline, frame, timestamp):
         self._writer.write_frame(frame)
@@ -80,7 +79,7 @@ class Executor:
             live.update(self._timing.snapshot_and_reset())
 
     def _run_ingress_scheduler(self):
-        self._ingress_scheduler.run_forever(
+        self._ingress_scheduler.run(
             self._state,
             on_output=self._handle_pipeline_output,
             stop_on_error=True,
@@ -89,8 +88,8 @@ class Executor:
     def run(self):
         ingress_thread = threading.Thread(target=self._run_ingress_scheduler, daemon=True)
         ingress_thread.start()
-        #if isinstance(self._ingress_scheduler, OfflineScheduler):
-        #    ingress_thread.join()
+        if isinstance(self._ingress_scheduler, OfflineScheduler):
+            ingress_thread.join()
 
         with OutputManager(self._timing) as output_manager:
             self._compute_scheduler.run(

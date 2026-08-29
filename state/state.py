@@ -15,14 +15,15 @@ class State:
             frame = Frame(timestamp)
 
             for signal in signals:
-                print(f"Signal: {signal}")
-                print(f"Values: {self._values}")
                 value = self._values[signal]
             
                 if isinstance(value, TimeSeries):
+                    print("==================")
                     print(f"{signal} (Timeseries): {value[timestamp]} @ {timestamp} -> frame")
                     frame.write(signal, value[timestamp])
                 else:
+                    print("==================")
+                    print(f"{signal} (Float): {value} @ {timestamp} -> frame")
                     frame.write(signal, value)  
 
             return frame.as_view()

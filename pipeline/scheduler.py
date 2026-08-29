@@ -1,12 +1,14 @@
-from pipeline.protocols import SchedulerObserver, ScheduledRun, RunnablePipeline
+import datetime as dt
+import heapq
+import itertools
+import math
+import time
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from typing import Any
-import datetime as dt
-import itertools
-import heapq
-import time
-import math
-from abc import ABC, abstractmethod
+
+from pipeline.protocols import RunnablePipeline, ScheduledRun, SchedulerObserver
+
 
 class Scheduler(ABC):
     def __init__(self, pipelines: Iterable[RunnablePipeline], observer: SchedulerObserver | None = None, now_wall = None):
@@ -109,6 +111,17 @@ class Scheduler(ABC):
 
         if on_tick is not None:
             on_tick()
+
+    @abstractmethod
+    def run(
+            self,
+            state: Any,
+            on_output: Callable[[RunnablePipeline, Any, dt.datetime], None] | None = None,
+            on_tick: Callable[[], None] | None = None,
+            *,
+            stop_on_error: bool = True,
+        ) -> None:
+        ...
             
 class OnlineScheduler(Scheduler):
     def run(

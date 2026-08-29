@@ -52,12 +52,13 @@ class QueuedEventWriter:
 
         for frame in frames:
             for signal, value in frame:
-                rows.append({
-                    "event_id": self._event_writer._event_id,
-                    "ts": frame.timestamp,
-                    "signal_id": self._event_writer._signal_names_to_id[signal],
-                    "value_f64": value,
-                })
+                if isinstance(value, float):
+                    rows.append({
+                        "event_id": self._event_writer._event_id,
+                        "ts": frame.timestamp,
+                        "signal_id": self._event_writer._signal_names_to_id[signal],
+                        "value_f64": value,
+                    })
 
         if not rows:
             return
