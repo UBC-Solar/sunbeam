@@ -144,4 +144,9 @@ class OfflineScheduler(Scheduler):
             *,
             stop_on_error: bool = True,
         ) -> None:
-            self.run_once(state=state, on_output=on_output, on_tick=on_tick, stop_on_error=stop_on_error)
+            # Each pipeline in the offline heap needs to run exactly once (they all
+            # have period_ns == inf, so re-running run_once() this many times covers
+            # every pipeline without ever repeating one). The heap's size doesn't
+            # change across calls since each pop is matched by a push-back.
+            for _ in range(len(self._heap)):
+                self.run_once(state=state, on_output=on_output, on_tick=on_tick, stop_on_error=stop_on_error)
