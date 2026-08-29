@@ -60,7 +60,7 @@ class Scheduler(ABC):
         *,
         stop_on_error: bool = True,
     ) -> None:
-        """ Function which runs Sunbeam on loop.
+        """ Function which runs Sunbeam once.
         
                 :param Any state: State object which holds the values for processing
                 :param Callable[[RunnablePipeline, Any, dt.datetime], None] | None on_output: The function which runs on output, defaults to None
