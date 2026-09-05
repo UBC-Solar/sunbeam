@@ -1,17 +1,19 @@
+import uuid
+from datetime import UTC
+from typing import ClassVar
+
+from data_tools.localization import InfluxDBLanguageLocalization  # type: ignore
+
 from db.telemetrydb.offline_ingress import OfflineIngressQuerier
 from db.telemetrydb.protocols import TimeProvider
-from data_tools.localization import InfluxDBLanguageLocalization # type: ignore
-from state.frame import Frame, FrameView
-from datetime import timezone
-from typing import ClassVar
 from stage.stage import Stage
-import uuid
+from state.frame import Frame, FrameView
 
 
 class OfflineIngress(Stage):
     inputs: ClassVar[list[str]] = []
 
-    def __init__(self, output_signals: list[str], time_provider: TimeProvider, event_start_date, event_end_date, bucket: str = None, organization: str = None, token: str = None, url: str = None) -> None:
+    def __init__(self, output_signals: list[str], time_provider: TimeProvider, event_start_date, event_end_date, bucket: str | None = None, organization: str | None = None, token: str | None = None, url: str | None = None) -> None:
         super().__init__()
         self._output_signals = output_signals
         self._frequency = 0
@@ -22,7 +24,7 @@ class OfflineIngress(Stage):
         self._localized_output_signals = []
         self._localized_signal_to_signal = {}
         for signal in self._output_signals:
-            field, _, _, _ = InfluxDBLanguageLocalization.localize(signal, time_provider.now(timezone.utc).date())
+            field, _, _, _ = InfluxDBLanguageLocalization.localize(signal, time_provider.now(UTC).date())
             self._localized_output_signals.append(field)
             self._localized_signal_to_signal[field] = signal
 

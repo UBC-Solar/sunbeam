@@ -1,7 +1,9 @@
+from collections.abc import Iterable
+from datetime import UTC, datetime
+
 from data_tools.collections import TimeSeries
 from data_tools.query import InfluxDBClient
-from datetime import datetime
-from typing import Iterable
+
 
 class OfflineIngressQuerier:
     """
@@ -21,7 +23,7 @@ class OfflineIngressQuerier:
             url: str = "http://influxdb.telemetry.ubcsolar.com",
             token: str = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==",
             timeout_s: float = 1.0,
-            fields: Iterable[str] = None,
+            fields: Iterable[str] | None = None,
     ):
         self._bucket = bucket
         self._organization = organization
@@ -45,7 +47,7 @@ class OfflineIngressQuerier:
             _field: None for _field in self._fields
         }
 
-        for _field in _out.keys():
+        for _field in _out:
             _out[_field] = self._client.query_time_series(start_time, stop_time, _field)
 
         return _out
@@ -55,7 +57,6 @@ class OfflineIngressQuerier:
 
 
 if __name__ == "__main__":
-    from datetime import timezone
 
     reader = OfflineIngressQuerier(
         bucket="CAN_log",
@@ -73,7 +74,7 @@ if __name__ == "__main__":
         )
     )
 
-    values = reader.get_values_between(datetime(2024, 7, 16, 14, 00, tzinfo=timezone.utc), datetime(2024, 7, 16, 15, 00, tzinfo=timezone.utc))
+    values = reader.get_values_between(datetime(2024, 7, 16, 14, 00, tzinfo=UTC), datetime(2024, 7, 16, 15, 00, tzinfo=UTC))
 
     print(values)
 

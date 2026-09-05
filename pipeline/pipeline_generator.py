@@ -1,11 +1,17 @@
+from abc import ABC, abstractmethod
+from datetime import date, datetime
+
+import networkx as nx  # type: ignore
+from data_tools.localization import (  # type: ignore
+    CanonicalName,
+    InfluxDBLanguageLocalization,
+)
+
 from config.context import Context, TelemetryDB
 from db.telemetrydb.realtime_ingress import DebugTimeProvider
-from stage.stage import Stage
-import networkx as nx # type: ignore
 from pipeline.pipeline import Pipeline
-from data_tools.localization import InfluxDBLanguageLocalization, CanonicalName # type: ignore
-from datetime import date, datetime
-from abc import ABC, abstractmethod
+from stage.stage import Stage
+
 
 def build_node_graph(nodes: list[Stage]) -> nx.DiGraph:
     producer_of: dict[str, str] = {}
@@ -118,8 +124,7 @@ class PipelineGenerator(ABC):
         # Get every node output
         for node in nodes:
             for output_signal in node.outputs:
-                if output_signal in unprovided_inputs:
-                    unprovided_inputs.remove(output_signal)
+                unprovided_inputs.discard(output_signal)
 
         # Anything left must not be produced by any node: we assume it must be
         # required to be found by the ingress stage.
@@ -139,7 +144,7 @@ class PipelineGenerator(ABC):
         return signal_bins
 
     @abstractmethod
-    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, event_start_date: date, event_end_date: date, debug: bool = False, debug_time: datetime = None) -> list[Stage]: ...
+    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, event_start_date: date, event_end_date: date, debug: bool = False, debug_time: datetime | None = None) -> list[Stage]: ...
 
     @staticmethod
     def build_pipeline_from_nodes(nodes: list[Stage]) -> list[Pipeline]:
@@ -151,7 +156,7 @@ class PipelineGenerator(ABC):
         return pipelines
 
     @classmethod
-    def generate_pipeline_from_nodes(cls, nodes: list[Stage], event_start_date: date, event_end_date: date, stage_library, debug: bool = False, debug_time: datetime = None) -> tuple[list[Pipeline], list[Pipeline]]:
+    def generate_pipeline_from_nodes(cls, nodes: list[Stage], event_start_date: date, event_end_date: date, stage_library, debug: bool = False, debug_time: datetime | None = None) -> tuple[list[Pipeline], list[Pipeline]]:
         ingress_signals = PipelineGenerator.collect_signals_for_ingress(nodes)
         signal_bins = PipelineGenerator.bin_signals_by_frequency(ingress_signals, event_start_date.date())
         ingress_nodes = cls.generate_ingress_for_nodes(signal_bins, debug=debug, event_start_date=event_start_date, event_end_date=event_end_date, debug_time=debug_time, stage_library=stage_library)
@@ -165,7 +170,7 @@ class PipelineGenerator(ABC):
         pass
 
 class RealtimePipelineGenerator(PipelineGenerator):
-    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, event_start_date: date, event_end_date: date, debug: bool = False, debug_time: datetime = None) -> list[Stage]:
+    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, event_start_date: date, event_end_date: date, debug: bool = False, debug_time: datetime | None = None) -> list[Stage]:
         ingress_node = stage_library.get_stage_by_name("Ingress")
 
         telemetry_db: TelemetryDB = Context().telemetry_db
@@ -193,13 +198,13 @@ class RealtimePipelineGenerator(PipelineGenerator):
     
 class OfflinePipelineGenerator(PipelineGenerator):
     @staticmethod
-    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, event_start_date: datetime, event_end_date: datetime, debug: bool = False, debug_time: datetime = None) -> list[Stage]:
+    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, event_start_date: datetime, event_end_date: datetime, debug: bool = False, debug_time: datetime | None = None) -> list[Stage]:
         ingress_node = stage_library.get_stage_by_name("Offline_Ingress")
 
         telemetry_db: TelemetryDB = Context().telemetry_db
 
         ingress_nodes: list[Stage] = []
-        for _, signals in signal_bins.items():
+        for signals in signal_bins.values():
             if debug:
                 time_provider = DebugTimeProvider(start_time=debug_time)
             else:

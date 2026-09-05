@@ -1,11 +1,13 @@
 import queue
 import threading
 import time
+
 from sqlalchemy import insert
 from sqlalchemy.orm import Session
+
+from db.sunbeamdb.models import AlignedSample
 from db.sunbeamdb.writer import EventWriter
 from state.frame import FrameView
-from db.sunbeamdb.models import AlignedSample
 
 
 class QueuedEventWriter:

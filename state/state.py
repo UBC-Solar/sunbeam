@@ -1,12 +1,14 @@
-from data_tools.localization import CanonicalName
-from data_tools.collections import TimeSeries
-
-from state.frame import FrameView, Frame
-from datetime import datetime
 import threading
+from datetime import datetime
+
+from data_tools.collections import TimeSeries
+from data_tools.localization import CanonicalName
+
+from state.frame import Frame, FrameView
+
 
 class State:
-    def __init__(self, values: dict[CanonicalName, float] = None):
+    def __init__(self, values: dict[CanonicalName, float] | None = None):
         self._values = {} if not values else values
         self._lock = threading.RLock()
 

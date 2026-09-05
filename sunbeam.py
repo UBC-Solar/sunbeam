@@ -1,12 +1,12 @@
 import tomllib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import create_engine
 
 import config
+from config import EventManager, SignalManager, VehicleManager
 from config.context import Context, ServiceType
 from db import create_schema
-from config import VehicleManager, EventManager, SignalManager
 from pipeline import Executor
 
 
@@ -37,7 +37,7 @@ class Sunbeam:
         SignalManager.sync_signals(self._engine)
         print("==== Signals synced ==== \n ")
 
-    def run(self, event_name, reprocess: bool = False, debug: bool = False, debug_time: datetime = None):
+    def run(self, event_name, reprocess: bool = False, debug: bool = False, debug_time: datetime | None = None):
         executor = Executor(event_name, self._engine, reprocess=reprocess, debug=debug, debug_time=debug_time)
         executor.run()
 
@@ -48,4 +48,4 @@ if __name__ == "__main__":
 
     sunbeam = Sunbeam()
     sunbeam.start()
-    sunbeam.run("FSGP_2024_Day_1", reprocess=True, debug=False, debug_time=datetime(2024, 7, 16, 14, 10, tzinfo=timezone.utc))
+    sunbeam.run("FSGP_2024_Day_1", reprocess=True, debug=False, debug_time=datetime(2024, 7, 16, 14, 10, tzinfo=UTC))
