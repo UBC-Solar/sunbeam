@@ -1,12 +1,9 @@
-from data_tools.localization import TemporalLocalization
+from data_tools.localization import TemporalLocalization # type: ignore
+from db.telemetrydb.protocols import TimeProvider
 from datetime import datetime, timedelta, timezone
 from influxdb_client import InfluxDBClient
-from typing import Any, Protocol
+from typing import Any
 from typing import Iterable
-
-
-class TimeProvider(Protocol):
-    def now(self, tz: timezone) -> datetime: ...
 
 
 class DebugTimeProvider:
@@ -35,7 +32,7 @@ class DebugTimeProvider:
         return timestamp
 
 
-class RealtimeIngress:
+class RealtimeIngressQuerier:
     """
     Fast path for:
       'get the last value of these three fields before timestamp T'
@@ -76,6 +73,12 @@ class RealtimeIngress:
 
     @staticmethod
     def _flux_time(dt: datetime) -> str:
+        """ Creates a timestamp for Flux, query language of InfluxDB
+
+        :param datetime dt: original timestamp
+        :raises ValueError: Timestamp must be timezone aware
+        :return str: Timestamp for Flux
+        """        
         if dt.tzinfo is None:
             raise ValueError("timestamp must be timezone-aware")
         return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -86,7 +89,12 @@ class RealtimeIngress:
         )
         return field_filter
 
-    def _build_last_value_query(self, stop_time: datetime):
+    def _build_last_value_query(self, stop_time: datetime) -> str:
+        """ Creates the InfluxDB query for the 10 seconds before the stop time
+
+        :param datetime stop_time: Stop time for the query
+        :return str: Influx DB query
+        """        
         stop_flux = self._flux_time(stop_time - self._timezone_fix)
         start_time = self._flux_time(stop_time - self._timezone_fix - timedelta(seconds=10))
 
@@ -101,6 +109,11 @@ class RealtimeIngress:
                     '''.strip()
 
     def _process_query(self, query: str):
+        """ Processes the InfluxDB query and returns a list of fields alongside their values and time.
+
+        :param str query: InfluxDB query
+        :return dict[str, dict[str, Any] | None]: List of fields alongside their values and time
+        """        
         _out: dict[str, dict[str, Any] | None] = {
             _field: None for _field in self._fields
         }
@@ -128,6 +141,10 @@ class RealtimeIngress:
         return _out
 
     def get_last_values(self) -> dict[str, dict[str, Any] | None]:
+        """ Returns the latest values from InfluxDB
+
+        :return dict[str, dict[str, Any] | None]: List of fields alongside their values and time
+        """        
         query = self._build_last_value_query(self.now())
         out = self._process_query(query)
         return out
@@ -141,7 +158,7 @@ if __name__ == "__main__":
     import sys
     import time
 
-    reader = RealtimeIngress(bucket="CAN_log",
+    reader = RealtimeIngressQuerier(bucket="CAN_log",
             organization="8a0b66d77a331e96",
             url="http://influxdb.telemetry.ubcsolar.com",
             token="s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==",

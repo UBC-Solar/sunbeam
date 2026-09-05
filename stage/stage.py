@@ -27,8 +27,8 @@ class Stage(ABC):
         if "outputs" not in cls.__dict__:
             raise TypeError(f"{cls.__name__} must override 'outputs'")
 
-        if "frequency" not in cls.__dict__:
-            raise TypeError(f"{cls.__name__} must override 'frequency'")
+        # if "frequency" not in cls.__dict__:
+        #     raise TypeError(f"{cls.__name__} must override 'frequency'")
 
     @abstractmethod
     def run(self, input_frame: FrameView) -> Frame: ...

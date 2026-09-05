@@ -1,10 +1,16 @@
+from abc import ABC, abstractmethod
+from datetime import date, datetime
+
+import networkx as nx  # type: ignore
+from data_tools.localization import (  # type: ignore
+    CanonicalName,
+    InfluxDBLanguageLocalization,
+)
+
 from config.context import Context, TelemetryDB
 from db.telemetrydb.realtime_ingress import DebugTimeProvider
-from stage.stage import Stage
-import networkx as nx
 from pipeline.pipeline import Pipeline
-from data_tools.localization import InfluxDBLanguageLocalization, CanonicalName
-from datetime import date, datetime
+from stage.stage import Stage
 
 
 def build_node_graph(nodes: list[Stage]) -> nx.DiGraph:
@@ -104,9 +110,7 @@ def describe_subgraphs(g: nx.DiGraph) -> list[dict]:
         )
 
     return result
-
-
-class PipelineGenerator:
+class PipelineGenerator(ABC):
     @staticmethod
     def collect_signals_for_ingress(nodes: list[Stage]) -> list[CanonicalName]:
         unprovided_inputs: set[CanonicalName] = set()
@@ -120,8 +124,7 @@ class PipelineGenerator:
         # Get every node output
         for node in nodes:
             for output_signal in node.outputs:
-                if output_signal in unprovided_inputs:
-                    unprovided_inputs.remove(output_signal)
+                unprovided_inputs.discard(output_signal)
 
         # Anything left must not be produced by any node: we assume it must be
         # required to be found by the ingress stage.
@@ -140,8 +143,34 @@ class PipelineGenerator:
 
         return signal_bins
 
+    @abstractmethod
+    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, event_start_date: date, event_end_date: date, debug: bool = False, debug_time: datetime | None = None) -> list[Stage]: ...
+
     @staticmethod
-    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, debug: bool = False, debug_time: datetime = None) -> list[Stage]:
+    def build_pipeline_from_nodes(nodes: list[Stage]) -> list[Pipeline]:
+        graph = build_node_graph(nodes)
+        subgraphs = same_rate_components(graph)
+
+        pipelines = [Pipeline(subgraph, frequency) for (subgraph, frequency) in subgraphs]
+
+        return pipelines
+
+    @classmethod
+    def generate_pipeline_from_nodes(cls, nodes: list[Stage], event_start_date: date, event_end_date: date, stage_library, debug: bool = False, debug_time: datetime | None = None) -> tuple[list[Pipeline], list[Pipeline]]:
+        ingress_signals = PipelineGenerator.collect_signals_for_ingress(nodes)
+        signal_bins = PipelineGenerator.bin_signals_by_frequency(ingress_signals, event_start_date.date())
+        ingress_nodes = cls.generate_ingress_for_nodes(signal_bins, debug=debug, event_start_date=event_start_date, event_end_date=event_end_date, debug_time=debug_time, stage_library=stage_library)
+
+        ingress_pipeline = PipelineGenerator.build_pipeline_from_nodes(ingress_nodes)
+        pipelines = PipelineGenerator.build_pipeline_from_nodes(nodes)
+
+        return pipelines, ingress_pipeline
+
+    def from_event(self):
+        pass
+
+class RealtimePipelineGenerator(PipelineGenerator):
+    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, event_start_date: date, event_end_date: date, debug: bool = False, debug_time: datetime | None = None) -> list[Stage]:
         ingress_node = stage_library.get_stage_by_name("Ingress")
 
         telemetry_db: TelemetryDB = Context().telemetry_db
@@ -166,26 +195,32 @@ class PipelineGenerator:
             )
 
         return ingress_nodes
-
+    
+class OfflinePipelineGenerator(PipelineGenerator):
     @staticmethod
-    def build_pipeline_from_nodes(nodes: list[Stage]) -> list[Pipeline]:
-        graph = build_node_graph(nodes)
-        subgraphs = same_rate_components(graph)
+    def generate_ingress_for_nodes(signal_bins: dict[float, list[CanonicalName]], stage_library, event_start_date: datetime, event_end_date: datetime, debug: bool = False, debug_time: datetime | None = None) -> list[Stage]:
+        ingress_node = stage_library.get_stage_by_name("Offline_Ingress")
 
-        pipelines = [Pipeline(subgraph, frequency) for (subgraph, frequency) in subgraphs]
+        telemetry_db: TelemetryDB = Context().telemetry_db
 
-        return pipelines
+        ingress_nodes: list[Stage] = []
+        for signals in signal_bins.values():
+            if debug:
+                time_provider = DebugTimeProvider(start_time=debug_time)
+            else:
+                time_provider = datetime
 
-    @staticmethod
-    def generate_pipeline_from_nodes(nodes: list[Stage], event_date: date, stage_library, debug: bool = False, debug_time: datetime = None) -> tuple[list[Pipeline], list[Pipeline]]:
-        ingress_signals = PipelineGenerator.collect_signals_for_ingress(nodes)
-        signal_bins = PipelineGenerator.bin_signals_by_frequency(ingress_signals, event_date)
-        ingress_nodes = PipelineGenerator.generate_ingress_for_nodes(signal_bins, debug=debug, debug_time=debug_time, stage_library=stage_library)
+            ingress_nodes.append(
+                ingress_node(
+                    output_signals=signals,
+                    time_provider=time_provider,
+                    event_start_date = event_start_date,
+                    event_end_date = event_end_date,
+                    bucket=telemetry_db.bucket,
+                    organization=telemetry_db.organization,
+                    url=telemetry_db.database_url,
+                    token=telemetry_db.token
+                )
+            )
 
-        ingress_pipeline = PipelineGenerator.build_pipeline_from_nodes(ingress_nodes)
-        pipelines = PipelineGenerator.build_pipeline_from_nodes(nodes)
-
-        return pipelines, ingress_pipeline
-
-    def from_event(self):
-        pass
+        return ingress_nodes

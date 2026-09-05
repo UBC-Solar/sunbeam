@@ -6,7 +6,7 @@ from config import EVENTS_PATH
 from sqlalchemy import select, Engine
 from sqlalchemy.orm import Session
 import tomllib
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class EventManager:
@@ -49,11 +49,59 @@ class EventManager:
 
         return self._events
 
-    def get_event_date(self, event_name) -> datetime:
+    def check_if_past_event(self, event_name, debug) -> bool:
+        '''
+        Finds if an event is in the past by checking if its end date precedes the current time
+
+        :param str event_name: Event name
+        
+        :return bool: If the event is past or not
+
+        :raises ValueError: Event name not found 
+        '''
+        if debug:
+            return False
+        
+        for event in self._raw_events:
+            if event["name"] == event_name: # Checks if event exists
+                if "ends_at" in event:
+                    # True if end date in the past
+                    return datetime.fromisoformat(event["ends_at"]) < datetime.now(timezone.utc)
+                else:
+                    return False # Event has no end date
+        raise ValueError(f"Event {event_name} not found!")
+
+    def get_event_start_date(self, event_name) -> datetime:
+        '''
+        Returns the starting date of an event
+
+        :param str event_name: Event name
+        :return: Starting date of event
+
+        :raises ValueError: Event name not found in events
+        '''
         for event in self._raw_events:
             if event["name"] == event_name:
                 return datetime.fromisoformat(event["starts_at"])
 
+        raise ValueError(f"Event {event_name} not found!")
+    
+    def get_event_end_date(self, event_name) -> datetime:
+        '''
+        Returns the ending date of an event
+
+        :param str event_name: Event name
+        :return: Ending date of event
+
+        :raises ValueError: Event name not found in events
+        :raises ValueError: Event does not have an end date
+        '''
+        for event in self._raw_events:
+            if event["name"] == event_name:
+                if "ends_at" in event:
+                    return datetime.fromisoformat(event["ends_at"])
+                else:
+                    raise ValueError(f"Event {event_name} has not end date!")
         raise ValueError(f"Event {event_name} not found!")
 
     def get_event_pipeline_edition(self, event_name) -> str:

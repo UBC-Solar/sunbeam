@@ -1,11 +1,14 @@
-from pipeline.timing import StageTimingStats
-from state.frame import FrameView
-from state.state import State
-from stage.stage import Stage
-from typing import Iterator
-import networkx as nx
 import datetime
 import time
+import traceback
+from collections.abc import Iterator
+
+import networkx as nx
+
+from pipeline.timing import StageTimingStats
+from stage.stage import Stage
+from state.frame import FrameView
+from state.state import State
 
 
 class Pipeline:
@@ -27,6 +30,7 @@ class Pipeline:
                 input_frame = state.as_frame(stage.inputs, timestamp)
             except KeyError:
                 print(f"{stage.stage_name} not ready to run yet. Yielding...")
+                print(traceback.print_exc())
                 return
 
             start_ns = time.monotonic_ns()
