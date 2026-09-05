@@ -26,9 +26,8 @@ class Pipeline:
             try:
                 input_frame = state.as_frame(stage.inputs, timestamp)
             except KeyError:
-                # Temporarilly commented out
-                # print(f"{stage.stage_name} not ready to run yet. Yielding...")
-                # print(traceback.print_exc())
+                print(f"{stage.stage_name} not ready to run yet. Yielding...")
+                print(traceback.print_exc())
                 return
 
             start_ns = time.monotonic_ns()

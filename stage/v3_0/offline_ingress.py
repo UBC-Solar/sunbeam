@@ -22,7 +22,6 @@ class OfflineIngress(Stage):
         self._localized_output_signals = []
         self._localized_signal_to_signal = {}
         for signal in self._output_signals:
-            print(signal) # Delete This
             field, _, _, _ = InfluxDBLanguageLocalization.localize(signal, time_provider.now(timezone.utc).date())
             self._localized_output_signals.append(field)
             self._localized_signal_to_signal[field] = signal
