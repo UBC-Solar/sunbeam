@@ -5,7 +5,7 @@ from state.frame import Frame, FrameView
 from datetime import timezone
 from typing import ClassVar
 from stage.stage import Stage
-import random
+import uuid
 
 
 class OfflineIngress(Stage):
@@ -17,7 +17,7 @@ class OfflineIngress(Stage):
         self._frequency = 0
         self._start_date = event_start_date
         self._end_date = event_end_date
-        self._stage_name = f"Offline_Ingress{random.randint(1, 1000)}"
+        self._stage_name = f"Offline_Ingress{uuid.uuid4()}"
 
         self._localized_output_signals = []
         self._localized_signal_to_signal = {}
