@@ -1,16 +1,20 @@
-from db.sunbeamdb.writer import EventWriter
-from db.sunbeamdb.queued_writer import QueuedEventWriter
+import threading
+from datetime import datetime
+
 from sqlalchemy import Engine
 
-from pipeline.pipeline_generator import RealtimePipelineGenerator, OfflinePipelineGenerator
 from config import EventManager
-from stage.stage_library import StageLibrary
-from pipeline.timing import TimingStats
-from pipeline.scheduler import Scheduler, OnlineScheduler, OfflineScheduler
+from db.sunbeamdb.queued_writer import QueuedEventWriter
+from db.sunbeamdb.writer import EventWriter
 from pipeline.output import OutputManager
-from datetime import datetime
+from pipeline.pipeline_generator import (
+    OfflinePipelineGenerator,
+    RealtimePipelineGenerator,
+)
+from pipeline.scheduler import OfflineScheduler, OnlineScheduler
+from pipeline.timing import TimingStats
+from stage.stage_library import StageLibrary
 from state.state import State
-import threading
 
 
 class Executor:
