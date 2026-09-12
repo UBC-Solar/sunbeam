@@ -18,7 +18,7 @@ from state.state import State
 
 
 class Executor:
-    def __init__(self, event_name: str, engine: Engine, reprocess: bool = False, debug: bool = False, debug_time: datetime = None):
+    def __init__(self, event_name: str, engine: Engine, reprocess: bool = False, debug: bool = False, debug_time: datetime | None = None):
         writer = EventWriter(event_name, engine, reprocess=reprocess)
         self._writer = QueuedEventWriter(writer)
 
