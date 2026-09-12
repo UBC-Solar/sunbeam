@@ -1,14 +1,13 @@
 from data_tools.localization import CanonicalName
 from datetime import datetime
 
-
 class FrameView:
     def __init__(self, timestamp: datetime, values: dict[CanonicalName, float] = None):
         self._values = {} if not values else values
         self.timestamp = timestamp
 
-    def read(self, signal: CanonicalName) -> float:
-        return float(self._values[signal])
+    def read(self, signal: CanonicalName):
+        return self._values[signal]
 
     def __repr__(self):
         return f"Frame({self.timestamp}) with {len(self._values)} values"

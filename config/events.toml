@@ -3,7 +3,7 @@ name = "FSGP_2024_Day_1"
 vehicle = "Brightside"
 description = "First day of FSGP 2024 at NCM Motorsports"
 stages = ["Power", "Efficiency"]
-starts_at = "2024-07-16T04:00:00Z"
+starts_at = "2024-07-16T17:00:00Z"
 ends_at = "2024-07-17T04:00:00Z"
 pipeline_edition = "v3_0"
 

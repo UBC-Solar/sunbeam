@@ -3,7 +3,6 @@ from collections.abc import Iterable
 from typing import Any, Protocol
 import datetime as dt
 
-
 class RunnablePipeline(Protocol):
     frequency: float  # Hz
     name: str
