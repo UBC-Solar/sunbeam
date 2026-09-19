@@ -1,12 +1,12 @@
-from db.sunbeamdb.models import Event, Vehicle, EventStatus
-from db.sunbeamdb.seed_data import get_or_create_event
-from config import EVENTS_PATH
-
-
-from sqlalchemy import select, Engine
-from sqlalchemy.orm import Session
 import tomllib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
+from sqlalchemy import Engine, select
+from sqlalchemy.orm import Session
+
+from config import EVENTS_PATH
+from db.sunbeamdb.models import Event, Vehicle, AlignedSample
+from db.sunbeamdb.seed_data import get_or_create_event
 
 
 class EventManager:
@@ -49,6 +49,24 @@ class EventManager:
 
         return self._events
 
+    def clear_event(self, engine: Engine, event_name: str):
+
+        with Session(engine) as session:
+            event = session.execute(select(Event).where(Event.name == event_name)).scalar_one_or_none()
+
+            event_id = event.id
+
+            sample = session.execute(
+                select(AlignedSample).where(AlignedSample.event_id == event_id)
+            ).scalars().all()
+            
+            if sample:
+                session.delete(sample)
+                session.commit()
+                
+        print(f"Event '{event_name}' cleared from database!")
+
+
     def check_if_past_event(self, event_name, debug) -> bool:
         '''
         Finds if an event is in the past by checking if its end date precedes the current time
@@ -66,7 +84,7 @@ class EventManager:
             if event["name"] == event_name: # Checks if event exists
                 if "ends_at" in event:
                     # True if end date in the past
-                    return datetime.fromisoformat(event["ends_at"]) < datetime.now(timezone.utc)
+                    return datetime.fromisoformat(event["ends_at"]) < datetime.now(UTC)
                 else:
                     return False # Event has no end date
         raise ValueError(f"Event {event_name} not found!")

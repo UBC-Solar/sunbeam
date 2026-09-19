@@ -28,6 +28,9 @@ class Executor:
 
         is_past_event = event_manager.check_if_past_event(event_name=event_name, debug=debug)
 
+        if is_past_event:
+            event_manager.clear_event(engine, event_name)
+
         pipeline_stage_names = event_manager.get_stages_for_event(event_name)
         stage_library = StageLibrary(event_manager.get_event_pipeline_edition(event_name))
 
