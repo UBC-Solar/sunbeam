@@ -1,7 +1,7 @@
 import tomllib
 from datetime import UTC, datetime
 
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine, select, delete
 from sqlalchemy.orm import Session
 
 from config import EVENTS_PATH
@@ -50,21 +50,17 @@ class EventManager:
         return self._events
 
     def clear_event(self, engine: Engine, event_name: str):
-
         with Session(engine) as session:
             event = session.execute(select(Event).where(Event.name == event_name)).scalar_one_or_none()
-
-            event_id = event.id
-
-            sample = session.execute(
-                select(AlignedSample).where(AlignedSample.event_id == event_id)
-            ).scalars().all()
             
-            if sample:
-                session.delete(sample)
+            if event:
+                # Issue a bulk delete directly on the database
+                session.execute(
+                    delete(AlignedSample).where(AlignedSample.event_id == event.id)
+                )
                 session.commit()
-                
-        print(f"Event '{event_name}' cleared from database!")
+                print(f"Event '{event_name}' cleared from database!")
+
 
 
     def check_if_past_event(self, event_name, debug) -> bool:
