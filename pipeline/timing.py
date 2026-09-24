@@ -1,12 +1,13 @@
-from pipeline.protocols import RunnablePipeline
-from dataclasses import dataclass, field
 import threading
-
+import time
 from collections import defaultdict
+from dataclasses import dataclass, field
+
 from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
-import time
+
+from pipeline.protocols import RunnablePipeline
 
 
 @dataclass

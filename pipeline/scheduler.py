@@ -1,20 +1,24 @@
-from pipeline.protocols import SchedulerObserver, ScheduledRun, RunnablePipeline
+import datetime as dt
+import heapq
+import itertools
+import math
+import time
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from typing import Any
-import datetime as dt
-import itertools
-import heapq
-import time
+
+from pipeline.protocols import RunnablePipeline, ScheduledRun, SchedulerObserver
 
 
-class Scheduler:
-    def __init__(self, pipelines: Iterable[RunnablePipeline], observer: SchedulerObserver | None = None,):
+class Scheduler(ABC):
+    def __init__(self, pipelines: Iterable[RunnablePipeline], observer: SchedulerObserver | None = None, now_wall = None):
         self._heap: list[ScheduledRun] = []
         self._counter = itertools.count()
         self._observer = observer
 
         now_mono_ns = time.monotonic_ns()
-        now_wall = dt.datetime.now(dt.UTC)
+        if now_wall is None: # Reassigns now_wall if no start time is provided
+            now_wall = dt.datetime.now(dt.UTC)
 
         # Start at the next whole UTC second, i.e. nice 000 ms timestamp.
         self._start_wall_time = (now_wall + dt.timedelta(seconds=1)).replace(
@@ -25,12 +29,15 @@ class Scheduler:
         self._start_monotonic_ns = now_mono_ns + int(delay_s * 1_000_000_000)
 
         for pipeline in pipelines:
-            if pipeline.frequency <= 0:
+            if pipeline.frequency < 0:
                 raise ValueError(
-                    f"Pipeline frequency must be positive: {pipeline.frequency}"
+                    f"Pipeline frequency must be non-negative: {pipeline.frequency}"
                 )
 
-            period_ns = round(1_000_000_000 / pipeline.frequency)
+            if pipeline.frequency == 0:
+                period_ns = math.inf
+            else:
+                period_ns = round(1_000_000_000 / pipeline.frequency)
             heapq.heappush(
                 self._heap,
                 ScheduledRun(
@@ -45,7 +52,79 @@ class Scheduler:
         offset_ns = scheduled_ns - self._start_monotonic_ns
         return self._start_wall_time + dt.timedelta(microseconds=offset_ns / 1000)
 
-    def run_forever(
+    def run_once(
+        self,
+        state: Any,
+        on_output: Callable[[RunnablePipeline, Any, dt.datetime], None] | None = None,
+        on_tick: Callable[[], None] | None = None,
+        *,
+        stop_on_error: bool = True,
+    ) -> None:
+        """ Function which runs Sunbeam once.
+        
+                :param Any state: State object which holds the values for processing
+                :param Callable[[RunnablePipeline, Any, dt.datetime], None] | None on_output: The function which runs on output, defaults to None
+                :param Callable[[], None] | None on_tick: The function which runs every tick, defaults to None
+                :param bool stop_on_error: Bool to stop Sunbeam if an error is encountered, defaults to True
+        """
+        scheduled = heapq.heappop(self._heap)
+        
+        now_ns = time.monotonic_ns()
+        sleep_ns = scheduled.next_run_ns - now_ns
+
+        if sleep_ns > 0:
+            if self._observer is not None:
+                self._observer.on_idle(sleep_ns)
+            late_ns = 0
+        else:
+            late_ns = -sleep_ns
+
+        timestamp = self._timestamp_from_monotonic_ns(scheduled.next_run_ns)
+        pipeline_name = scheduled.pipeline.name
+
+        if self._observer is not None:
+            self._observer.on_pipeline_start(pipeline_name, late_ns)
+
+        run_start_ns = time.monotonic_ns()
+
+        try:
+            for frame in scheduled.pipeline.run(state, timestamp):
+                if on_output is not None:
+                    write_start_ns = time.monotonic_ns()
+                    on_output(scheduled.pipeline, frame, timestamp)
+                    write_elapsed_ns = time.monotonic_ns() - write_start_ns
+
+                    if self._observer is not None:
+                        self._observer.on_writer_done(write_elapsed_ns)
+
+        except Exception:
+            if stop_on_error:
+                raise
+
+        run_elapsed_ns = time.monotonic_ns() - run_start_ns
+
+        if self._observer is not None:
+            self._observer.on_pipeline_done(pipeline_name, run_elapsed_ns)
+
+        scheduled.next_run_ns += scheduled.period_ns
+        heapq.heappush(self._heap, scheduled)
+
+        if on_tick is not None:
+            on_tick()
+
+    @abstractmethod
+    def run(
+            self,
+            state: Any,
+            on_output: Callable[[RunnablePipeline, Any, dt.datetime], None] | None = None,
+            on_tick: Callable[[], None] | None = None,
+            *,
+            stop_on_error: bool = True,
+        ) -> None:
+        ...
+            
+class OnlineScheduler(Scheduler):
+    def run(
         self,
         state: Any,
         on_output: Callable[[RunnablePipeline, Any, dt.datetime], None] | None = None,
@@ -54,48 +133,20 @@ class Scheduler:
         stop_on_error: bool = True,
     ) -> None:
         while True:
-            scheduled = heapq.heappop(self._heap)
+            self.run_once(state=state, on_output=on_output, on_tick=on_tick, stop_on_error=stop_on_error)
 
-            now_ns = time.monotonic_ns()
-            sleep_ns = scheduled.next_run_ns - now_ns
-
-            if sleep_ns > 0:
-                time.sleep(sleep_ns / 1_000_000_000)
-                if self._observer is not None:
-                    self._observer.on_idle(sleep_ns)
-                late_ns = 0
-            else:
-                late_ns = -sleep_ns
-
-            timestamp = self._timestamp_from_monotonic_ns(scheduled.next_run_ns)
-            pipeline_name = scheduled.pipeline.name
-
-            if self._observer is not None:
-                self._observer.on_pipeline_start(pipeline_name, late_ns)
-
-            run_start_ns = time.monotonic_ns()
-
-            try:
-                for frame in scheduled.pipeline.run(state, timestamp):
-                    if on_output is not None:
-                        write_start_ns = time.monotonic_ns()
-                        on_output(scheduled.pipeline, frame, timestamp)
-                        write_elapsed_ns = time.monotonic_ns() - write_start_ns
-
-                        if self._observer is not None:
-                            self._observer.on_writer_done(write_elapsed_ns)
-
-            except Exception:
-                if stop_on_error:
-                    raise
-
-            run_elapsed_ns = time.monotonic_ns() - run_start_ns
-
-            if self._observer is not None:
-                self._observer.on_pipeline_done(pipeline_name, run_elapsed_ns)
-
-            scheduled.next_run_ns += scheduled.period_ns
-            heapq.heappush(self._heap, scheduled)
-
-            if on_tick is not None:
-                on_tick()
+class OfflineScheduler(Scheduler):
+    def run(
+            self,
+            state: Any,
+            on_output: Callable[[RunnablePipeline, Any, dt.datetime], None] | None = None,
+            on_tick: Callable[[], None] | None = None,
+            *,
+            stop_on_error: bool = True,
+        ) -> None:
+            # Each pipeline in the offline heap needs to run exactly once (they all
+            # have period_ns == inf, so re-running run_once() this many times covers
+            # every pipeline without ever repeating one). The heap's size doesn't
+            # change across calls since each pop is matched by a push-back.
+            for _ in range(len(self._heap)):
+                self.run_once(state=state, on_output=on_output, on_tick=on_tick, stop_on_error=stop_on_error)

@@ -1,11 +1,14 @@
+import threading
+from datetime import datetime
+
+from data_tools.collections import TimeSeries
 from data_tools.localization import CanonicalName
 
-from state.frame import FrameView, Frame
-from datetime import datetime
-import threading
+from state.frame import Frame, FrameView
+
 
 class State:
-    def __init__(self, values: dict[CanonicalName, float] = None):
+    def __init__(self, values: dict[CanonicalName, float] | None = None):
         self._values = {} if not values else values
         self._lock = threading.RLock()
 
@@ -14,7 +17,17 @@ class State:
             frame = Frame(timestamp)
 
             for signal in signals:
-                frame.write(signal, self._values[signal])
+                value = self._values[signal]
+            
+                if isinstance(value, TimeSeries):
+                    # Commented out debug code to track what is being written to frames
+                    # print("==================")
+                    # print(f"{signal} (Timeseries): {value[timestamp]} @ {timestamp} -> frame")
+                    frame.write(signal, value[timestamp])
+                else:
+                    # print("==================")
+                    # print(f"{signal} (Float): {value} @ {timestamp} -> frame")
+                    frame.write(signal, value)  
 
             return frame.as_view()
 

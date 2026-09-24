@@ -1,11 +1,13 @@
 import queue
 import threading
 import time
+
 from sqlalchemy import insert
 from sqlalchemy.orm import Session
+
+from db.sunbeamdb.models import AlignedSample
 from db.sunbeamdb.writer import EventWriter
 from state.frame import FrameView
-from db.sunbeamdb.models import AlignedSample
 
 
 class QueuedEventWriter:
@@ -52,12 +54,13 @@ class QueuedEventWriter:
 
         for frame in frames:
             for signal, value in frame:
-                rows.append({
-                    "event_id": self._event_writer._event_id,
-                    "ts": frame.timestamp,
-                    "signal_id": self._event_writer._signal_names_to_id[signal],
-                    "value_f64": value,
-                })
+                if isinstance(value, float):
+                    rows.append({
+                        "event_id": self._event_writer._event_id,
+                        "ts": frame.timestamp,
+                        "signal_id": self._event_writer._signal_names_to_id[signal],
+                        "value_f64": value,
+                    })
 
         if not rows:
             return
