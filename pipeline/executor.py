@@ -1,20 +1,24 @@
 import threading
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 
 from sqlalchemy import Engine
 
 from config import EventManager
 from db.sunbeamdb.queued_writer import QueuedEventWriter
 from db.sunbeamdb.writer import EventWriter
-from pipeline.output import OutputManager
+from pipeline.output import ProgressReporter, TimingTableReporter
 from pipeline.pipeline_generator import (
     OfflinePipelineGenerator,
     RealtimePipelineGenerator,
 )
-from pipeline.scheduler import OfflineScheduler, OnlineScheduler
+from pipeline.scheduler import OfflineScheduler, RealtimeScheduler, ReplayScheduler
 from pipeline.timing import TimingStats
 from stage.stage_library import StageLibrary
 from state.state import State
+
+# Warn if telemetry covers noticeably less than the event window
+REPLAY_TRIM_WARNING = timedelta(seconds=5)
 
 
 class Executor:
@@ -67,16 +71,17 @@ class Executor:
 
         self._timing = TimingStats(pipelines_by_name)
 
-        now_wall = None # Start time for the scheduler
-        if is_past_event:
-            now_wall = event_start_datetime
-        
-        self._compute_scheduler = OnlineScheduler(self._pipelines, observer=self._timing, now_wall=now_wall)
+        self._event_name = event_name
+        self._is_past_event = is_past_event
+        self._event_start = event_start_datetime
+        self._event_end = event_end_datetime
 
         if is_past_event:
-            self._ingress_scheduler = OfflineScheduler(self._ingress_pipelines, observer=self._timing, now_wall=now_wall)
+            # The compute scheduler is built in _run_offline(), once ingress has told us what range the data covers
+            self._ingress_scheduler = OfflineScheduler(self._ingress_pipelines, observer=self._timing, now_wall=event_start_datetime)
         else:
-            self._ingress_scheduler = OnlineScheduler(self._ingress_pipelines, observer=self._timing, now_wall=now_wall)
+            self._ingress_scheduler = RealtimeScheduler(self._ingress_pipelines, observer=self._timing)
+            self._compute_scheduler = RealtimeScheduler(self._pipelines, observer=self._timing)
 
     def _handle_pipeline_output(self, pipeline, frame, timestamp):
         self._writer.write_frame(frame)
@@ -92,18 +97,72 @@ class Executor:
             stop_on_error=True,
         )
 
-    def run(self):
-        ingress_thread = threading.Thread(target=self._run_ingress_scheduler, daemon=True)
-        ingress_thread.start()
-        if isinstance(self._ingress_scheduler, OfflineScheduler):
-            ingress_thread.join()
+    def _make_reporter(self) -> ProgressReporter:
+        return TimingTableReporter(self._timing)
 
-        with OutputManager(self._timing) as output_manager:
-            self._compute_scheduler.run(
+    def _replay_bounds(self) -> tuple[datetime, datetime] | None:
+        """ The part of the event window for which every ingressed signal has data. """
+        data_bounds = self._state.timeseries_bounds()
+        if data_bounds is None:
+            return None
+
+        data_start, data_end = data_bounds
+        start = max(self._event_start, data_start)
+        end = min(self._event_end, data_end)
+
+        if end <= start:
+            return None
+
+        trimmed = (start - self._event_start) + (self._event_end - end)
+        if trimmed > REPLAY_TRIM_WARNING:
+            print(
+                f"Warning: telemetry only covers {start:%Y-%m-%d %H:%M:%S} -> {end:%Y-%m-%d %H:%M:%S} "
+                f"of event window {self._event_start:%Y-%m-%d %H:%M:%S} -> {self._event_end:%Y-%m-%d %H:%M:%S}; "
+                f"processing the covered range only."
+            )
+
+        return start, end
+
+    def _run_offline(self):
+        self._run_ingress_scheduler()
+
+        bounds = self._replay_bounds()
+        if bounds is None:
+            print(f"No telemetry found for {self._event_name}; nothing to process.")
+            return
+
+        start, end = bounds
+        compute_scheduler = ReplayScheduler(self._pipelines, observer=self._timing, now_wall=start, end_wall=end)
+
+        wall_start = time.monotonic()
+        with self._make_reporter() as reporter:
+            compute_scheduler.run(
                 self._state,
-                on_tick=output_manager.on_tick,
+                on_tick=reporter.on_tick,
                 on_output=self._handle_pipeline_output,
             )
+
+        print(f"Processed {self._event_name}: {start:%H:%M:%S} -> {end:%H:%M:%S} in {time.monotonic() - wall_start:.1f} s")
+
+    def _run_realtime(self):
+        ingress_thread = threading.Thread(target=self._run_ingress_scheduler, daemon=True)
+        ingress_thread.start()
+
+        with self._make_reporter() as reporter:
+            self._compute_scheduler.run(
+                self._state,
+                on_tick=reporter.on_tick,
+                on_output=self._handle_pipeline_output,
+            )
+
+    def run(self):
+        try:
+            if self._is_past_event:
+                self._run_offline()
+            else:
+                self._run_realtime()
+        finally:
+            self._writer.close()
 
 if __name__ == '__main__':
     event_manager = EventManager()

@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 from data_tools.collections import TimeSeries
 from data_tools.query import InfluxDBClient
+from data_tools.localization import CanonicalName
 
 
 class OfflineIngressQuerier:
@@ -42,8 +43,8 @@ class OfflineIngressQuerier:
             self,
             start_time: datetime,
             stop_time: datetime
-            ) -> dict[str, TimeSeries]:
-        _out: dict[str, TimeSeries | None] = {
+            ) -> dict[CanonicalName, TimeSeries]:
+        _out: dict[CanonicalName, TimeSeries | None] = {
             _field: None for _field in self._fields
         }
 

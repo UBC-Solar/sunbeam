@@ -31,4 +31,4 @@ v3_0 = [
 ]
 
 [tool.uv.sources]
-ubc-solar-data-tools = { git = "https://github.com/UBC-Solar/data_tools.git", rev = "e2d3e4bee849171a70e4f227a03819ab2e288934" }
+ubc-solar-data-tools = { path = "../data_tools" }

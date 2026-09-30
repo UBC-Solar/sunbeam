@@ -1,8 +1,18 @@
+from datetime import datetime
+from typing import Protocol, Self
+
 from rich.console import Console
 from rich.live import Live
 
 
-class OutputManager:
+class ProgressReporter(Protocol):
+    """ Displays scheduler progress. Used as a context manager, with ``on_tick`` called after every scheduled run. """
+    def __enter__(self) -> Self: ...
+    def __exit__(self, exc_type, exc, tb) -> None: ...
+    def on_tick(self, timestamp: datetime) -> None: ...
+
+
+class TimingTableReporter:
     def __init__(self, timing, *, interval_s: float = 1.0):
         self._timing = timing
         self._interval_s = interval_s
@@ -16,9 +26,12 @@ class OutputManager:
 
     def __exit__(self, exc_type, exc, tb):
         if self._live is not None:
+            if exc_type is None:
+                # Show whatever accumulated since the last refresh so the final table isn't lost
+                self._live.update(self._timing.snapshot_and_reset())
             self._live.__exit__(exc_type, exc, tb)
 
-    def on_tick(self):
+    def on_tick(self, timestamp: datetime):
         if self._live is None:
             return
 

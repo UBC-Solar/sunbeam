@@ -29,7 +29,7 @@ class OfflineIngress(Stage):
             self._localized_signal_to_signal[field] = signal
 
         self._ingress = OfflineIngressQuerier(
-            fields=self._localized_output_signals,
+            fields=self._output_signals,
             bucket=bucket,
             organization=organization,
             url=url,
@@ -55,7 +55,7 @@ class OfflineIngress(Stage):
 
         for field, data in values.items():
             try:
-                new_frame.write(self._localized_signal_to_signal[field], data)
+                new_frame.write(field, data)
             except TypeError:
                 pass
 

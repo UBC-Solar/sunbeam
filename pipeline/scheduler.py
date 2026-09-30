@@ -11,10 +11,17 @@ from pipeline.protocols import RunnablePipeline, ScheduledRun, SchedulerObserver
 
 
 class Scheduler(ABC):
-    def __init__(self, pipelines: Iterable[RunnablePipeline], observer: SchedulerObserver | None = None, now_wall = None):
+    def __init__(
+            self,
+            pipelines: Iterable[RunnablePipeline],
+            observer: SchedulerObserver | None = None,
+            now_wall: dt.datetime | None = None,
+            end_wall: dt.datetime | None = None,
+        ):
         self._heap: list[ScheduledRun] = []
         self._counter = itertools.count()
         self._observer = observer
+        self._end_wall = end_wall
 
         now_mono_ns = time.monotonic_ns()
         if now_wall is None: # Reassigns now_wall if no start time is provided
@@ -52,32 +59,36 @@ class Scheduler(ABC):
         offset_ns = scheduled_ns - self._start_monotonic_ns
         return self._start_wall_time + dt.timedelta(microseconds=offset_ns / 1000)
 
+    def _next_timestamp(self) -> dt.datetime:
+        return self._timestamp_from_monotonic_ns(self._heap[0].next_run_ns)
+
+    @abstractmethod
+    def _wait_until(self, next_run_ns: int) -> int:
+        """ Wait (or not) until a run is due.
+
+                :param int next_run_ns: Monotonic time at which the next run is scheduled
+                :return int: How late, in ns, the run is starting
+        """
+        ...
+
     def run_once(
         self,
         state: Any,
         on_output: Callable[[RunnablePipeline, Any, dt.datetime], None] | None = None,
-        on_tick: Callable[[], None] | None = None,
+        on_tick: Callable[[dt.datetime], None] | None = None,
         *,
         stop_on_error: bool = True,
     ) -> None:
         """ Function which runs Sunbeam once.
-        
+
                 :param Any state: State object which holds the values for processing
                 :param Callable[[RunnablePipeline, Any, dt.datetime], None] | None on_output: The function which runs on output, defaults to None
-                :param Callable[[], None] | None on_tick: The function which runs every tick, defaults to None
+                :param Callable[[dt.datetime], None] | None on_tick: The function which runs every tick with the timestamp just processed, defaults to None
                 :param bool stop_on_error: Bool to stop Sunbeam if an error is encountered, defaults to True
         """
         scheduled = heapq.heappop(self._heap)
-        
-        now_ns = time.monotonic_ns()
-        sleep_ns = scheduled.next_run_ns - now_ns
 
-        if sleep_ns > 0:
-            if self._observer is not None:
-                self._observer.on_idle(sleep_ns)
-            late_ns = 0
-        else:
-            late_ns = -sleep_ns
+        late_ns = self._wait_until(scheduled.next_run_ns)
 
         timestamp = self._timestamp_from_monotonic_ns(scheduled.next_run_ns)
         pipeline_name = scheduled.pipeline.name
@@ -110,37 +121,47 @@ class Scheduler(ABC):
         heapq.heappush(self._heap, scheduled)
 
         if on_tick is not None:
-            on_tick()
+            on_tick(timestamp)
 
-    @abstractmethod
     def run(
             self,
             state: Any,
             on_output: Callable[[RunnablePipeline, Any, dt.datetime], None] | None = None,
-            on_tick: Callable[[], None] | None = None,
+            on_tick: Callable[[dt.datetime], None] | None = None,
             *,
             stop_on_error: bool = True,
         ) -> None:
-        ...
-            
-class OnlineScheduler(Scheduler):
-    def run(
-        self,
-        state: Any,
-        on_output: Callable[[RunnablePipeline, Any, dt.datetime], None] | None = None,
-        on_tick: Callable[[], None] | None = None,
-        *,
-        stop_on_error: bool = True,
-    ) -> None:
-        while True:
+        """ Run pipelines until the next scheduled run falls after ``end_wall`` (forever if ``end_wall`` is None). """
+        while self._heap and (self._end_wall is None or self._next_timestamp() <= self._end_wall):
             self.run_once(state=state, on_output=on_output, on_tick=on_tick, stop_on_error=stop_on_error)
 
-class OfflineScheduler(Scheduler):
+
+class RealtimeScheduler(Scheduler):
+    """ Runs pipelines in step with the wall clock, sleeping between runs. """
+    def _wait_until(self, next_run_ns: int) -> int:
+        sleep_ns = next_run_ns - time.monotonic_ns()
+
+        if sleep_ns > 0:
+            time.sleep(sleep_ns / 1_000_000_000)
+            if self._observer is not None:
+                self._observer.on_idle(sleep_ns)
+            return 0
+
+        return -sleep_ns
+
+
+class ReplayScheduler(Scheduler):
+    """ Runs pipelines over simulated time as fast as possible, never sleeping. """
+    def _wait_until(self, next_run_ns: int) -> int:
+        return 0
+
+
+class OfflineScheduler(ReplayScheduler):
     def run(
             self,
             state: Any,
             on_output: Callable[[RunnablePipeline, Any, dt.datetime], None] | None = None,
-            on_tick: Callable[[], None] | None = None,
+            on_tick: Callable[[dt.datetime], None] | None = None,
             *,
             stop_on_error: bool = True,
         ) -> None:

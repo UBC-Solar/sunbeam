@@ -10,10 +10,17 @@ from db.sunbeamdb.writer import EventWriter
 from state.frame import FrameView
 
 
+class _Stop:
+    """ Queue sentinel telling the writer thread to flush and exit. """
+
+
+_STOP = _Stop()
+
+
 class QueuedEventWriter:
     def __init__(self, event_writer: EventWriter, batch_size: int = 1000, flush_interval_s: float = 0.1):
         self._event_writer = event_writer
-        self._queue: queue.Queue[FrameView | None] = queue.Queue(maxsize=10_000)
+        self._queue: queue.Queue[FrameView | _Stop] = queue.Queue(maxsize=10_000)
         self._batch_size = batch_size
         self._flush_interval_s = flush_interval_s
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -22,6 +29,13 @@ class QueuedEventWriter:
     def write_frame(self, frame: FrameView):
         # Fast path for scheduler thread
         self._queue.put(frame)
+
+    def close(self):
+        """ Flushes every queued frame to the database and stops the writer thread. Blocks until done. """
+        if not self._thread.is_alive():  # Writer already died; putting could block forever on a full queue
+            return
+        self._queue.put(_STOP)
+        self._thread.join()
 
     def _run(self):
         pending: list[FrameView] = []
@@ -34,6 +48,11 @@ class QueuedEventWriter:
                 frame = self._queue.get(timeout=timeout)
             except queue.Empty:
                 frame = None
+
+            if isinstance(frame, _Stop):
+                if pending:
+                    self._flush(pending)
+                return
 
             if frame is None:
                 if pending:

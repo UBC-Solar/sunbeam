@@ -31,6 +31,19 @@ class State:
 
             return frame.as_view()
 
+    def timeseries_bounds(self) -> tuple[datetime, datetime] | None:
+        """ Returns the time range over which every TimeSeries in the state has data
+
+        :return tuple[datetime, datetime] | None: (latest start, earliest stop), or None if the state holds no TimeSeries
+        """
+        with self._lock:
+            series = [value for value in self._values.values() if isinstance(value, TimeSeries)]
+
+            if not series:
+                return None
+
+            return max(ts.start for ts in series), min(ts.stop for ts in series)
+
     def from_frame(self, frame: FrameView, signals: list[CanonicalName]) -> "State":
         with self._lock:
             for signal in signals:
