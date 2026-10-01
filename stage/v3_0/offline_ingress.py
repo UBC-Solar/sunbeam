@@ -5,7 +5,7 @@ from typing import ClassVar
 from data_tools.localization import InfluxDBLanguageLocalization  # type: ignore
 
 from db.telemetrydb.offline_ingress import OfflineIngressQuerier
-from db.telemetrydb.protocols import TimeProvider
+from db.telemetrydb.protocols import IngressObserver, TimeProvider
 from stage.stage import Stage
 from state.frame import Frame, FrameView
 
@@ -13,7 +13,7 @@ from state.frame import Frame, FrameView
 class OfflineIngress(Stage):
     inputs: ClassVar[list[str]] = []
 
-    def __init__(self, output_signals: list[str], time_provider: TimeProvider, event_start_date, event_end_date, bucket: str | None = None, organization: str | None = None, token: str | None = None, url: str | None = None) -> None:
+    def __init__(self, output_signals: list[str], time_provider: TimeProvider, event_start_date, event_end_date, bucket: str | None = None, organization: str | None = None, token: str | None = None, url: str | None = None, observer: IngressObserver | None = None) -> None:
         super().__init__()
         self._output_signals = output_signals
         self._frequency = 0
@@ -33,7 +33,8 @@ class OfflineIngress(Stage):
             bucket=bucket,
             organization=organization,
             url=url,
-            token=token
+            token=token,
+            observer=observer,
         )
 
     @property

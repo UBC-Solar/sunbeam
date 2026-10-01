@@ -1,9 +1,16 @@
+import time
 from collections.abc import Iterable
 from datetime import UTC, datetime
 
 from data_tools.collections import TimeSeries
 from data_tools.query import InfluxDBClient
 from data_tools.localization import CanonicalName
+
+from db.telemetrydb.protocols import IngressObserver
+
+
+class IngressError(RuntimeError):
+    """ Raised when telemetry for an offline event could not be fetched. """
 
 
 class OfflineIngressQuerier:
@@ -23,20 +30,22 @@ class OfflineIngressQuerier:
             organization: str = "8a0b66d77a331e96",
             url: str = "http://influxdb.telemetry.ubcsolar.com",
             token: str = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==",
-            timeout_s: float = 1.0,
+            timeout_s: float = 30.0,
             fields: Iterable[str] | None = None,
+            observer: IngressObserver | None = None,
     ):
         self._bucket = bucket
         self._organization = organization
         self._url = url
         self._token = token
         self._fields = fields
+        self._observer = observer
 
         self._client = InfluxDBClient(
             url=self._url,
             influxdb_token=self._token,
             influxdb_org=self._organization,
-            timeout=timeout_s * 1000
+            timeout=timeout_s  # data_tools takes seconds and converts to ms itself
         )
 
     def get_values_between(
@@ -49,7 +58,19 @@ class OfflineIngressQuerier:
         }
 
         for _field in _out:
-            _out[_field] = self._client.query_time_series(start_time, stop_time, _field)
+            if self._observer is not None:
+                self._observer.on_query_start(str(_field))
+
+            query_start = time.monotonic()
+            try:
+                _out[_field] = self._client.query_time_series(start_time, stop_time, _field)
+            except Exception as e:
+                if self._observer is not None:
+                    self._observer.on_query_failed(str(_field), e)
+                raise IngressError(f"Failed to query {_field} between {start_time} and {stop_time} from InfluxDB: {e}") from e
+
+            if self._observer is not None:
+                self._observer.on_query_done(str(_field), len(_out[_field]), time.monotonic() - query_start)
 
         return _out
 

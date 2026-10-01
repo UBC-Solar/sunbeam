@@ -7,7 +7,8 @@ from sqlalchemy import Engine
 from config import EventManager
 from db.sunbeamdb.queued_writer import QueuedEventWriter
 from db.sunbeamdb.writer import EventWriter
-from pipeline.output import ProgressReporter, TimingTableReporter
+from db.telemetrydb.offline_ingress import IngressError
+from pipeline.output import IngressProgressReporter, ProgressReporter, TimingTableReporter
 from pipeline.pipeline_generator import (
     OfflinePipelineGenerator,
     RealtimePipelineGenerator,
@@ -42,6 +43,7 @@ class Executor:
         pipeline_stages = [stage() for stage in pipeline_stage_definitions]
 
         self._pipelines, self._ingress_pipelines = None, None
+        self._ingress_reporter = IngressProgressReporter()
 
         if is_past_event:
             self._pipelines, self._ingress_pipelines = OfflinePipelineGenerator.generate_pipeline_from_nodes(
@@ -50,7 +52,8 @@ class Executor:
                         event_end_datetime,
                         debug=debug,
                         debug_time=debug_time,
-                        stage_library=stage_library
+                        stage_library=stage_library,
+                        ingress_observer=self._ingress_reporter,
                     )
         else:
             self._pipelines, self._ingress_pipelines = RealtimePipelineGenerator.generate_pipeline_from_nodes(
@@ -123,8 +126,23 @@ class Executor:
 
         return start, end
 
+    def _check_ingress_complete(self):
+        """ Fail fast if any signal the ingress pipelines should provide never made it into the state. """
+        expected = {
+            signal
+            for pipeline in self._ingress_pipelines
+            for node_id in pipeline.graph.nodes
+            for signal in pipeline.graph.nodes[node_id]["node"].outputs
+        }
+        missing = sorted(str(signal) for signal in expected if signal not in self._state)
+
+        if missing:
+            raise IngressError(f"Ingress finished without data for: {', '.join(missing)}")
+
     def _run_offline(self):
-        self._run_ingress_scheduler()
+        with self._ingress_reporter:
+            self._run_ingress_scheduler()
+        self._check_ingress_complete()
 
         bounds = self._replay_bounds()
         if bounds is None:
