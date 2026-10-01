@@ -31,6 +31,10 @@ class State:
 
             return frame.as_view()
 
+    def __contains__(self, signal: CanonicalName) -> bool:
+        with self._lock:
+            return signal in self._values
+
     def timeseries_bounds(self) -> tuple[datetime, datetime] | None:
         """ Returns the time range over which every TimeSeries in the state has data
 

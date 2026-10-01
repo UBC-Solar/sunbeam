@@ -2,6 +2,9 @@ import queue
 import threading
 import time
 
+import numpy as np
+import pandas as pd
+from data_tools.collections import TimeSeries
 from sqlalchemy import insert
 from sqlalchemy.orm import Session
 
@@ -58,7 +61,9 @@ class QueuedEventWriter:
                 if pending:
                     self._flush(pending)
                     pending.clear()
-                    last_flush = time.monotonic()
+
+                # Reset even when nothing was flushed, otherwise the timeout stays at 0 and this loop busy-spins
+                last_flush = time.monotonic()
                 continue
 
             pending.append(frame)
@@ -73,7 +78,10 @@ class QueuedEventWriter:
 
         for frame in frames:
             for signal, value in frame:
-                if isinstance(value, float):
+                if isinstance(value, TimeSeries):
+                    self._copy_series(signal, value)
+
+                elif isinstance(value, float):
                     rows.append({
                         "event_id": self._event_writer._event_id,
                         "ts": frame.timestamp,
@@ -87,3 +95,25 @@ class QueuedEventWriter:
         with Session(self._event_writer._engine) as session:
             session.execute(insert(AlignedSample), rows)
             session.commit()
+
+    def _copy_series(self, signal: str, series: TimeSeries):
+        """ Bulk-loads every sample of a TimeSeries with COPY.
+
+        SQLAlchemy has no COPY construct, and its bulk insert() is ~2x slower here and holds the GIL long
+        enough to noticeably slow the compute thread, so this drops to psycopg's COPY on a SQLAlchemy-managed
+        connection: engine.begin() still owns the transaction (commit/rollback) and returning it to the pool.
+        """
+        event_id = self._event_writer._event_id
+        signal_id = self._event_writer._signal_names_to_id[signal]
+        timestamps = pd.to_datetime(series.unix_x_axis, unit="s", utc=True).to_pydatetime()
+        values = np.asarray(series, dtype=float).tolist()
+
+        table = AlignedSample.__table__
+        columns = ", ".join(column.name for column in (table.c.event_id, table.c.signal_id, table.c.ts, table.c.value_f64))
+
+        with self._event_writer._engine.begin() as connection:
+            with connection.connection.driver_connection.cursor() as cursor, cursor.copy(
+                f"COPY {AlignedSample.__tablename__} ({columns}) FROM STDIN"
+            ) as copy:
+                for ts, value in zip(timestamps, values, strict=True):
+                    copy.write_row((event_id, signal_id, ts, value))

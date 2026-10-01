@@ -160,6 +160,10 @@ class Executor:
                 on_output=self._handle_pipeline_output,
             )
 
+
+        print("Waiting for database writes to finish...")
+        self._writer.close()
+
         print(f"Processed {self._event_name}: {start:%H:%M:%S} -> {end:%H:%M:%S} in {time.monotonic() - wall_start:.1f} s")
 
     def _run_realtime(self):
