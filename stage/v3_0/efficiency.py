@@ -1,3 +1,4 @@
+import numpy as np
 from data_tools.localization import CanonicalName
 from state.frame import Frame, FrameView
 from typing import ClassVar
@@ -16,7 +17,10 @@ class Efficiency(Stage):
         motor_power = input_frame.read(CanonicalName.MotorPower)
         vehicle_speed = input_frame.read(CanonicalName.VehicleSpeed)
 
-        motor_efficiency = motor_power / vehicle_speed
+        # Speed is 0 whenever the car is stopped; inf/nan are the expected results then, so don't warn about them
+        with np.errstate(divide="ignore", invalid="ignore"):
+            motor_efficiency = motor_power / vehicle_speed
+
         new_frame.write(CanonicalName.MotorEfficiency, motor_efficiency)
 
         return new_frame
