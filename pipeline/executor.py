@@ -40,7 +40,8 @@ class Executor:
         stage_library = StageLibrary(event_manager.get_event_pipeline_edition(event_name))
 
         pipeline_stage_definitions = stage_library.get_stages_by_names(pipeline_stage_names)
-        pipeline_stages = [stage() for stage in pipeline_stage_definitions]
+        kwargs = {"event_name": event_name}
+        pipeline_stages = [stage(**kwargs) for stage in pipeline_stage_definitions]
 
         self._pipelines, self._ingress_pipelines = None, None
         self._ingress_reporter = IngressProgressReporter()

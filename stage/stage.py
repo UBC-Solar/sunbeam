@@ -10,7 +10,10 @@ class Stage(ABC):
     stage_name: ClassVar[str]
     inputs: ClassVar[list[CanonicalName]]
     outputs: ClassVar[list[CanonicalName]]
-    rate: ClassVar[float]
+    frequency: ClassVar[float]
+
+    def __init__(self, **kwargs):
+        pass
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
