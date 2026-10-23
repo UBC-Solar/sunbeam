@@ -1,4 +1,5 @@
 from data_tools.localization import CanonicalName
+from data_tools.collections import TimeSeries
 from datetime import datetime
 from numbers import Real
 
@@ -27,7 +28,7 @@ class FrameView:
 
 
 class Frame(FrameView):
-    def write(self, signal: CanonicalName, value: float) -> None:
+    def write(self, signal: CanonicalName, value: float | TimeSeries) -> None:
         self._values[signal] = value
 
     def as_view(self) -> FrameView:

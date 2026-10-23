@@ -25,6 +25,9 @@ def build_node_graph(nodes: list[Stage]) -> nx.DiGraph:
     g = nx.DiGraph()
 
     for node in nodes:
+        # Stage names are the graph's node keys, so a duplicate would silently replace the earlier stage
+        if node.stage_name in g:
+            raise ValueError(f"Stage name {node.stage_name!r} is used by multiple nodes.")
         g.add_node(node.stage_name, node=node)
 
     for node in nodes:
