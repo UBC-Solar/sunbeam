@@ -1,5 +1,11 @@
 from data_tools.localization import CanonicalName
 from datetime import datetime
+from numbers import Real
+
+def _format_value(value) -> str:
+    # Offline ingress frames hold whole TimeSeries rather than single samples
+    return f"{value:.1f}" if isinstance(value, Real) else f"<{type(value).__name__} of {len(value)} points>"
+
 
 class FrameView:
     def __init__(self, timestamp: datetime, values: dict[CanonicalName, float] = None):
@@ -13,7 +19,7 @@ class FrameView:
         return f"Frame({self.timestamp}) with {len(self._values)} values"
 
     def __str__(self):
-        internal_str = [f"{str(signal)}: {float(value):.1f} \n" for signal, value in self._values.items()]
+        internal_str = [f"{str(signal)}: {_format_value(value)} \n" for signal, value in self._values.items()]
         return f"-- {self.timestamp} -- \n{"".join(internal_str)}"
 
     def __iter__(self):

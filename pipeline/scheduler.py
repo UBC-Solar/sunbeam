@@ -1,7 +1,6 @@
 import datetime as dt
 import heapq
 import itertools
-import math
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
@@ -36,15 +35,12 @@ class Scheduler(ABC):
         self._start_monotonic_ns = now_mono_ns + int(delay_s * 1_000_000_000)
 
         for pipeline in pipelines:
-            if pipeline.frequency < 0:
+            if pipeline.frequency <= 0:
                 raise ValueError(
-                    f"Pipeline frequency must be non-negative: {pipeline.frequency}"
+                    f"Pipeline frequency must be positive: {pipeline.frequency}"
                 )
 
-            if pipeline.frequency == 0:
-                period_ns = math.inf
-            else:
-                period_ns = round(1_000_000_000 / pipeline.frequency)
+            period_ns = round(1_000_000_000 / pipeline.frequency)
             heapq.heappush(
                 self._heap,
                 ScheduledRun(
@@ -66,8 +62,8 @@ class Scheduler(ABC):
     def _wait_until(self, next_run_ns: int) -> int:
         """ Wait (or not) until a run is due.
 
-                :param int next_run_ns: Monotonic time at which the next run is scheduled
-                :return int: How late, in ns, the run is starting
+        :param int next_run_ns: Monotonic time at which the next run is scheduled
+        :return int: How late, in ns, the run is starting
         """
         ...
 
@@ -79,12 +75,12 @@ class Scheduler(ABC):
         *,
         stop_on_error: bool = True,
     ) -> None:
-        """ Function which runs Sunbeam once.
+        """ Runs the next scheduled pipeline once.
 
-                :param Any state: State object which holds the values for processing
-                :param Callable[[RunnablePipeline, Any, dt.datetime], None] | None on_output: The function which runs on output, defaults to None
-                :param Callable[[dt.datetime], None] | None on_tick: The function which runs every tick with the timestamp just processed, defaults to None
-                :param bool stop_on_error: Bool to stop Sunbeam if an error is encountered, defaults to True
+        :param Any state: State object which holds the values for processing
+        :param Callable[[RunnablePipeline, Any, dt.datetime], None] | None on_output: The function which runs on output, defaults to None
+        :param Callable[[dt.datetime], None] | None on_tick: The function which runs every tick with the timestamp just processed, defaults to None
+        :param bool stop_on_error: Bool to stop Sunbeam if an error is encountered, defaults to True
         """
         scheduled = heapq.heappop(self._heap)
 
@@ -155,19 +151,3 @@ class ReplayScheduler(Scheduler):
     def _wait_until(self, next_run_ns: int) -> int:
         return 0
 
-
-class OfflineScheduler(ReplayScheduler):
-    def run(
-            self,
-            state: Any,
-            on_output: Callable[[RunnablePipeline, Any, dt.datetime], None] | None = None,
-            on_tick: Callable[[dt.datetime], None] | None = None,
-            *,
-            stop_on_error: bool = True,
-        ) -> None:
-            # Each pipeline in the offline heap needs to run exactly once (they all
-            # have period_ns == inf, so re-running run_once() this many times covers
-            # every pipeline without ever repeating one). The heap's size doesn't
-            # change across calls since each pop is matched by a push-back.
-            for _ in range(len(self._heap)):
-                self.run_once(state=state, on_output=on_output, on_tick=on_tick, stop_on_error=stop_on_error)

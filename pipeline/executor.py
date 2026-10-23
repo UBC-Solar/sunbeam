@@ -7,13 +7,15 @@ from sqlalchemy import Engine
 from config import EventManager
 from db.sunbeamdb.queued_writer import QueuedEventWriter
 from db.sunbeamdb.writer import EventWriter
-from db.telemetrydb.offline_ingress import IngressError
-from pipeline.output import IngressProgressReporter, ProgressReporter, TimingTableReporter
+from db.telemetrydb.realtime_ingress import DebugTimeProvider
+from pipeline.output import IngressProgressReporter, TimingTableReporter
 from pipeline.pipeline_generator import (
-    OfflinePipelineGenerator,
-    RealtimePipelineGenerator,
+    IngressFactory,
+    OfflineIngressFactory,
+    RealtimeIngressFactory,
+    generate_pipelines,
 )
-from pipeline.scheduler import OfflineScheduler, RealtimeScheduler, ReplayScheduler
+from pipeline.scheduler import RealtimeScheduler, ReplayScheduler
 from pipeline.timing import TimingStats
 from stage.stage_library import StageLibrary
 from state.state import State
@@ -24,85 +26,37 @@ REPLAY_TRIM_WARNING = timedelta(seconds=5)
 
 class Executor:
     def __init__(self, event_name: str, engine: Engine, reprocess: bool = False, debug: bool = False, debug_time: datetime | None = None):
-        writer = EventWriter(event_name, engine, reprocess=reprocess)
-        self._writer = QueuedEventWriter(writer)
+        self._event = EventManager().get_event(event_name)
+        self._writer = QueuedEventWriter(EventWriter(event_name, engine, reprocess=reprocess))
 
-        event_manager = EventManager()
-        event_start_datetime: datetime = event_manager.get_event_start_date(event_name)
-        event_end_datetime: datetime = event_manager.get_event_end_date(event_name)
-
-        is_past_event = event_manager.check_if_past_event(event_name=event_name, debug=debug)
-
-        if is_past_event:
-            event_manager.clear_event(engine, event_name)
-
-        pipeline_stage_names = event_manager.get_stages_for_event(event_name)
-        stage_library = StageLibrary(event_manager.get_event_pipeline_edition(event_name))
-
-        pipeline_stage_definitions = stage_library.get_stages_by_names(pipeline_stage_names)
+        stage_library = StageLibrary(self._event.pipeline_edition)
         kwargs = {"event_name": event_name}
-        pipeline_stages = [stage(**kwargs) for stage in pipeline_stage_definitions]
+        pipeline_stages = [stage(**kwargs) for stage in stage_library.get_stages_by_names(self._event.stages)]
 
-        self._pipelines, self._ingress_pipelines = None, None
+        # Past events are replayed from their recorded telemetry. Debug mode instead runs any event through the
+        # realtime path, against a fake clock starting at debug_time.
+        self._is_replay = self._event.is_past() and not debug
         self._ingress_reporter = IngressProgressReporter()
 
-        if is_past_event:
-            self._pipelines, self._ingress_pipelines = OfflinePipelineGenerator.generate_pipeline_from_nodes(
-                        pipeline_stages,
-                        event_start_datetime,
-                        event_end_datetime,
-                        debug=debug,
-                        debug_time=debug_time,
-                        stage_library=stage_library,
-                        ingress_observer=self._ingress_reporter,
-                    )
+        ingress_factory: IngressFactory
+        if self._is_replay:
+            ingress_factory = OfflineIngressFactory(stage_library, self._event.starts_at, self._event.ends_at, observer=self._ingress_reporter)
         else:
-            self._pipelines, self._ingress_pipelines = RealtimePipelineGenerator.generate_pipeline_from_nodes(
-                        pipeline_stages,
-                        event_start_datetime,
-                        event_end_datetime,
-                        debug=debug,
-                        debug_time=debug_time,
-                        stage_library=stage_library,
-                    )
-        
+            time_provider = DebugTimeProvider(start_time=debug_time) if debug else datetime
+            ingress_factory = RealtimeIngressFactory(stage_library, self._event.starts_at.date(), time_provider)
+
+        self._pipelines, self._ingress_pipelines = generate_pipelines(pipeline_stages, ingress_factory)
         self._state = State()
 
         pipelines_by_name = {
             pipeline.name: pipeline
-            for pipeline in [*self._pipelines, *self._ingress_pipelines]
+            for pipeline in self._pipelines + self._ingress_pipelines
         }
 
         self._timing = TimingStats(pipelines_by_name)
 
-        self._event_name = event_name
-        self._is_past_event = is_past_event
-        self._event_start = event_start_datetime
-        self._event_end = event_end_datetime
-
-        if is_past_event:
-            # The compute scheduler is built in _run_offline(), once ingress has told us what range the data covers
-            self._ingress_scheduler = OfflineScheduler(self._ingress_pipelines, observer=self._timing, now_wall=event_start_datetime)
-        else:
-            self._ingress_scheduler = RealtimeScheduler(self._ingress_pipelines, observer=self._timing)
-            self._compute_scheduler = RealtimeScheduler(self._pipelines, observer=self._timing)
-
     def _handle_pipeline_output(self, pipeline, frame, timestamp):
         self._writer.write_frame(frame)
-
-    def _update_timing_display(self, live):
-        if self._timing.should_print(interval_s=1.0):
-            live.update(self._timing.snapshot_and_reset())
-
-    def _run_ingress_scheduler(self):
-        self._ingress_scheduler.run(
-            self._state,
-            on_output=self._handle_pipeline_output,
-            stop_on_error=True,
-        )
-
-    def _make_reporter(self) -> ProgressReporter:
-        return TimingTableReporter(self._timing)
 
     def _replay_bounds(self) -> tuple[datetime, datetime] | None:
         """ The part of the event window for which every ingressed signal has data. """
@@ -110,69 +64,66 @@ class Executor:
         if data_bounds is None:
             return None
 
+        event_start, event_end = self._event.starts_at, self._event.ends_at
         data_start, data_end = data_bounds
-        start = max(self._event_start, data_start)
-        end = min(self._event_end, data_end)
+        start = max(event_start, data_start)
+        end = min(event_end, data_end)
 
         if end <= start:
             return None
 
-        trimmed = (start - self._event_start) + (self._event_end - end)
+        trimmed = (start - event_start) + (event_end - end)
         if trimmed > REPLAY_TRIM_WARNING:
             print(
                 f"Warning: telemetry only covers {start:%Y-%m-%d %H:%M:%S} -> {end:%Y-%m-%d %H:%M:%S} "
-                f"of event window {self._event_start:%Y-%m-%d %H:%M:%S} -> {self._event_end:%Y-%m-%d %H:%M:%S}; "
+                f"of event window {event_start:%Y-%m-%d %H:%M:%S} -> {event_end:%Y-%m-%d %H:%M:%S}; "
                 f"processing the covered range only."
             )
 
         return start, end
 
-    def _check_ingress_complete(self):
-        """ Fail fast if any signal the ingress pipelines should provide never made it into the state. """
-        expected = {
-            signal
-            for pipeline in self._ingress_pipelines
-            for node_id in pipeline.graph.nodes
-            for signal in pipeline.graph.nodes[node_id]["node"].outputs
-        }
-        missing = sorted(str(signal) for signal in expected if signal not in self._state)
-
-        if missing:
-            raise IngressError(f"Ingress finished without data for: {', '.join(missing)}")
-
-    def _run_offline(self):
+    def _run_replay(self):
+        # Offline ingress fetches the whole event in one go, so it runs once up front rather than on a schedule
         with self._ingress_reporter:
-            self._run_ingress_scheduler()
-        self._check_ingress_complete()
+            for pipeline in self._ingress_pipelines:
+                for frame in pipeline.run(self._state, self._event.starts_at):
+                    self._writer.write_frame(frame)
 
         bounds = self._replay_bounds()
         if bounds is None:
-            print(f"No telemetry found for {self._event_name}; nothing to process.")
+            print(f"No telemetry found for {self._event.name}; nothing to process.")
             return
 
         start, end = bounds
         compute_scheduler = ReplayScheduler(self._pipelines, observer=self._timing, now_wall=start, end_wall=end)
 
         wall_start = time.monotonic()
-        with self._make_reporter() as reporter:
+        with TimingTableReporter(self._timing) as reporter:
             compute_scheduler.run(
                 self._state,
                 on_tick=reporter.on_tick,
                 on_output=self._handle_pipeline_output,
             )
 
-
         print("Waiting for database writes to finish...")
         self._writer.close()
 
-        print(f"Processed {self._event_name}: {start:%H:%M:%S} -> {end:%H:%M:%S} in {time.monotonic() - wall_start:.1f} s")
+        print(f"Processed {self._event.name}: {start:%H:%M:%S} -> {end:%H:%M:%S} in {time.monotonic() - wall_start:.1f} s")
 
     def _run_realtime(self):
-        ingress_thread = threading.Thread(target=self._run_ingress_scheduler, daemon=True)
+        ingress_scheduler = RealtimeScheduler(self._ingress_pipelines, observer=self._timing)
+        compute_scheduler = RealtimeScheduler(self._pipelines, observer=self._timing)
+
+        ingress_thread = threading.Thread(
+            target=ingress_scheduler.run,
+            args=(self._state,),
+            kwargs={"on_output": self._handle_pipeline_output, "stop_on_error": True},
+            daemon=True,
+        )
         ingress_thread.start()
 
-        with self._make_reporter() as reporter:
-            self._compute_scheduler.run(
+        with TimingTableReporter(self._timing) as reporter:
+            compute_scheduler.run(
                 self._state,
                 on_tick=reporter.on_tick,
                 on_output=self._handle_pipeline_output,
@@ -180,15 +131,9 @@ class Executor:
 
     def run(self):
         try:
-            if self._is_past_event:
-                self._run_offline()
+            if self._is_replay:
+                self._run_replay()
             else:
                 self._run_realtime()
         finally:
-            self._writer.close()
-
-if __name__ == '__main__':
-    event_manager = EventManager()
-
-    print(event_manager.get_event_start_date("FSGP_2024_Day_1"))
-    print(event_manager.get_event_start_date("realtime"))
+            self._writer.close()  # No-op if the replay already closed it

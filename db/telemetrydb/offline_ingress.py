@@ -63,7 +63,7 @@ class OfflineIngressQuerier:
 
             query_start = time.monotonic()
             try:
-                _out[_field] = self._client.query_time_series(start_time, stop_time, _field)
+                _out[_field] = self._client.query_time_series(start_time, stop_time, _field, bucket=self._bucket)
             except Exception as e:
                 if self._observer is not None:
                     self._observer.on_query_failed(str(_field), e)

@@ -1,12 +1,37 @@
 import tomllib
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import Engine, select, delete
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
 from config import EVENTS_PATH
-from db.sunbeamdb.models import Event, Vehicle, AlignedSample
+from db.sunbeamdb.models import Event, Vehicle
 from db.sunbeamdb.seed_data import get_or_create_event
+
+
+@dataclass(frozen=True)
+class EventConfig:
+    """ One ``[[event]]`` entry of ``events.toml``. """
+    name: str
+    stages: list[str]
+    pipeline_edition: str
+    starts_at: datetime
+    ends_at: datetime | None  # None for ongoing events
+
+    @classmethod
+    def from_raw(cls, raw_event: dict) -> "EventConfig":
+        return cls(
+            name=raw_event["name"],
+            stages=raw_event["stages"],
+            pipeline_edition=raw_event["pipeline_edition"],
+            starts_at=datetime.fromisoformat(raw_event["starts_at"]),
+            ends_at=datetime.fromisoformat(raw_event["ends_at"]) if "ends_at" in raw_event else None,
+        )
+
+    def is_past(self) -> bool:
+        """ True if the event has an end date and it precedes the current time. """
+        return self.ends_at is not None and self.ends_at < datetime.now(UTC)
 
 
 class EventManager:
@@ -15,10 +40,19 @@ class EventManager:
             self._raw_events: list[dict] = tomllib.load(f)["event"]
             self._events: dict[str, Event] = {}
 
-    def get_stages_for_event(self, event_name: str) -> list[str]:
-        for event in self._raw_events:
-            if event["name"] == event_name:
-                return event["stages"]
+    def get_event(self, event_name: str) -> EventConfig:
+        '''
+        Returns the configuration of an event
+
+        :param str event_name: Event name
+        :return EventConfig: The event's configuration
+
+        :raises ValueError: Event name not found in events
+        '''
+        for raw_event in self._raw_events:
+            if raw_event["name"] == event_name:
+                return EventConfig.from_raw(raw_event)
+
         raise ValueError(f"Event {event_name} not found!")
 
     def sync_events(self, engine: Engine) -> dict[str, Event]:
@@ -48,79 +82,3 @@ class EventManager:
             session.commit()
 
         return self._events
-
-    def clear_event(self, engine: Engine, event_name: str):
-        with Session(engine) as session:
-            event = session.execute(select(Event).where(Event.name == event_name)).scalar_one_or_none()
-            
-            if event:
-                # Issue a bulk delete directly on the database
-                session.execute(
-                    delete(AlignedSample).where(AlignedSample.event_id == event.id)
-                )
-                session.commit()
-                print(f"Event '{event_name}' cleared from database!")
-
-
-
-    def check_if_past_event(self, event_name, debug) -> bool:
-        '''
-        Finds if an event is in the past by checking if its end date precedes the current time
-
-        :param str event_name: Event name
-        
-        :return bool: If the event is past or not
-
-        :raises ValueError: Event name not found 
-        '''
-        if debug:
-            return False
-        
-        for event in self._raw_events:
-            if event["name"] == event_name: # Checks if event exists
-                if "ends_at" in event:
-                    # True if end date in the past
-                    return datetime.fromisoformat(event["ends_at"]) < datetime.now(UTC)
-                else:
-                    return False # Event has no end date
-        raise ValueError(f"Event {event_name} not found!")
-
-    def get_event_start_date(self, event_name) -> datetime:
-        '''
-        Returns the starting date of an event
-
-        :param str event_name: Event name
-        :return: Starting date of event
-
-        :raises ValueError: Event name not found in events
-        '''
-        for event in self._raw_events:
-            if event["name"] == event_name:
-                return datetime.fromisoformat(event["starts_at"])
-
-        raise ValueError(f"Event {event_name} not found!")
-    
-    def get_event_end_date(self, event_name) -> datetime:
-        '''
-        Returns the ending date of an event
-
-        :param str event_name: Event name
-        :return: Ending date of event
-
-        :raises ValueError: Event name not found in events
-        :raises ValueError: Event does not have an end date
-        '''
-        for event in self._raw_events:
-            if event["name"] == event_name:
-                if "ends_at" in event:
-                    return datetime.fromisoformat(event["ends_at"])
-                else:
-                    raise ValueError(f"Event {event_name} has not end date!")
-        raise ValueError(f"Event {event_name} not found!")
-
-    def get_event_pipeline_edition(self, event_name) -> str:
-        for event in self._raw_events:
-            if event["name"] == event_name:
-                return event["pipeline_edition"]
-
-        raise ValueError(f"Event {event_name} not found!")
