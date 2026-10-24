@@ -408,3 +408,32 @@ tbody tr.clickable:hover {
   font-size: 1.3rem;
   font-weight: 600;
 }
+.progress-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.45rem;
+  font-size: 0.82rem;
+}
+
+.progress-pct {
+  font-size: 1.3rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-track {
+  height: 12px;
+  background: var(--accent-track);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 6px;
+  /* Ease between reports (twice a second) instead of jumping */
+  transition: width 0.4s ease-out;
+}

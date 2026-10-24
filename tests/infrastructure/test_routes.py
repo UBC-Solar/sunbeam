@@ -287,6 +287,28 @@ class TestMetricsRoutes:
         assert body["idle_pct"] == 90.0
         assert body["reported_at"] is not None
 
+    def test_replay_progress_round_trips(self, client, make_worker):
+        worker_id = make_worker()
+        replay = {
+            "start": "2024-07-16T15:00:00Z", "end": "2024-07-16T21:53:49Z",
+            "current": "2024-07-16T17:41:06Z", "fraction": 0.39,
+            "processed_s": 9666.0, "total_s": 24829.0, "elapsed_s": 11.6,
+            "speed": 833.3, "eta_s": 18.2,
+        }
+
+        client.post(f"/workers/{worker_id}/metrics", json={**METRICS_PAYLOAD, "replay": replay})
+        body = client.get(f"/workers/{worker_id}/metrics").json()
+
+        assert body["replay"]["fraction"] == 0.39
+        assert body["replay"]["speed"] == 833.3
+
+    def test_realtime_metrics_have_no_replay_progress(self, client, make_worker):
+        worker_id = make_worker()
+
+        client.post(f"/workers/{worker_id}/metrics", json=METRICS_PAYLOAD)
+
+        assert client.get(f"/workers/{worker_id}/metrics").json()["replay"] is None
+
     def test_report_for_terminal_worker_is_404(self, client, make_worker):
         worker_id = make_worker(status=WorkerStatus.COMPLETED)
 

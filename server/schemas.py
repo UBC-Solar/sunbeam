@@ -112,12 +112,26 @@ class WriterQueueStats(BaseModel):
     max_flush_ms: float
 
 
+class ReplayProgressStats(BaseModel):
+    """How far a replay worker has got through its window of simulated time."""
+    start: datetime
+    end: datetime
+    current: datetime
+    fraction: float
+    processed_s: float
+    total_s: float
+    elapsed_s: float
+    speed: float | None = None  # Times faster than realtime; None until anything is processed
+    eta_s: float | None = None
+
+
 class WorkerMetricsReport(BaseModel):
     idle_pct: float
     busy_pct: float
     writer_ms: float
     pipelines: list[PipelineMetric] = []
     writer_queue: WriterQueueStats | None = None
+    replay: ReplayProgressStats | None = None  # Only reported by replay workers
 
 
 class WorkerMetricsRead(WorkerMetricsReport):

@@ -64,11 +64,24 @@ export type PipelineMetric = {
   stages: StageMetric[];
 };
 
+export type ReplayProgress = {
+  start: string;
+  end: string;
+  current: string;
+  fraction: number;
+  processed_s: number;
+  total_s: number;
+  elapsed_s: number;
+  speed: number | null;
+  eta_s: number | null;
+};
+
 export type WorkerMetrics = {
   idle_pct: number;
   busy_pct: number;
   writer_ms: number;
   pipelines: PipelineMetric[];
+  replay: ReplayProgress | null;
   reported_at: string;
 };
 

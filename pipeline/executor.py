@@ -5,6 +5,7 @@ from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import datetime, timedelta
 
+from rich.console import Console
 from sqlalchemy import Engine
 
 from config import EventManager
@@ -15,7 +16,14 @@ from db.sunbeamdb.writer import EventWriter
 from db.telemetrydb.protocols import IngressObserver, TimeProvider
 from db.telemetrydb.realtime_ingress import DebugTimeProvider
 from orchestration.control import OrchestratedWorkerControl, ServerlessWorkerControl, WorkerControl
-from pipeline.output import IngressProgressReporter, LoggingOutputManager, OutputManager, RichOutputManager
+from pipeline.output import (
+    CombinedOutputManager,
+    IngressProgressReporter,
+    LoggingOutputManager,
+    OutputManager,
+    RichOutputManager,
+    RichReplayOutputManager,
+)
 from pipeline.pipeline import Pipeline
 from pipeline.pipeline_generator import (
     IngressFactory,
@@ -24,6 +32,7 @@ from pipeline.pipeline_generator import (
     generate_pipelines,
 )
 from pipeline.protocols import FrameWriter
+from pipeline.replay_progress import ReplayProgress
 from pipeline.scheduler import RealtimeScheduler, ReplayScheduler
 from pipeline.timing import TimingStats
 from stage.stage_library import StageLibrary
@@ -33,6 +42,9 @@ logger = logging.getLogger("sunbeam.worker")
 
 # Warn if telemetry covers noticeably less than the event window
 REPLAY_TRIM_WARNING = timedelta(seconds=5)
+
+# How often a replay reports its progress to the server (2 Hz)
+REPLAY_REPORT_INTERVAL_S = 0.5
 
 
 def replay_window_for(event: EventConfig) -> tuple[datetime, datetime] | None:
@@ -95,18 +107,21 @@ class Executor:
             sleep: Callable[[float], None] = time.sleep,
             replay_window: tuple[datetime, datetime] | None = None,
             ingress_reporter: IngressProgressReporter | None = None,
+            interactive: bool | None = None,
     ):
         """
         :param replay_window: (start, end) of a past event to replay as fast as possible, or None to run live.
             A replay runs every ingress pipeline once up front, then the compute pipelines over the window.
         :param ingress_reporter: Displays the up-front ingress queries of a replay; the ingress stages must have
             been built to report to it
+        :param interactive: Whether output goes to a terminal that can be redrawn in place; detected if None
         """
         self._control = control or ServerlessWorkerControl()
         self._writer = writer
         self._pipelines = pipelines
         self._ingress_pipelines = ingress_pipelines
         self._output_manager = output_manager
+        self._interactive = Console().is_terminal if interactive is None else interactive
         self._monotonic_ns = monotonic_ns
         self._sleep = sleep
         self._replay_window = replay_window
@@ -193,18 +208,38 @@ class Executor:
             self._ingress_crash_message = str(exc)
             self._ingress_crashed.set()
 
-    def _resolve_output_manager(self) -> OutputManager:
+    def _resolve_output_manager(self, replay: ReplayProgress | None = None) -> OutputManager:
+        """
+        Realtime: the timing table in a serverless terminal, otherwise log lines and reports to the server. (Never
+        both, since the table and the reports would each reset the same timing stats.)
+
+        Replay: the progress bar in a terminal, otherwise log lines; either way, reports to the server twice a
+        second, since a replay can be over in seconds. ServerlessWorkerControl simply drops the reports.
+        """
         if self._output_manager is not None:
             return self._output_manager
 
-        if isinstance(self._control, OrchestratedWorkerControl):
+        writer_stats = getattr(self._writer, "stats", None)
+
+        if replay is None:
+            if isinstance(self._control, OrchestratedWorkerControl):
+                return LoggingOutputManager(self._timing, self._control, writer_stats=writer_stats)
+            return RichOutputManager(self._timing)
+
+        if not self._interactive:
             return LoggingOutputManager(
-                self._timing,
-                self._control,
-                writer_stats=getattr(self._writer, "stats", None),
+                self._timing, self._control,
+                report_interval_s=REPLAY_REPORT_INTERVAL_S, writer_stats=writer_stats, replay=replay,
             )
 
-        return RichOutputManager(self._timing)
+        return CombinedOutputManager(
+            RichReplayOutputManager(replay, writer_stats=writer_stats),
+            LoggingOutputManager(
+                self._timing, self._control,
+                report_interval_s=REPLAY_REPORT_INTERVAL_S, log_interval_s=None, writer_stats=writer_stats,
+                replay=replay,
+            ),
+        )
 
     def _replay_bounds(self, event_start: datetime, event_end: datetime) -> tuple[datetime, datetime] | None:
         """ The part of the event window for which every ingressed signal has data. """
@@ -231,6 +266,7 @@ class Executor:
 
     def _run_replay(self, event_start: datetime, event_end: datetime) -> None:
         # Offline ingress fetches the whole event in one go, so it runs once up front rather than on a schedule
+        self._control.set_message("Fetching telemetry from InfluxDB")
         with self._ingress_reporter or nullcontext():
             for pipeline in self._ingress_pipelines:
                 for frame in pipeline.run(self._state, event_start):
@@ -248,7 +284,8 @@ class Executor:
 
         wall_start = time.monotonic()
         logger.info("Starting replay of %s -> %s.", f"{start:%H:%M:%S}", f"{end:%H:%M:%S}")
-        with self._resolve_output_manager() as output_manager:
+        self._control.set_message(f"Replaying {start:%Y-%m-%d %H:%M:%S} -> {end:%H:%M:%S} UTC")
+        with self._resolve_output_manager(ReplayProgress(start, end)) as output_manager:
             compute_scheduler.run(
                 self._state,
                 on_tick=output_manager.on_tick,
@@ -261,6 +298,7 @@ class Executor:
             self.signal_completion()
 
         logger.info("Waiting for database writes to finish...")
+        self._control.set_message("Waiting for database writes to finish")
         self._writer.close()
         logger.info("Replayed %s -> %s in %.1f s.", f"{start:%H:%M:%S}", f"{end:%H:%M:%S}", time.monotonic() - wall_start)
 

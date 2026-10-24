@@ -11,6 +11,7 @@ import {
 import {formatClock, formatDuration, formatRelative} from "../time";
 import {ConfirmButton} from "./ConfirmButton";
 import {StatusBadge} from "./StatusBadge";
+import {ReplayProgressBar} from "./ReplayProgress";
 import {BusyIdleMeter, PipelineLatencyBars} from "./TimingCharts";
 
 type WorkerDetailProps = {
@@ -42,24 +43,30 @@ export function WorkerDetail({worker, events, onClose, onStop}: WorkerDetailProp
     }
 
     let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
 
     async function poll() {
+      // Replays report their progress twice a second and can be over in seconds, so keep up with them
+      let delayMs = 2000;
+
       try {
         const snapshot = await getWorkerMetrics(worker.id);
         if (!cancelled) {
           setMetrics(snapshot);
           setMetricsError(null);
         }
+        if (snapshot?.replay) delayMs = 500;
       } catch (err) {
         if (!cancelled) setMetricsError((err as Error).message);
       }
+
+      if (!cancelled) timeout = setTimeout(poll, delayMs);
     }
 
     poll();
-    const interval = setInterval(poll, 2000);
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      clearTimeout(timeout);
     };
   }, [worker.id, isActive]);
 
@@ -164,6 +171,13 @@ export function WorkerDetail({worker, events, onClose, onStop}: WorkerDetailProp
             </>
           )}
         </dl>
+
+        {isActive && metrics?.replay && (
+          <div className="card" style={{marginTop: "1.25rem"}}>
+            <h3>Replay progress</h3>
+            <ReplayProgressBar replay={metrics.replay} />
+          </div>
+        )}
 
         <div className="card" style={{marginTop: "1.25rem"}}>
           <h3>Live timing</h3>

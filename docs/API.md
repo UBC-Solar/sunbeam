@@ -230,7 +230,23 @@ have been reported yet.
 ```
 
 `writer_queue` is `null` until the worker's first periodic report after
-its writer has flushed at least once. See the worker log line this same
+its writer has flushed at least once.
+
+Replay workers (past events) also report `replay`, their progress through
+the event window in simulated time; it is `null` for realtime workers:
+
+```json
+"replay": {
+  "start": "2024-07-16T15:00:00Z", "end": "2024-07-16T21:53:49Z",
+  "current": "2024-07-16T17:41:06Z", "fraction": 0.39,
+  "processed_s": 9666.0, "total_s": 24829.0, "elapsed_s": 11.6,
+  "speed": 833.3, "eta_s": 18.2
+}
+```
+
+`speed` is how many times faster than realtime the replay is running and
+`eta_s` the wall-clock seconds left at that speed; both are `null` until
+anything has been processed. See the worker log line this same
 payload drives: `timing idle=85.2% busy=14.8% writer=3.16ms queue=1/10000
 (hwm 6) flush_avg=7.82ms ...`.
 
