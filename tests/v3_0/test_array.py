@@ -1,5 +1,4 @@
 from data_tools.localization import CanonicalName
-from state.frame import FrameView
 import pytest
 
 class TestArrayStage:

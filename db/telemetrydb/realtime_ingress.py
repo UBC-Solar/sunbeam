@@ -45,19 +45,19 @@ class RealtimeIngressQuerier:
 
     def __init__(
             self,
-            bucket: str = "CAN_log",
-            organization: str = "8a0b66d77a331e96",
-            url: str = "http://influxdb.telemetry.ubcsolar.com",
-            token: str = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==",
+            bucket: str | None = "CAN_log",
+            organization: str | None = "8a0b66d77a331e96",
+            url: str | None = "http://influxdb.telemetry.ubcsolar.com",
+            token: str | None = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==",
             timeout_s: float = 1.0,
-            fields: Iterable[str] = None,
+            fields: Iterable[str] | None = None,
             time_provider: TimeProvider = datetime
     ):
         self._bucket = bucket
         self._organization = organization
         self._url = url
         self._token = token
-        self._fields = fields
+        self._fields = tuple(fields) if fields is not None else ()
 
         self._client = InfluxDBClient(
             url=self._url,

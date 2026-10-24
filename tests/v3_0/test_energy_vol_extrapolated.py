@@ -1,6 +1,5 @@
 from data_tools.localization import CanonicalName
 from stage.v3_0.energy_vol_extrapolated import EnergyVOLExtrapolated
-from scipy.interpolate import CubicSpline
 import pytest
 
 

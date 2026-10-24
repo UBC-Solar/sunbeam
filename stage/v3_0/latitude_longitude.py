@@ -17,7 +17,10 @@ class LatitudeLongitude(Stage):
     frequency: ClassVar[float] = 3
 
     def __init__(self, event_name: str | None = None, **kwargs):
-        self.min_lat = self.max_lat = self.min_lon = self.max_lon = None
+        self.min_lat: float | None = None
+        self.max_lat: float | None = None
+        self.min_lon: float | None = None
+        self.max_lon: float | None = None
         if event_name is None:
             return
         
@@ -53,10 +56,15 @@ class LatitudeLongitude(Stage):
         return new_frame # if empty frame. accounted for?
 
     def in_bounds(self, lat: float, lon: float) -> bool:
-        if None in (self.min_lat, self.max_lat, self.min_lon, self.max_lon):
+        if (
+            self.min_lat is None
+            or self.max_lat is None
+            or self.min_lon is None
+            or self.max_lon is None
+        ):
             return True
-        else:
-            return (
-                self.min_lat <= lat <= self.max_lat and
-                self.min_lon <= lon <= self.max_lon
-            )
+
+        return (
+            self.min_lat <= lat <= self.max_lat and
+            self.min_lon <= lon <= self.max_lon
+        )

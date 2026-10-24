@@ -31,8 +31,9 @@ class OfflineIngress(Stage):
             observer=observer,
         )
 
+    # The Stage contract declares outputs as a class attribute; like Ingress, this stage's outputs are per-instance
     @property
-    def outputs(self) -> list[str]:
+    def outputs(self) -> list[str]:  # type: ignore[override]
         return self._output_signals
 
     def run(self, input_frame: FrameView) -> Frame:

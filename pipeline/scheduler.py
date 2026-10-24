@@ -14,15 +14,18 @@ class Scheduler(ABC):
             self,
             pipelines: Iterable[RunnablePipeline],
             observer: SchedulerObserver | None = None,
+            *,
             now_wall: dt.datetime | None = None,
             end_wall: dt.datetime | None = None,
+            monotonic_ns: Callable[[], int] = time.monotonic_ns,
         ):
         self._heap: list[ScheduledRun] = []
         self._counter = itertools.count()
         self._observer = observer
         self._end_wall = end_wall
+        self._monotonic_ns = monotonic_ns
 
-        now_mono_ns = time.monotonic_ns()
+        now_mono_ns = self._monotonic_ns()
         if now_wall is None: # Reassigns now_wall if no start time is provided
             now_wall = dt.datetime.now(dt.UTC)
 
@@ -78,8 +81,8 @@ class Scheduler(ABC):
         """ Runs the next scheduled pipeline once.
 
         :param Any state: State object which holds the values for processing
-        :param Callable[[RunnablePipeline, Any, dt.datetime], None] | None on_output: The function which runs on output, defaults to None
-        :param Callable[[dt.datetime], None] | None on_tick: The function which runs every tick with the timestamp just processed, defaults to None
+        :param on_output: Called with every frame the pipeline yields, defaults to None
+        :param on_tick: Called after every run with the timestamp just processed, defaults to None
         :param bool stop_on_error: Bool to stop Sunbeam if an error is encountered, defaults to True
         """
         scheduled = heapq.heappop(self._heap)
@@ -92,14 +95,14 @@ class Scheduler(ABC):
         if self._observer is not None:
             self._observer.on_pipeline_start(pipeline_name, late_ns)
 
-        run_start_ns = time.monotonic_ns()
+        run_start_ns = self._monotonic_ns()
 
         try:
             for frame in scheduled.pipeline.run(state, timestamp):
                 if on_output is not None:
-                    write_start_ns = time.monotonic_ns()
+                    write_start_ns = self._monotonic_ns()
                     on_output(scheduled.pipeline, frame, timestamp)
-                    write_elapsed_ns = time.monotonic_ns() - write_start_ns
+                    write_elapsed_ns = self._monotonic_ns() - write_start_ns
 
                     if self._observer is not None:
                         self._observer.on_writer_done(write_elapsed_ns)
@@ -108,7 +111,7 @@ class Scheduler(ABC):
             if stop_on_error:
                 raise
 
-        run_elapsed_ns = time.monotonic_ns() - run_start_ns
+        run_elapsed_ns = self._monotonic_ns() - run_start_ns
 
         if self._observer is not None:
             self._observer.on_pipeline_done(pipeline_name, run_elapsed_ns)
@@ -126,19 +129,38 @@ class Scheduler(ABC):
             on_tick: Callable[[dt.datetime], None] | None = None,
             *,
             stop_on_error: bool = True,
+            should_stop: Callable[[], bool] | None = None,
         ) -> None:
-        """ Run pipelines until the next scheduled run falls after ``end_wall`` (forever if ``end_wall`` is None). """
-        while self._heap and (self._end_wall is None or self._next_timestamp() <= self._end_wall):
+        """ Run pipelines until ``should_stop`` returns True, or the next scheduled run falls after ``end_wall``.
+
+        Without either, runs forever.
+        """
+        while (
+            self._heap
+            and not (should_stop and should_stop())
+            and (self._end_wall is None or self._next_timestamp() <= self._end_wall)
+        ):
             self.run_once(state=state, on_output=on_output, on_tick=on_tick, stop_on_error=stop_on_error)
 
 
 class RealtimeScheduler(Scheduler):
     """ Runs pipelines in step with the wall clock, sleeping between runs. """
+    def __init__(
+            self,
+            pipelines: Iterable[RunnablePipeline],
+            observer: SchedulerObserver | None = None,
+            *,
+            sleep: Callable[[float], None] = time.sleep,
+            **kwargs,
+        ):
+        super().__init__(pipelines, observer, **kwargs)
+        self._sleep = sleep
+
     def _wait_until(self, next_run_ns: int) -> int:
-        sleep_ns = next_run_ns - time.monotonic_ns()
+        sleep_ns = next_run_ns - self._monotonic_ns()
 
         if sleep_ns > 0:
-            time.sleep(sleep_ns / 1_000_000_000)
+            self._sleep(sleep_ns / 1_000_000_000)
             if self._observer is not None:
                 self._observer.on_idle(sleep_ns)
             return 0
@@ -150,4 +172,3 @@ class ReplayScheduler(Scheduler):
     """ Runs pipelines over simulated time as fast as possible, never sleeping. """
     def _wait_until(self, next_run_ns: int) -> int:
         return 0
-

@@ -26,19 +26,19 @@ class OfflineIngressQuerier:
 
     def __init__(
             self,
-            bucket: str = "CAN_log",
-            organization: str = "8a0b66d77a331e96",
-            url: str = "http://influxdb.telemetry.ubcsolar.com",
-            token: str = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==",
+            bucket: str | None = "CAN_log",
+            organization: str | None = "8a0b66d77a331e96",
+            url: str | None = "http://influxdb.telemetry.ubcsolar.com",
+            token: str | None = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==",
             timeout_s: float = 30.0,
-            fields: Iterable[str] | None = None,
+            fields: Iterable[CanonicalName] | None = None,
             observer: IngressObserver | None = None,
     ):
         self._bucket = bucket
         self._organization = organization
         self._url = url
         self._token = token
-        self._fields = fields
+        self._fields = tuple(fields) if fields is not None else ()
         self._observer = observer
 
         self._client = InfluxDBClient(
@@ -53,24 +53,24 @@ class OfflineIngressQuerier:
             start_time: datetime,
             stop_time: datetime
             ) -> dict[CanonicalName, TimeSeries]:
-        _out: dict[CanonicalName, TimeSeries | None] = {
-            _field: None for _field in self._fields
-        }
+        _out: dict[CanonicalName, TimeSeries] = {}
 
-        for _field in _out:
+        for _field in self._fields:
             if self._observer is not None:
                 self._observer.on_query_start(str(_field))
 
             query_start = time.monotonic()
             try:
-                _out[_field] = self._client.query_time_series(start_time, stop_time, _field, bucket=self._bucket)
+                series = self._client.query_time_series(start_time, stop_time, _field, bucket=self._bucket)
             except Exception as e:
                 if self._observer is not None:
                     self._observer.on_query_failed(str(_field), e)
                 raise IngressError(f"Failed to query {_field} between {start_time} and {stop_time} from InfluxDB: {e}") from e
 
             if self._observer is not None:
-                self._observer.on_query_done(str(_field), len(_out[_field]), time.monotonic() - query_start)
+                self._observer.on_query_done(str(_field), len(series), time.monotonic() - query_start)
+
+            _out[_field] = series
 
         return _out
 
