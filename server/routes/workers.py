@@ -1,6 +1,8 @@
 import logging
 import uuid
 
+import anyio
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
@@ -235,13 +237,28 @@ def stream_logs(
             detail="Worker or its container could not be found",
         )
 
-    def event_source():
+    # The stream can stay open for as long as the worker runs, so give the session's pooled connection back now
+    # rather than when the response finishes; otherwise a handful of open log viewers exhausts the pool and every
+    # other route (including /health) blocks waiting for a connection.
+    db.close()
+
+    async def event_source():
         try:
-            for chunk in log_stream:
+            while True:
+                # Docker's follow stream blocks until the container writes a line. abandon_on_cancel lets a client
+                # disconnect cancel this immediately instead of waiting for the next line, which for a quiet worker
+                # may never come; the finally below then closes the stream, unblocking the abandoned thread.
+                chunk = await anyio.to_thread.run_sync(next, log_stream, None, abandon_on_cancel=True)
+                if chunk is None:
+                    break
                 text = chunk.decode("utf-8", errors="replace")
                 for line in text.splitlines():
                     yield f"data: {line}\n\n"
         except Exception:
             logger.exception("Log stream for worker %s failed", worker_id)
+        finally:
+            close = getattr(log_stream, "close", None)
+            if close is not None:
+                close()
 
     return StreamingResponse(event_source(), media_type="text/event-stream")
