@@ -16,7 +16,10 @@ dependency graph from their declared inputs/outputs
 (`pipeline/pipeline_generator.py`), splits it into same-rate subgraphs,
 and schedules each subgraph based on its frequency. Stages that consume signals
 nothing else produces automatically get their data from generated
-**ingress** stages reading InfluxDB. Output frames flow through a batching,
+**ingress** stages reading InfluxDB. An ongoing event runs **realtime**,
+polling InfluxDB in step with the wall clock; a past event is **replayed**,
+fetching its whole window up front and processing it as fast as possible
+(see [`docs/USAGE.md`](docs/USAGE.md#realtime-vs-replay-runs)). Output frames flow through a batching,
 non-blocking writer into `aligned_sample` table in `sunbeamdb`, Sunbeam's PostgreSQL database. A worker can run
 standalone (`--serverless`), or report in to the **server** — a FastAPI
 app (`server/`) that can launch workers as Docker containers, supervise
@@ -91,7 +94,7 @@ worker, the test suite, and the lint/type tooling):
 uv sync --extra executor --extra v3_0 --group test --group dev
 ```
 
-See [`docs/USAGE.md`](docs/USAGE.md#dependency-groups-and-why-they-exist)
+See [`docs/USAGE.md`](docs/USAGE.md#dependency-groups-and-why)
 for what each extra/group is for and why `server`/`executor` and
 `v3_0`/`v3_1` are mutually exclusive.
 

@@ -200,7 +200,8 @@ metrics for the worker. `404` for unknown `worker_id`.
 ### `POST /workers/{worker_id}/metrics` → `204`
 
 Periodic timing/writer-queue snapshot from a running worker (see
-`WorkerMetricsReport` below). `404` if the worker doesn't exist or is
+`WorkerMetricsReport` below) — every ~5 s for a realtime worker, every
+0.5 s for a replay worker. `404` if the worker doesn't exist or is
 already terminal — a worker's final metrics push right before exit may
 race its own `/complete` call and lose; this is expected and harmless.
 

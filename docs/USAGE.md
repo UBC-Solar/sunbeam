@@ -122,9 +122,11 @@ Once it's up:
    its `WorkerRun` row and passes the ID via the `SUNBEAM_WORKER_RUN_ID`
    environment variable when it starts the container (see
    `server/services/worker_service.py`'s `launch_worker`).
-4. The dashboard polls `/workers` for status, `/workers/{id}/logs` (or the
-   `/logs/stream` SSE endpoint) for output, and can request a stop via
-   `POST /workers/{id}/stop`.
+4. The dashboard polls `/workers` for status, `/workers/{id}/metrics` for
+   live timing (and a replay's progress — see
+   [Realtime vs replay runs](#realtime-vs-replay-runs)),
+   `/workers/{id}/logs` (or the `/logs/stream` SSE endpoint) for output, and
+   can request a stop via `POST /workers/{id}/stop`.
 5. A `WatchdogService` runs inside the server process, sweeping every few
    seconds to reconcile `WorkerRun` status against actual container state —
    a crashed or unresponsive container gets marked `lost`/`failed`
@@ -166,7 +168,7 @@ uv run sunbeam.py --event_name realtime
 |---|---|---|
 | `--event_name` | `$SUNBEAM_EVENT_NAME` or `"realtime"` | Which event (from `events.toml`) to run. |
 | `--serverless` | off | Run with no server at all — see below. |
-| `--reprocess` | `$SUNBEAM_REPROCESS` or `false` | Passed through to `EventWriter`; intended for reprocessing an already-`PROCESSED` event (see the commented-out guard in `db/sunbeamdb/writer.py` — this is a known incomplete feature, not a footgun you'll hit by accident). |
+| `--reprocess` | `$SUNBEAM_REPROCESS` or `false` | Delete the event's existing `aligned_sample` rows before writing. Replays always do this regardless (see below), so this only matters for realtime runs, which otherwise append to whatever an earlier run wrote. |
 | `--configuration` | `$SUNBEAM_CONFIGURATION_PROFILE` | `debug` or `production` — which `context.toml` block to load. Defaults to whatever `context.toml`'s `[main].default_config` says. |
 
 Every flag also has an environment-variable fallback, because that's how
@@ -174,6 +176,42 @@ the Docker worker container is actually configured (see
 `server/services/worker_service.py`'s `launch_worker`, which sets
 `SUNBEAM_EVENT_NAME`, `SUNBEAM_PIPELINE_EDITION`, etc. as container env
 vars rather than CLI args).
+
+### Realtime vs Replay worker runs
+
+`Executor.from_event` picks one of two modes from the event's entry in
+`events.toml`:
+
+- **Realtime** — events with no `ends_at` (like `realtime`), or one still in
+  the future. Ingress polls InfluxDB for the latest values on a schedule (one
+  `Ingress` stage and thread per signal frequency), and every pipeline runs
+  in step with the wall clock until the worker is stopped.
+- **Replay** — events whose `ends_at` has passed (like `FSGP_2024_Day_1`).
+  The worker fetches every needed signal over the whole event window from
+  InfluxDB up front (`Offline_Ingress`, shown as one spinner per signal),
+  trims the window to the range every signal actually has data for (with a
+  warning if that's noticeably shorter than the event), then runs the
+  compute pipelines over that window as fast as possible, never sleeping.
+  Reaching the end of the window completes the worker successfully. A
+  replay always deletes the event's earlier `aligned_sample` rows first,
+  since it rewrites the whole event, and would otherwise collide with an
+  earlier run's samples on the `(event, signal, ts)` primary key.
+
+Both modes write the same derived signals to `aligned_sample`; a replay
+also writes the raw ingress signals it fetched.
+
+What you see depends on the mode and on whether output is a terminal:
+
+| Run | Terminal shows | Reported to the server |
+|---|---|---|
+| Realtime, `--serverless` | A live timing table: per-pipeline/per-stage latency, idle/busy split | Nothing |
+| Realtime, with a server | `timing idle=...` log lines every 5 s | Timing metrics every 5 s |
+| Replay in a terminal | A progress bar: simulated clock vs. the end of the window, speed (× realtime), elapsed, ETA, writer queue | Timing + replay progress every 0.5 s (if there's a server) |
+| Replay without a terminal (e.g. a container) | `replay 42.1% ...` and `timing ...` log lines every 5 s | Timing + replay progress every 0.5 s |
+
+The dashboard's worker drawer shows a replay's progress as its own card
+above the timing charts, and the worker's status message names the phase
+it's in (fetching telemetry, replaying, waiting for database writes).
 
 ### The three ways a CLI worker can run
 
@@ -246,3 +284,10 @@ defaulting to `context.toml`'s `[main].default_config`. This is what lets
 the same `context.toml` describe both a `docker compose` deployment (where
 `worker.sunbeam-server` points at the Docker-network hostname `server`) and
 a bare CLI run against `localhost`, without code changes.
+
+Each `telemetrydb` block also has `debug` and `debug_time`. With
+`debug = true`, **realtime** runs read InfluxDB through a fake clock that
+starts at `debug_time` and then advances in real time, so a recorded
+session can be played back through the live path as if it were happening
+now. It has no effect on replays, which always read their event's own
+window.

@@ -70,7 +70,7 @@ sharing a Python dependency — which is exactly why `server`'s test suite
 `test_watchdog_service.py`) never imports `orchestration` either, and why
 a worker container's image never installs `server`'s dependencies (the
 `server`/`executor` `uv` extras are mutually exclusive — see
-[`USAGE.md`](USAGE.md#dependency-groups-and-why-they-exist)). The same
+[`USAGE.md`](USAGE.md#dependency-groups-and-why)). The same
 logic is why `server` has no edge to `pipeline` or `state` at all: the
 server never runs a pipeline, so it has nothing to import from either.
 
@@ -150,8 +150,10 @@ configured to talk to right now."
 - `EventManager`, `VehicleManager`, `SignalManager` (`config/events.py`,
   `vehicles.py`, `signals.py`) — read `events.toml` / `vehicles.toml` and
   `sync_*` them into the database (upsert by name; never delete). Also the
-  read side: `EventManager.get_stages_for_event`,
-  `get_event_pipeline_edition`, `get_event_date`.
+  read side: `EventManager.get_event(name)` returns an `EventConfig` (the
+  event's `stages`, `pipeline_edition`, `starts_at`, and `ends_at`, which is
+  `None` for an ongoing event), whose `is_past()` is what decides whether a
+  worker replays the event or runs it live.
 
 **Contract:**
 - `Context` is a singleton **by design** — every module that needs
@@ -172,7 +174,17 @@ configured to talk to right now."
 [`ALEMBIC.md`](ALEMBIC.md)), and the two ways data gets written:
 `EventWriter`/`QueuedEventWriter` (aligned samples, one row per
 `(event, signal, timestamp)`) and `telemetrydb/` (reading raw CAN data back
-out of InfluxDB during ingress).
+out of InfluxDB during ingress: `RealtimeIngressQuerier` for the latest
+values, `OfflineIngressQuerier` for a whole window as `TimeSeries`).
+
+`EventWriter` bulk-inserts plain values and loads `TimeSeries` values (a
+replay's raw ingress signals) with Postgres `COPY`; constructed with
+`reprocess=True`, it first deletes the event's existing `aligned_sample`
+rows. `QueuedEventWriter` wraps it with a bounded queue and a background
+flush thread: frames are never dropped (a full queue blocks the caller), a
+dead flush thread makes the next `write_frame`/`close` raise
+`WriterThreadError` rather than losing data silently, and `close()` waits
+until every queued frame is written.
 
 **Tables** (`db/sunbeamdb/models.py`; see [`ALEMBIC.md`](ALEMBIC.md) for how
 the schema evolves):
@@ -261,7 +273,7 @@ running.
   perfectly ordinary table; the hypertable conversion, the extension
   bootstrap, and the composite-key requirement are only exercised by the
   Postgres-marked suite (`tests/postgres/test_schema.py`; see
-  [`ALEMBIC.md`](ALEMBIC.md) and the [README](../README.md#running-the-tests)).
+  [`ALEMBIC.md`](ALEMBIC.md) and the [README](../README.md#running-tests)).
   If you change anything about the hypertable setup, that's where the test
   belongs — SQLite will pass regardless of whether the change is correct.
 
@@ -310,9 +322,10 @@ pipeline step implements) and `StageLibrary`, which resolves stage names
 - Every `Stage` subclass declares `stage_name`, `inputs`, `outputs`,
   `frequency` as **class-level** attributes (enforced by
   `Stage.__init_subclass__` — a subclass missing any of them fails at
-  *import* time, not at first use). `Ingress` is the one exception,
-  overriding these as properties since its identity varies per instance
-  (one `Ingress` object per frequency bin) — see
+  *import* time, not at first use). The ingress stages are the exception,
+  overriding some of these as properties since their identity varies per
+  instance (one `Ingress` object per frequency bin; one `Offline_Ingress`
+  object for whatever signals an event needs) — see
   [`STAGES.md`](STAGES.md) for the full contract and how to write a new one.
 - A stage's `run(input_frame) -> Frame` must be a pure function of its
   input frame and its own instance state (e.g. `IntegratedPackPower`
@@ -325,13 +338,24 @@ pipeline step implements) and `StageLibrary`, which resolves stage names
 ## `pipeline`
 
 **Owns:** turning a flat list of `Stage` instances into a scheduled,
-running system: `PipelineGenerator` (graph construction, splitting into
-same-rate subgraphs, generating ingress stages for unproduced signals),
-`Pipeline` (topological execution of one subgraph), `Scheduler` (a
-frequency-based min-heap runner, clock-injectable for tests), and
-`Executor` (the top-level object that owns the compute scheduler, one
-ingress scheduler *per ingress pipeline* running on its own thread, the
-writer, and the `WorkerControl`).
+running system: `pipeline_generator.py` (graph construction, splitting into
+same-rate subgraphs, and generating ingress stages for unproduced signals
+through a `RealtimeIngressFactory` or `OfflineIngressFactory`), `Pipeline`
+(topological execution of one subgraph), the schedulers (frequency-based
+min-heap runners, clock-injectable for tests: `RealtimeScheduler` sleeps
+to stay in step with the wall clock, `ReplayScheduler` runs a fixed window
+of simulated time as fast as possible), the output managers (`output.py`:
+the live timing table, the replay progress bar, and the headless logger
+that also reports metrics to the server), and `Executor` (the top-level
+object that owns the schedulers, the writer, and the `WorkerControl`).
+
+`Executor` runs in one of two modes (see
+[`USAGE.md`](USAGE.md#realtime-vs-replay-runs)): **realtime**, with one
+ingress scheduler *per ingress pipeline* on its own thread beside the
+compute scheduler, until stopped; or **replay** (given a `replay_window`),
+which runs the ingress pipelines once up front, then the compute pipelines
+over the window covered by the fetched telemetry, and completes on its own
+at the end of it.
 
 **Contract:**
 - `pipeline/protocols.py` defines the seams other modules implement against:
@@ -342,17 +366,20 @@ writer, and the `WorkerControl`).
   want a fake in tests.
 - `Executor` is constructed two ways: `Executor.from_event(event_name,
   engine, ...)` does the full production wiring (reads `events.toml`,
-  builds the stage graph, opens a `QueuedEventWriter`); the plain
+  chooses realtime or replay, builds the stage graph, opens a
+  `QueuedEventWriter`, wiping the event's old samples for a replay); the plain
   `Executor(pipelines, ingress_pipelines, writer, control, ...)`
   constructor takes everything pre-built, which is what
   `tests/infrastructure/test_executor.py` uses with fakes for every
   argument. If you need to test executor *behavior* (stop/crash/completion
   handling), use the second form — don't reach for `from_event`.
 - `pipeline` imports `config` (`pipeline_generator.py` reads `Context` for
-  the InfluxDB connection details used to build ingress stages, and
-  `EventManager` via `from_event`), `state`, `stage`, `db.sunbeamdb` (for
-  the concrete writer types used by `from_event`), and `orchestration`
-  (for `WorkerControl`). It does not import `server`.
+  the InfluxDB connection details used to build ingress stages, the
+  executor reads it for the realtime debug clock, and `EventManager` via
+  `from_event`), `state`, `stage`, `db` (`db.sunbeamdb` for
+  the concrete writer types used by `from_event`, `db.telemetrydb` for the
+  ingress protocols and the realtime debug clock, `DebugTimeProvider`), and `orchestration` (for
+  `WorkerControl`). It does not import `server`.
 
 ## `orchestration`
 
@@ -385,11 +412,13 @@ purely **local** stop such as a crashed ingress pipeline calling
 `request_stop()` directly, which never round-trips through the server at
 all — both the permission poll and the heartbeat stop firing entirely; the
 worker simply goes quiet on this channel from the server's point of view
-until it reports terminal status. Separately, and on a much slower cadence
-(every ~5 seconds, driven by the scheduler's `on_tick` callback rather than
-the control thread), the executor's output manager assembles a **metrics**
-snapshot — per-pipeline/per-stage timing, idle/busy percentages, writer
-queue depth — and calls `control.report_metrics(...)`, `POST`ing it to
+until it reports terminal status. Separately (driven by the scheduler's
+`on_tick` callback rather than the control thread, every ~5 seconds for a
+realtime run and every 0.5 seconds for a replay, which may be over in
+seconds), the executor's output manager assembles a **metrics** snapshot —
+per-pipeline/per-stage timing, idle/busy percentages, writer queue depth,
+and for a replay its progress through the window — and calls
+`control.report_metrics(...)`, `POST`ing it to
 `/workers/{id}/metrics` (see [`API.md`](API.md#get-workersworker_idmetrics)
 for the exact payload — it's the same JSON structure behind the periodic
 `timing idle=...%` log line). Finally, when the executor's scheduler loop

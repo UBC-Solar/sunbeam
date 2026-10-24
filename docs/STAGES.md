@@ -75,18 +75,17 @@ one-time config loaded in `__init__` like `LatitudeLongitude`'s track
 bounding box). It should **not** read `Context()`, hit the database, or do
 network I/O — with one deliberate exception:
 
-### The `Ingress` stage
+### The ingress stages
 
 `Ingress` (`stage/v3_0/ingress.py`) is not a normal computation stage — it's
-how *external* data (from InfluxDB, via `RealtimeIngress`) enters the
-pipeline as signals. It's special in three ways worth knowing if you ever
-touch it:
+how *external* data (from InfluxDB, via `RealtimeIngressQuerier`) enters the
+pipeline as signals during a realtime run. It's special in three ways worth
+knowing if you ever touch it:
 
 1. It overrides `frequency`, `outputs`, and `stage_name` as **properties**
    instead of class attributes, because one `Ingress` *instance* exists per
-   frequency bin — `PipelineGenerator` creates one per distinct frequency
-   among the signals no other stage produces (see
-   `PipelineGenerator.generate_ingress_for_nodes`).
+   frequency bin — `RealtimeIngressFactory` creates one per distinct
+   frequency among the signals no other stage produces.
 2. Its `run()` does real I/O (an InfluxDB query per tick) — the one place
    in the stage layer where that's intentional.
 3. It enforces a **data grace period**: a signal with no data for more than
@@ -96,10 +95,22 @@ touch it:
    are tolerated via `MissingDataTracker`; a signal that's *actually* gone
    dark is not silently ignored.
 
+`Offline_Ingress` (`stage/v3_0/offline_ingress.py`) is its replay
+counterpart (see [`USAGE.md`](USAGE.md#realtime-vs-replay-runs)): a single
+instance, built by `OfflineIngressFactory`, that fetches *every* ingress
+signal over the whole event window in one go (via
+`OfflineIngressQuerier`) and outputs each as a `TimeSeries` rather than a
+single value. It runs exactly once, before the compute pipelines start, so
+it is never scheduled — its `frequency` of `0` is never used. During the
+replay, `State` samples each `TimeSeries` at the tick's timestamp, so your
+compute stages still read plain values and don't need to know which mode
+they're running in.
+
 You will not normally write another stage like this — ingress is generated
 automatically for whatever signals your compute stages need but no stage
-produces. You only touch `Ingress` itself if you're changing how telemetry
-enters the system (e.g. a new backing store).
+produces. You only touch `Ingress`/`Offline_Ingress` themselves if you're
+changing how telemetry enters the system (e.g. a new backing store). An
+edition needs both registered to support both realtime and replay runs.
 
 ## Pipeline Construction
 
@@ -109,17 +120,23 @@ though you rarely call it directly:
 1. **Build a dependency graph** (`build_node_graph`): one node per stage,
    one edge `producer -> consumer` per signal a stage consumes that another
    stage in the set produces. Two stages declaring the same output is a
-   hard error (`ValueError: Signal ... is produced by multiple nodes`); a
-   cycle is a hard error too.
+   hard error (`ValueError: Signal ... is produced by multiple nodes`), as
+   are two stages with the same `stage_name` (it's the graph's node key, so
+   one would silently replace the other) and a cycle.
 2. **Find every signal nobody in the set produces** — those are the
    *ingress signals*, the real telemetry your compute stages ultimately
-   depend on (`PipelineGenerator.collect_signals_for_ingress`).
-3. **Bin ingress signals by frequency** (from `data_tools`'s localization
-   tables) and generate one `Ingress` stage per bin.
-4. **Split the full node set (compute stages + generated ingress stages)
-   into same-rate subgraphs** (`same_rate_components`): cross-rate edges
-   are removed first, then each connected component becomes one scheduled
-   `Pipeline`, running at its single shared frequency.
+   depend on (`collect_signals_for_ingress`).
+3. **Generate ingress stages for them**, via an `IngressFactory`: for a
+   realtime run, `RealtimeIngressFactory` bins the signals by frequency
+   (from `data_tools`'s localization tables) and makes one `Ingress` stage
+   per bin; for a replay, `OfflineIngressFactory` makes a single
+   `Offline_Ingress` stage for all of them.
+4. **Split the compute stages and the ingress stages, separately, into
+   same-rate subgraphs** (`same_rate_components`): cross-rate edges are
+   removed first, then each connected component becomes one `Pipeline`,
+   running at its single shared frequency. `generate_pipelines` returns
+   the two lists (compute pipelines, ingress pipelines), which the executor
+   schedules separately.
 5. Each `Pipeline` executes its nodes in **topological order** every tick
    (computed once at construction, not per-tick). A stage whose inputs
    aren't in `State` yet (e.g. a fast pipeline's first tick, before a
@@ -167,6 +184,10 @@ class = "Array"
 [v3_0.Ingress]
 module = "stage.v3_0.ingress"
 class = "Ingress"
+
+[v3_0.Offline_Ingress]
+module = "stage.v3_0.offline_ingress"
+class = "OfflineIngress"
 ```
 
 `StageLibrary(pipeline_edition)` (`stage/stage_library.py`) reads this file
@@ -205,7 +226,7 @@ convention, not enforced — but there is no reason to break it.
    pipeline edition's `[project.optional-dependencies]` extra in
    `pyproject.toml` (e.g. `v3_0 = [...]`), *not* to `executor` or `server`.
    This is the reason editions are separate `uv` extras at all — see
-   [`USAGE.md`](USAGE.md#why-per-edition-dependency-groups) for the full
+   [`USAGE.md`](USAGE.md#per-edition-dependency-groups) for the full
    rationale. If your stage needs nothing new, skip this step.
 5. **Write tests** under `tests/<edition>/test_your_stage.py`, following
    the existing pattern: a `conftest.py` fixture constructing the stage,

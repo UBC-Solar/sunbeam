@@ -186,7 +186,7 @@ linear (well, DAG-with-one-sink) chain.
 ## Testing
 
 `tests/postgres/test_migrations.py` (Postgres-marked — see the
-[README](../README.md#running-the-tests)) keeps the chain honest on every
+[README](../README.md#running-tests)) keeps the chain honest on every
 CI run: a fresh database upgraded to `head` must produce the full schema
 including hypertables, `downgrade base` must remove it cleanly, and
 `upgrade_database`'s pre-Alembic stamping shim and lock-timeout behavior
