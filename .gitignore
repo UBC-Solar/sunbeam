@@ -5,6 +5,9 @@ data/
 .env
 .bin
 
+dashboard/node_modules
+sunbeam.egg-info
+
 **/*.log
 **/*.bin
 **/__pycache__/

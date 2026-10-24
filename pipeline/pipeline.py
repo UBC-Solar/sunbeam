@@ -1,11 +1,13 @@
-from pipeline.timing import StageTimingStats
-from state.frame import FrameView
-from state.state import State
-from stage.stage import Stage
-from typing import Iterator
-import networkx as nx
 import datetime
 import time
+from collections.abc import Iterator
+
+import networkx as nx
+
+from pipeline.timing import StageTimingStats
+from stage.stage import Stage
+from state.frame import FrameView
+from state.state import State
 
 
 class Pipeline:
