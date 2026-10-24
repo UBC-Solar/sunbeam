@@ -1075,7 +1075,7 @@ name = "pytest-cov"
 version = "7.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "coverage", marker = "(extra == 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-server') or (extra != 'extra-7-sunbeam-server' and extra == 'extra-7-sunbeam-v3-0') or (extra != 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-v3-0')" },
+    { name = "coverage" },
     { name = "pluggy" },
     { name = "pytest" },
 ]
@@ -1372,9 +1372,6 @@ server = [
 v3-0 = [
     { name = "influxdb-client" },
     { name = "psycopg" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "pytest-mock" },
 ]
 
 [package.dev-dependencies]
@@ -1388,6 +1385,7 @@ test = [
     { name = "fastapi" },
     { name = "httpx2" },
     { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "pytest-mock" },
     { name = "testcontainers" },
 ]
@@ -1406,15 +1404,12 @@ requires-dist = [
     { name = "psycopg-binary", marker = "extra == 'executor'", specifier = ">=3.3.4" },
     { name = "psycopg-binary", marker = "extra == 'server'", specifier = ">=3.3.4" },
     { name = "pydantic", marker = "extra == 'server'", specifier = ">=2.13.4" },
-    { name = "pytest", marker = "extra == 'v3-0'", specifier = ">=9.1.1" },
-    { name = "pytest-cov", marker = "extra == 'v3-0'", specifier = ">=7.1.0" },
-    { name = "pytest-mock", marker = "extra == 'v3-0'", specifier = ">=3.15.1" },
     { name = "pyzmq", marker = "extra == 'server'", specifier = ">=27.1.0" },
     { name = "rich", marker = "extra == 'executor'", specifier = ">=15.0.0" },
     { name = "sqlalchemy", marker = "extra == 'executor'", specifier = ">=2.0.49" },
     { name = "sqlalchemy", marker = "extra == 'server'", specifier = ">=2.0.49" },
-    { name = "ubc-solar-data-tools", marker = "extra == 'executor'", specifier = ">=2.0.1" },
-    { name = "ubc-solar-data-tools", marker = "extra == 'server'" },
+    { name = "ubc-solar-data-tools", marker = "extra == 'executor'", specifier = ">=2.0.2" },
+    { name = "ubc-solar-data-tools", marker = "extra == 'server'", specifier = ">=2.0.2" },
     { name = "uvicorn", marker = "extra == 'server'", specifier = ">=0.49.0" },
 ]
 provides-extras = ["server", "executor", "v3-0", "v3-1"]
@@ -1430,6 +1425,7 @@ test = [
     { name = "fastapi", specifier = ">=0.138.0" },
     { name = "httpx2", specifier = ">=0.1" },
     { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "pytest-mock", specifier = ">=3.15.1" },
     { name = "testcontainers", specifier = ">=4.8" },
 ]
@@ -1491,7 +1487,7 @@ wheels = [
 
 [[package]]
 name = "ubc-solar-data-tools"
-version = "2.0.1"
+version = "2.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dill" },
@@ -1509,7 +1505,7 @@ dependencies = [
     { name = "solcast", marker = "extra == 'extra-7-sunbeam-executor' or extra == 'extra-7-sunbeam-server' or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
     { name = "sqlalchemy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ca/c4/4dd908fc7c814e7d5c44e66e4a8e26390b86ddf42c97373d197e6f7048ac/ubc_solar_data_tools-2.0.1.tar.gz", hash = "sha256:55d0dac3be91374e21599e3e67c7fdf9ccd3815aa7ef76f793b82ca883b46c37", size = 258337, upload-time = "2026-07-18T21:58:04.198Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9c/f4/42dbe52d872b838d63e70ca0e560360c81de783b63500455f5f8a5b38c32/ubc_solar_data_tools-2.0.2.tar.gz", hash = "sha256:d84f935744695c935e29cec26e1580546c40dac9c595cc26a00ffb5fccf088df", size = 258739, upload-time = "2026-10-23T02:34:09.919Z" }
 
 [[package]]
 name = "urllib3"

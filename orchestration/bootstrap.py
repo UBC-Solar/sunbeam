@@ -30,7 +30,7 @@ def build_control(serverless: bool, event_name: str) -> WorkerControl:
     # Launched by hand: register with the server to obtain a run ID.
     from config import EventManager
 
-    pipeline_edition = EventManager().get_event_pipeline_edition(event_name)
+    pipeline_edition = EventManager().get_event(event_name).pipeline_edition
 
     try:
         client = OrchestratorClient.register(

@@ -1,10 +1,19 @@
+import time
+from collections.abc import Iterable
+from datetime import UTC, datetime
+
 from data_tools.collections import TimeSeries
 from data_tools.query import InfluxDBClient
-from datetime import datetime
-from typing import Iterable, Optional
+from data_tools.localization import CanonicalName
+
+from db.telemetrydb.protocols import IngressObserver
 
 
-class OfflineIngress:
+class IngressError(RuntimeError):
+    """ Raised when telemetry for an offline event could not be fetched. """
+
+
+class OfflineIngressQuerier:
     """
     Fast path for:
       'get the last value of these three fields before timestamp T'
@@ -17,37 +26,51 @@ class OfflineIngress:
 
     def __init__(
             self,
-            bucket: str = "CAN_log",
-            organization: str = "8a0b66d77a331e96",
-            url: str = "http://influxdb.telemetry.ubcsolar.com",
-            token: str = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==",
-            timeout_s: float = 1.0,
-            fields: Optional[Iterable[str]] = None,
+            bucket: str | None = "CAN_log",
+            organization: str | None = "8a0b66d77a331e96",
+            url: str | None = "http://influxdb.telemetry.ubcsolar.com",
+            token: str | None = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==",
+            timeout_s: float = 30.0,
+            fields: Iterable[CanonicalName] | None = None,
+            observer: IngressObserver | None = None,
     ):
         self._bucket = bucket
         self._organization = organization
         self._url = url
         self._token = token
         self._fields = tuple(fields) if fields is not None else ()
+        self._observer = observer
 
         self._client = InfluxDBClient(
             url=self._url,
             influxdb_token=self._token,
             influxdb_org=self._organization,
-            timeout=timeout_s * 1000
+            timeout=timeout_s  # data_tools takes seconds and converts to ms itself
         )
 
     def get_values_between(
             self,
             start_time: datetime,
             stop_time: datetime
-    ) -> dict[str, TimeSeries]:
-        _out: dict[str, TimeSeries | None] = {
-            _field: None for _field in self._fields
-        }
+            ) -> dict[CanonicalName, TimeSeries]:
+        _out: dict[CanonicalName, TimeSeries] = {}
 
-        for _field in _out.keys():
-            _out[_field] = self._client.query_time_series(start_time, stop_time, _field)
+        for _field in self._fields:
+            if self._observer is not None:
+                self._observer.on_query_start(str(_field))
+
+            query_start = time.monotonic()
+            try:
+                series = self._client.query_time_series(start_time, stop_time, _field, bucket=self._bucket)
+            except Exception as e:
+                if self._observer is not None:
+                    self._observer.on_query_failed(str(_field), e)
+                raise IngressError(f"Failed to query {_field} between {start_time} and {stop_time} from InfluxDB: {e}") from e
+
+            if self._observer is not None:
+                self._observer.on_query_done(str(_field), len(series), time.monotonic() - query_start)
+
+            _out[_field] = series
 
         return _out
 
@@ -56,9 +79,8 @@ class OfflineIngress:
 
 
 if __name__ == "__main__":
-    from datetime import timezone
 
-    reader = OfflineIngress(
+    reader = OfflineIngressQuerier(
         bucket="CAN_log",
         organization="8a0b66d77a331e96",
         url="http://influxdb.telemetry.ubcsolar.com",
@@ -74,7 +96,9 @@ if __name__ == "__main__":
         )
     )
 
-    values = reader.get_values_between(datetime(2024, 7, 16, 14, 00, tzinfo=timezone.utc), datetime(2024, 7, 16, 15, 00, tzinfo=timezone.utc))
+    values = reader.get_values_between(datetime(2024, 7, 16, 14, 00, tzinfo=UTC), datetime(2024, 7, 16, 15, 00, tzinfo=UTC))
+
+    print(values)
 
     values["TotalPackVoltage"].plot()
 

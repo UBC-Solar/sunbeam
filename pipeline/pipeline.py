@@ -1,12 +1,14 @@
-from pipeline.timing import StageTimingStats
-from state.frame import FrameView
-from state.state import State
-from stage.stage import Stage
-from typing import Iterator, Optional
-import networkx as nx
 import datetime
 import logging
 import time
+from collections.abc import Iterator
+
+import networkx as nx
+
+from pipeline.timing import StageTimingStats
+from stage.stage import Stage
+from state.frame import FrameView
+from state.state import State
 
 logger = logging.getLogger("sunbeam.worker")
 
@@ -32,7 +34,7 @@ class Pipeline:
         # still cannot run after it, something is actually wrong - raise
         # instead of silently idling forever.
         self._not_ready_grace_s = not_ready_grace_s
-        self._not_ready_since: Optional[float] = None
+        self._not_ready_since: float | None = None
 
     def run(self, state: State, timestamp: datetime.datetime) -> Iterator[FrameView]:
         for stage in self._stages:

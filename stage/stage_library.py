@@ -27,6 +27,13 @@ class StageLibrary:
         self._stage_registry = self._raw_data[pipeline_edition]
 
     def get_stage_by_name(self, stage_name: str) -> type[Stage]:
+        """ Finds and returns the Stage subclass from its name
+
+        :param str stage_name: Stage name
+        :raises ValueError: Stage name not found in stage registry
+        :raises TypeError: Found class from registry is not a stage subclass
+        :return type[Stage]: Stage subclass
+        """        
         if stage_name not in self._stage_registry:
             raise ValueError(f"Stage {stage_name!r} not found.")
 

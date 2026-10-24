@@ -69,19 +69,17 @@ class TestEventManager:
         manager = EventManager()
         first = raw_events[0]
 
-        assert manager.get_stages_for_event(first["name"]) == first["stages"]
-        assert manager.get_event_pipeline_edition(first["name"]) == first["pipeline_edition"]
-        assert manager.get_event_date(first["name"]).date().isoformat() == str(first["starts_at"])[:10]
+        event = manager.get_event(first["name"])
+
+        assert event.stages == first["stages"]
+        assert event.pipeline_edition == first["pipeline_edition"]
+        assert event.starts_at.date().isoformat() == str(first["starts_at"])[:10]
 
     def test_unknown_event_raises(self):
         manager = EventManager()
 
         with pytest.raises(ValueError, match="not found"):
-            manager.get_stages_for_event("no-such-event")
-        with pytest.raises(ValueError, match="not found"):
-            manager.get_event_date("no-such-event")
-        with pytest.raises(ValueError, match="not found"):
-            manager.get_event_pipeline_edition("no-such-event")
+            manager.get_event("no-such-event")
 
 
 class TestSignalManager:

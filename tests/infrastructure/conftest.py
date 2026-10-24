@@ -175,7 +175,7 @@ class FakeOutputManager:
         self.exited = True
         return False
 
-    def on_tick(self):
+    def on_tick(self, timestamp):
         self.ticks += 1
 
 

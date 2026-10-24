@@ -2,8 +2,9 @@ import networkx as nx
 import pytest
 
 from pipeline.pipeline_generator import (
-    PipelineGenerator,
     build_node_graph,
+    build_pipeline_from_nodes,
+    collect_signals_for_ingress,
     cross_rate_edges,
     same_rate_components,
 )
@@ -96,7 +97,7 @@ class TestCollectSignalsForIngress:
         a = make_stage("A", ["raw_1", "raw_2"], ["x"], 10.0)
         b = make_stage("B", ["x", "raw_3"], ["y"], 10.0)
 
-        signals = PipelineGenerator.collect_signals_for_ingress([a, b])
+        signals = collect_signals_for_ingress([a, b])
 
         assert sorted(signals) == ["raw_1", "raw_2", "raw_3"]
 
@@ -104,7 +105,7 @@ class TestCollectSignalsForIngress:
         a = make_stage("A", [], ["x"], 10.0)
         b = make_stage("B", ["x"], ["y"], 10.0)
 
-        assert PipelineGenerator.collect_signals_for_ingress([a, b]) == []
+        assert collect_signals_for_ingress([a, b]) == []
 
 
 class TestBuildPipelineFromNodes:
@@ -113,7 +114,7 @@ class TestBuildPipelineFromNodes:
         b = make_stage("B", ["x"], ["y"], 10.0)
         c = make_stage("C", ["y"], ["z"], 1.0)
 
-        pipelines = PipelineGenerator.build_pipeline_from_nodes([a, b, c])
+        pipelines = build_pipeline_from_nodes([a, b, c])
 
         assert sorted(p.frequency for p in pipelines) == [1.0, 10.0]
         names = {p.name for p in pipelines}

@@ -2,12 +2,12 @@ from datetime import timedelta
 
 import pytest
 
-from pipeline.scheduler import Scheduler
+from pipeline.scheduler import RealtimeScheduler
 from tests.infrastructure.conftest import FakePipeline
 
 
 def make_scheduler(pipelines, clock, observer=None):
-    return Scheduler(
+    return RealtimeScheduler(
         pipelines,
         observer=observer,
         monotonic_ns=clock.monotonic_ns,
@@ -30,7 +30,7 @@ class TestSchedulerRun:
         pipeline = FakePipeline("p", 10.0)
         scheduler = make_scheduler([pipeline], fake_clock)
 
-        scheduler.run_forever(state=None, should_stop=lambda: True)
+        scheduler.run(state=None, should_stop=lambda: True)
 
         assert pipeline.run_count == 0
 
@@ -38,7 +38,7 @@ class TestSchedulerRun:
         pipeline = FakePipeline("p", 10.0)
         scheduler = make_scheduler([pipeline], fake_clock)
 
-        scheduler.run_forever(state=None, should_stop=lambda: pipeline.run_count >= 5)
+        scheduler.run(state=None, should_stop=lambda: pipeline.run_count >= 5)
 
         assert pipeline.run_count == 5
 
@@ -53,7 +53,7 @@ class TestSchedulerRun:
         slow = FakePipeline("slow", 5.0)
         scheduler = make_scheduler([fast, slow], fake_clock)
 
-        scheduler.run_forever(state=None, should_stop=lambda: fast.run_count >= 21)
+        scheduler.run(state=None, should_stop=lambda: fast.run_count >= 21)
 
         # Over the same span of (fake) time, the 10 Hz pipeline must have run
         # twice as often as the 5 Hz one, up to boundary effects.
@@ -65,7 +65,7 @@ class TestSchedulerRun:
         scheduler = make_scheduler([pipeline], fake_clock)
         outputs = []
 
-        scheduler.run_forever(
+        scheduler.run(
             state=None,
             on_output=lambda p, frame, ts: outputs.append((p, frame, ts)),
             should_stop=lambda: pipeline.run_count >= 2,
@@ -81,9 +81,9 @@ class TestSchedulerRun:
         scheduler = make_scheduler([pipeline], fake_clock)
         ticks = []
 
-        scheduler.run_forever(
+        scheduler.run(
             state=None,
-            on_tick=lambda: ticks.append(1),
+            on_tick=lambda timestamp: ticks.append(timestamp),
             should_stop=lambda: pipeline.run_count >= 4,
         )
 
@@ -94,7 +94,7 @@ class TestSchedulerRun:
         scheduler = make_scheduler([pipeline], fake_clock)
 
         with pytest.raises(RuntimeError, match="p failed"):
-            scheduler.run_forever(
+            scheduler.run(
                 state=None,
                 stop_on_error=True,
                 should_stop=lambda: pipeline.run_count >= 100,
@@ -106,7 +106,7 @@ class TestSchedulerRun:
         pipeline = FakePipeline("p", 10.0, fail_after=2)
         scheduler = make_scheduler([pipeline], fake_clock)
 
-        scheduler.run_forever(
+        scheduler.run(
             state=None,
             stop_on_error=False,
             should_stop=lambda: pipeline.run_count >= 6,
@@ -141,7 +141,7 @@ class TestSchedulerObserver:
         observer = RecordingObserver()
         scheduler = make_scheduler([pipeline], fake_clock, observer=observer)
 
-        scheduler.run_forever(
+        scheduler.run(
             state=None,
             on_output=lambda p, frame, ts: None,
             should_stop=lambda: pipeline.run_count >= 3,
