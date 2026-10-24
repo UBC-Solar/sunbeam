@@ -15,7 +15,7 @@ class MissingDataTracker:
     a signal missing continuously for longer than the grace period is not.
     """
 
-    def __init__(self, grace_s: float = 100.0, monotonic: Callable[[], float] = time.monotonic):
+    def __init__(self, grace_s: float = 1000.0, monotonic: Callable[[], float] = time.monotonic):
         self._grace_s = grace_s
         self._monotonic = monotonic
         self._missing_since: dict[str, float] = {}
@@ -48,7 +48,7 @@ class Ingress(Stage):
         token: Optional[str] = None,
         url: Optional[str] = None,
         ingress_client: Optional[RealtimeIngressQuerier] = None,
-        data_grace_s: float = 1.0,
+        data_grace_s: float = 1000.0,
     ) -> None:
         super().__init__()
         self._output_signals = output_signals
