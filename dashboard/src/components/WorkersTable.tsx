@@ -51,7 +51,7 @@ export function WorkersTable({workers, events, onSelect, onStop}: WorkersTablePr
           <tr>
             <th>Status</th>
             <th>Event</th>
-            <th>Edition</th>
+            <th>Edition · profile</th>
             {tab === "active" ? (
               <>
                 <th>Stage</th>
@@ -82,7 +82,10 @@ export function WorkersTable({workers, events, onSelect, onStop}: WorkersTablePr
                 <StatusBadge status={worker.status} />
               </td>
               <td>{eventNameById.get(String(worker.event_id)) ?? worker.event_id}</td>
-              <td className="text-secondary">{worker.pipeline_edition}</td>
+              <td className="text-secondary">
+                {worker.pipeline_edition}
+                {worker.configuration_profile ? ` · ${worker.configuration_profile}` : ""}
+              </td>
               {tab === "active" ? (
                 <>
                   <td className="text-secondary">{worker.current_stage ?? "—"}</td>

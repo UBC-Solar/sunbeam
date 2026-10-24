@@ -437,3 +437,67 @@ tbody tr.clickable:hover {
   /* Ease between reports (twice a second) instead of jumping */
   transition: width 0.4s ease-out;
 }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 30;
+}
+
+.modal {
+  width: min(440px, 100%);
+  background: var(--page);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.4rem 1.5rem 1.25rem;
+}
+
+.modal-subtitle {
+  font-size: 0.82rem;
+  margin: -0.4rem 0 1.1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+.field-label {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.field-hint {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.field-checkbox {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+.field-checkbox input {
+  margin: 0.15rem 0 0;
+}
+
+.field-checkbox input:disabled + span {
+  opacity: 0.75;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}

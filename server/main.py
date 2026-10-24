@@ -1,4 +1,4 @@
-from server.routes import data, debug, events, workers, pipeline_editions
+from server.routes import configuration_profiles, data, debug, events, workers, pipeline_editions
 from server.services.watchdog_service import WatchdogService
 from server.preflight import check_docker, check_postgres
 from server.db import get_engine
@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from docker.errors import DockerException
 from fastapi import FastAPI, HTTPException
 from typing import Mapping
+import os
 import pathlib
 import logging
 from contextlib import asynccontextmanager
@@ -81,7 +82,8 @@ def on_shutdown():
     pass
 
 def on_startup() -> None:
-    Context.load(ServiceType.Server)
+    # e.g. `SUNBEAM_CONFIGURATION_PROFILE=production docker compose up`; unset or empty means context.toml's default
+    Context.load(ServiceType.Server, os.environ.get("SUNBEAM_CONFIGURATION_PROFILE") or None)
 
     logger.info("Resolved server configuration: %s", Context().describe())
 
@@ -143,6 +145,7 @@ def create_app(lifespan=lifespan) -> FastAPI:
     app.include_router(events.router)
     app.include_router(workers.router)
     app.include_router(pipeline_editions.router)
+    app.include_router(configuration_profiles.router)
     app.include_router(data.router)
     app.include_router(debug.router)
 

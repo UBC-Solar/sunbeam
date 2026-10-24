@@ -1,5 +1,5 @@
 // @ts-ignore
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
 export type WorkerStatus =
   | "requested"
@@ -32,6 +32,8 @@ export type WorkerRun = {
   current_stage: string | null;
   status_message: string | null;
   stop_requested: boolean;
+  configuration_profile: string | null;
+  reprocess: boolean;
   created_at: string;
   started_at: string | null;
   last_heartbeat_at: string | null;
@@ -43,7 +45,22 @@ export type Event = {
   id: number;
   name: string;
   description: string | null;
-  created_at: string;
+  starts_at: string;
+  ends_at: string | null;
+  pipeline_edition: string;
+  // A past event: its worker replays it, always wiping earlier samples first
+  is_replay: boolean;
+};
+
+export type ConfigurationProfiles = {
+  profiles: string[];
+  default: string;
+};
+
+export type LaunchOptions = {
+  pipelineEdition: string;
+  configurationProfile: string;
+  reprocess: boolean;
 };
 
 export type StageMetric = {
@@ -108,16 +125,19 @@ export async function getWorkers(): Promise<WorkerRun[]> {
   return asJson(await fetch(`${API_BASE_URL}/workers?active_only=false`));
 }
 
-export async function launchWorker(
-  eventId: number,
-  pipelineEdition: string,
-): Promise<WorkerRun> {
+export async function getConfigurationProfiles(): Promise<ConfigurationProfiles> {
+  return asJson(await fetch(`${API_BASE_URL}/configuration-profiles`));
+}
+
+export async function launchWorker(eventId: number, options: LaunchOptions): Promise<WorkerRun> {
   const response = await fetch(`${API_BASE_URL}/workers/launch`, {
     method: "POST",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify({
       event_id: eventId,
-      pipeline_edition: pipelineEdition,
+      pipeline_edition: options.pipelineEdition,
+      configuration_profile: options.configurationProfile,
+      reprocess: options.reprocess,
     }),
   });
 

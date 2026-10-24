@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 import pytest
 
@@ -8,12 +9,12 @@ pytest.importorskip("docker")
 from docker.errors import DockerException
 from fastapi.testclient import TestClient
 
-from db.sunbeamdb.models import WorkerRun, WorkerStatus
+from db.sunbeamdb.models import Event, WorkerRun, WorkerStatus
 from server.deps import get_db
 from server.routes.workers import get_worker_service
 from server.services.metrics_cache import MetricsCache
 from server.services.worker_service import WorkerService
-from tests.infrastructure.conftest import naive_utcnow
+from tests.infrastructure.conftest import TEST_PROFILES, naive_utcnow
 from tests.infrastructure.test_worker_service import FakeDockerClient
 
 
@@ -47,13 +48,25 @@ def client(session_factory, fake_docker):
         finally:
             db.close()
 
-    service = WorkerService(fake_docker, worker_network=None)
+    service = WorkerService(
+        fake_docker,
+        worker_network=None,
+        configuration_profiles=TEST_PROFILES,
+        default_configuration_profile=TEST_PROFILES[0],
+    )
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_worker_service] = lambda: service
 
     with TestClient(app) as test_client:
         yield test_client
+
+
+def end_event(session_factory, seeded_event):
+    """ Give the seeded event an end date in the past, so workers replay it. """
+    with session_factory() as session:
+        session.get(Event, seeded_event.event_id).ends_at = datetime(2026, 7, 1, 13, 0, 0)
+        session.commit()
 
 
 @pytest.fixture
@@ -106,6 +119,19 @@ class TestEventRoutes:
     def test_get_unknown_event_is_404(self, client):
         assert client.get("/events/999999").status_code == 404
 
+    def test_ongoing_event_is_not_a_replay(self, client, seeded_event):
+        assert client.get(f"/events/{seeded_event.event_id}").json()["is_replay"] is False
+
+    def test_past_event_is_a_replay(self, client, session_factory, seeded_event):
+        end_event(session_factory, seeded_event)
+
+        assert client.get(f"/events/{seeded_event.event_id}").json()["is_replay"] is True
+
+
+class TestConfigurationProfileRoutes:
+    def test_lists_profiles_and_default(self, client):
+        assert client.get("/configuration-profiles").json() == {"profiles": TEST_PROFILES, "default": "debug"}
+
 
 class TestPipelineEditionRoutes:
     def test_lists_registered_editions(self, client):
@@ -132,6 +158,31 @@ class TestLaunchRoute:
 
         assert response.status_code == 400
         assert "Unknown pipeline edition" in response.json()["detail"]
+
+    def test_launch_with_profile_and_reprocess(self, client, seeded_event, fake_docker):
+        response = client.post(
+            "/workers/launch",
+            json={
+                "event_id": seeded_event.event_id, "pipeline_edition": "v3_0",
+                "configuration_profile": "production", "reprocess": True,
+            },
+        )
+
+        worker = response.json()
+        assert worker["configuration_profile"] == "production"
+        assert worker["reprocess"] is True
+        environment = fake_docker.containers.run_calls[0]["environment"]
+        assert environment["SUNBEAM_CONFIGURATION_PROFILE"] == "production"
+        assert environment["SUNBEAM_REPROCESS"] == "true"
+
+    def test_launch_unknown_profile_is_400(self, client, seeded_event):
+        response = client.post(
+            "/workers/launch",
+            json={"event_id": seeded_event.event_id, "pipeline_edition": "v3_0", "configuration_profile": "nope"},
+        )
+
+        assert response.status_code == 400
+        assert "Unknown configuration profile" in response.json()["detail"]
 
     def test_launch_unknown_event_is_400(self, client):
         response = client.post(

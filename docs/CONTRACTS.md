@@ -147,6 +147,9 @@ configured to talk to right now."
   `configuration_type=None` return the already-configured singleton — so any
   module can call `Context.load(...)` defensively without re-parsing TOML or
   clobbering an explicit override made earlier by the entrypoint.
+  `Context().configuration_profile` names the profile that was loaded, and
+  `configuration_profiles(service)` lists the ones `context.toml` defines
+  for a service (what the server offers launched workers).
 - `EventManager`, `VehicleManager`, `SignalManager` (`config/events.py`,
   `vehicles.py`, `signals.py`) — read `events.toml` / `vehicles.toml` and
   `sync_*` them into the database (upsert by name; never delete). Also the
@@ -350,7 +353,7 @@ that also reports metrics to the server), and `Executor` (the top-level
 object that owns the schedulers, the writer, and the `WorkerControl`).
 
 `Executor` runs in one of two modes (see
-[`USAGE.md`](USAGE.md#realtime-vs-replay-runs)): **realtime**, with one
+[`USAGE.md`](USAGE.md#realtime-vs-replay-worker-runs)): **realtime**, with one
 ingress scheduler *per ingress pipeline* on its own thread beside the
 compute scheduler, until stopped; or **replay** (given a `replay_window`),
 which runs the ingress pipelines once up front, then the compute pipelines

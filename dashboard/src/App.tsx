@@ -1,13 +1,17 @@
 import {useEffect, useMemo, useState} from "react";
 import {
+  ConfigurationProfiles,
   Event,
+  LaunchOptions,
   WorkerRun,
+  getConfigurationProfiles,
   getEvents,
   getPipelineEditions,
   getWorkers,
   launchWorker,
   stopWorker,
 } from "./api";
+import {LaunchDialog} from "./components/LaunchDialog";
 import {WorkerDetail} from "./components/WorkerDetail";
 import {WorkersTable} from "./components/WorkersTable";
 
@@ -15,7 +19,8 @@ function App() {
   const [events, setEvents] = useState<Event[]>([]);
   const [workers, setWorkers] = useState<WorkerRun[]>([]);
   const [editions, setEditions] = useState<string[]>([]);
-  const [selectedEdition, setSelectedEdition] = useState<string>("");
+  const [profiles, setProfiles] = useState<ConfigurationProfiles | null>(null);
+  const [launchingEvent, setLaunchingEvent] = useState<Event | null>(null);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
 
   const [loaded, setLoaded] = useState(false);
@@ -23,22 +28,19 @@ function App() {
 
   async function refresh() {
     try {
-      const [eventsData, workersData, editionsData] = await Promise.all([
+      const [eventsData, workersData, editionsData, profilesData] = await Promise.all([
         getEvents(),
         getWorkers(),
         getPipelineEditions(),
+        getConfigurationProfiles(),
       ]);
 
       setEvents(eventsData);
       setWorkers(workersData);
       setEditions(editionsData);
+      setProfiles(profilesData);
       setError(null);
       setLoaded(true);
-
-      setSelectedEdition((current) => {
-        if (!current && editionsData.length > 0) return editionsData[0];
-        return current;
-      });
     } catch (err) {
       setError((err as Error).message);
     }
@@ -55,8 +57,9 @@ function App() {
     [workers, selectedWorkerId],
   );
 
-  async function onLaunch(eventId: number) {
-    await launchWorker(eventId, selectedEdition);
+  async function onLaunch(event: Event, options: LaunchOptions) {
+    await launchWorker(event.id, options);
+    setLaunchingEvent(null);
     await refresh();
   }
 
@@ -78,25 +81,13 @@ function App() {
           <div className="card">
             <div className="card-header">
               <h2>Events</h2>
-              <label className="text-secondary">
-                Pipeline edition:{" "}
-                <select
-                  value={selectedEdition}
-                  onChange={(e) => setSelectedEdition(e.target.value)}
-                >
-                  {editions.map((edition) => (
-                    <option key={edition} value={edition}>
-                      {edition}
-                    </option>
-                  ))}
-                </select>
-              </label>
             </div>
 
             <table>
               <thead>
                 <tr>
                   <th>Event</th>
+                  <th>Mode</th>
                   <th>Description</th>
                   <th />
                 </tr>
@@ -104,16 +95,21 @@ function App() {
               <tbody>
                 {events.length === 0 && (
                   <tr className="empty-row">
-                    <td colSpan={3}>No events found.</td>
+                    <td colSpan={4}>No events found.</td>
                   </tr>
                 )}
                 {events.map((event) => (
                   <tr key={event.id}>
                     <td>{event.name}</td>
+                    <td className="text-secondary">{event.is_replay ? "Replay" : "Realtime"}</td>
                     <td className="text-secondary">{event.description ?? "—"}</td>
                     <td>
-                      <button className="primary" onClick={() => onLaunch(event.id)}>
-                        Launch worker
+                      <button
+                        className="primary"
+                        onClick={() => setLaunchingEvent(event)}
+                        disabled={profiles === null}
+                      >
+                        Launch worker…
                       </button>
                     </td>
                   </tr>
@@ -129,6 +125,16 @@ function App() {
             onStop={onStop}
           />
         </>
+      )}
+
+      {launchingEvent && profiles && (
+        <LaunchDialog
+          event={launchingEvent}
+          editions={editions}
+          profiles={profiles}
+          onCancel={() => setLaunchingEvent(null)}
+          onLaunch={(options) => onLaunch(launchingEvent, options)}
+        />
       )}
 
       {selectedWorker && (

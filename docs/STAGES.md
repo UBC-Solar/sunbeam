@@ -96,7 +96,7 @@ knowing if you ever touch it:
    dark is not silently ignored.
 
 `Offline_Ingress` (`stage/v3_0/offline_ingress.py`) is its replay
-counterpart (see [`USAGE.md`](USAGE.md#realtime-vs-replay-runs)): a single
+counterpart (see [`USAGE.md`](USAGE.md#realtime-vs-replay-worker-runs)): a single
 instance, built by `OfflineIngressFactory`, that fetches *every* ingress
 signal over the whole event window in one go (via
 `OfflineIngressQuerier`) and outputs each as a `TimeSeries` rather than a

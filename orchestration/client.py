@@ -39,6 +39,8 @@ class OrchestratorClient:
         event_name: str,
         pipeline_edition: str,
         base_url: Optional[str] = None,
+        configuration_profile: Optional[str] = None,
+        reprocess: bool = False,
     ) -> "OrchestratorClient":
         """
         Register this process as an external worker: the server creates the
@@ -52,6 +54,8 @@ class OrchestratorClient:
                 "event_name": event_name,
                 "pipeline_edition": pipeline_edition,
                 "host": socket.gethostname(),
+                "configuration_profile": configuration_profile,
+                "reprocess": reprocess,
             },
             timeout=5,
         )

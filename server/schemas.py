@@ -7,6 +7,15 @@ from db.sunbeamdb.models import WorkerKind, WorkerStatus
 class LaunchWorkerRequest(BaseModel):
     event_id: int
     pipeline_edition: str
+    # Which context.toml profile the worker loads; None means the server's own profile
+    configuration_profile: str | None = None
+    # Wipe the event's earlier samples first. Always applied for replays (past events), whatever this says
+    reprocess: bool = False
+
+
+class ConfigurationProfilesRead(BaseModel):
+    profiles: list[str]
+    default: str
 
 
 class WorkerRunRead(BaseModel):
@@ -26,6 +35,8 @@ class WorkerRunRead(BaseModel):
     current_stage: str | None
     status_message: str | None
     stop_requested: bool
+    configuration_profile: str | None
+    reprocess: bool
 
     created_at: datetime
     started_at: datetime | None
@@ -76,6 +87,8 @@ class WorkerRegisterRequest(BaseModel):
     event_name: str
     pipeline_edition: str
     host: str | None = None
+    configuration_profile: str | None = None
+    reprocess: bool = False
 
 
 class WorkerCompleteRequest(BaseModel):

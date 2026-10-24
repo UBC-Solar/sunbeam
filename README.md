@@ -19,7 +19,7 @@ nothing else produces automatically get their data from generated
 **ingress** stages reading InfluxDB. An ongoing event runs **realtime**,
 polling InfluxDB in step with the wall clock; a past event is **replayed**,
 fetching its whole window up front and processing it as fast as possible
-(see [`docs/USAGE.md`](docs/USAGE.md#realtime-vs-replay-runs)). Output frames flow through a batching,
+(see [`docs/USAGE.md`](docs/USAGE.md#realtime-vs-replay-worker-runs)). Output frames flow through a batching,
 non-blocking writer into `aligned_sample` table in `sunbeamdb`, Sunbeam's PostgreSQL database. A worker can run
 standalone (`--serverless`), or report in to the **server** — a FastAPI
 app (`server/`) that can launch workers as Docker containers, supervise

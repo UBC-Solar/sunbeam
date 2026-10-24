@@ -60,12 +60,27 @@ class ServiceType(StrEnum):
     Worker = "worker"
 
 
+def configuration_profiles(service: "ServiceType", config_dict: dict | None = None) -> list[str]:
+    """
+    The configuration profiles (``debug``, ``production``, ...) that
+    ``context.toml`` fully defines for ``service``: those present in every one
+    of its blocks, in the order the first block lists them.
+    """
+    if config_dict is None:
+        with open(_CONTEXT_PATH, "rb") as f:
+            config_dict = tomllib.load(f)
+
+    blocks = list(config_dict[service.value].values())
+    return [profile for profile in blocks[0] if all(profile in block for block in blocks)]
+
+
 class Context:
     _instance: "Context | None" = None
 
     _sunbeam_db: "SunbeamDB | None"
     _telemetry_db: "TelemetryDB | None"
     _sunbeam_server: "SunbeamServer | None"
+    _configuration_profile: "str | None"
 
     def __new__(cls) -> "Context":
         if cls._instance is None:
@@ -73,6 +88,7 @@ class Context:
             cls._instance._sunbeam_db = None
             cls._instance._telemetry_db = None
             cls._instance._sunbeam_server = None
+            cls._instance._configuration_profile = None
         return cls._instance
 
     @classmethod
@@ -87,7 +103,15 @@ class Context:
         if configuration_type is None:
             configuration_type = config_dict["main"]["default_config"]
 
+        profiles = configuration_profiles(service, config_dict)
+        if configuration_type not in profiles:
+            raise ValueError(
+                f"Unknown configuration profile {configuration_type!r} for {service.value}. "
+                f"context.toml defines: {profiles}"
+            )
+
         service_config_dict = config_dict[service.value]
+        ctx._configuration_profile = configuration_type
 
         ctx._sunbeam_db = SunbeamDB(
             **service_config_dict["sunbeamdb"][configuration_type]
@@ -128,6 +152,13 @@ class Context:
         return cls.from_config(config_dict, service, configuration_type)
 
     @property
+    def configuration_profile(self) -> str:
+        """ The name of the profile this process loaded, e.g. ``debug``. """
+        if self._configuration_profile is None:
+            raise RuntimeError("Context has not been configured.")
+        return self._configuration_profile
+
+    @property
     def sunbeam_db(self) -> SunbeamDB:
         if self._sunbeam_db is None:
             raise RuntimeError("Sunbeam DB has not been configured.")
@@ -151,6 +182,7 @@ class Context:
         Passwords and API tokens are never included.
         """
         return {
+            "configuration_profile": self.configuration_profile,
             "sunbeam_db": _redacted_dict(self.sunbeam_db, {"database_password"}),
             "telemetry_db": _redacted_dict(self.telemetry_db, {"token"}),
             "sunbeam_server": dataclasses.asdict(self.sunbeam_server),

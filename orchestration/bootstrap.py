@@ -19,7 +19,7 @@ from orchestration.control import (
 logger = logging.getLogger("sunbeam.worker")
 
 
-def build_control(serverless: bool, event_name: str) -> WorkerControl:
+def build_control(serverless: bool, event_name: str, *, reprocess: bool = False) -> WorkerControl:
     if serverless:
         return ServerlessWorkerControl()
 
@@ -36,6 +36,9 @@ def build_control(serverless: bool, event_name: str) -> WorkerControl:
         client = OrchestratorClient.register(
             event_name=event_name,
             pipeline_edition=pipeline_edition,
+            # Shown on the dashboard for this worker
+            configuration_profile=Context().configuration_profile,
+            reprocess=reprocess,
         )
     except requests.exceptions.ConnectionError as exc:
         raise SystemExit(

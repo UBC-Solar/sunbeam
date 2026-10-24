@@ -83,7 +83,10 @@ def parse_args():
     parser.add_argument(
         "--configuration",
         default=os.environ.get("SUNBEAM_CONFIGURATION_PROFILE", None),
-        help="The configuration profile to use.",
+        help=(
+            "The context.toml configuration profile to use (e.g. debug or production). "
+            "Defaults to SUNBEAM_CONFIGURATION_PROFILE, then context.toml's [main].default_config."
+        ),
     )
 
     return parser.parse_args()
@@ -130,7 +133,7 @@ if __name__ == "__main__":
     if event_name is None:
         raise RuntimeError("Event name not set.")
 
-    control = build_control(is_serverless, args.event_name)
+    control = build_control(is_serverless, args.event_name, reprocess=args.reprocess)
 
     sunbeam = Sunbeam()
     sunbeam.run(

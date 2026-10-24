@@ -105,14 +105,20 @@ This starts three services (`docker-compose.yaml`):
   `docker compose up` takes noticeably longer than subsequent ones — it's
   building N worker images, not just the server).
 - **`dashboard`** — a Vite dev server (`dashboard/`), exposed on
-  `localhost:5173`, talking to the server at `VITE_API_BASE_URL`
-  (`http://localhost:8000` by default).
+  `localhost:5173`. The dashboard calls the API at a relative `/api` path and
+  the dev server proxies it to the `server` container
+  (`SUNBEAM_API_PROXY_TARGET`, `http://localhost:8000` when running
+  `npm run dev` outside compose), so it works unchanged when opened from
+  another machine, e.g. `http://<ec2-public-ip>:5173`.
 
 Once it's up:
 
-1. Open `http://localhost:5173` — the dashboard lists events and lets you
-   launch a worker for one (`POST /workers/launch`; see
-   [`API.md`](API.md#post-workerslaunch)).
+1. Open `http://localhost:5173` — the dashboard lists events (marked
+   *Realtime* or *Replay*) and lets you launch a worker for one. **Launch
+   worker…** opens a settings dialog: the pipeline edition (defaulting to
+   the event's own), the configuration profile the worker loads (defaulting
+   to the server's), and whether to reprocess (always on, and locked, for
+   replays). See [`API.md`](API.md#post-workerslaunch).
 2. The server launches a `sunbeam-worker:<edition>` container for that
    event, mounted onto the same `sunbeam-net` Docker network as the server
    and database (`config.toml`'s `[worker]` block points `sunbeamdb` at
@@ -124,7 +130,7 @@ Once it's up:
    `server/services/worker_service.py`'s `launch_worker`).
 4. The dashboard polls `/workers` for status, `/workers/{id}/metrics` for
    live timing (and a replay's progress — see
-   [Realtime vs replay runs](#realtime-vs-replay-runs)),
+   [Realtime vs replay runs](#realtime-vs-replay-worker-runs)),
    `/workers/{id}/logs` (or the `/logs/stream` SSE endpoint) for output, and
    can request a stop via `POST /workers/{id}/stop`.
 5. A `WatchdogService` runs inside the server process, sweeping every few
@@ -284,6 +290,30 @@ defaulting to `context.toml`'s `[main].default_config`. This is what lets
 the same `context.toml` describe both a `docker compose` deployment (where
 `worker.sunbeam-server` points at the Docker-network hostname `server`) and
 a bare CLI run against `localhost`, without code changes.
+
+**Choosing a profile:**
+
+- **CLI worker:** `--configuration production` (or
+  `SUNBEAM_CONFIGURATION_PROFILE=production`).
+- **Dashboard-launched worker:** pick it in the launch dialog; the server
+  passes it to the container as `SUNBEAM_CONFIGURATION_PROFILE`.
+- **Server:** `docker-compose.yaml` passes `SUNBEAM_CONFIGURATION_PROFILE`
+  through from wherever you run `docker compose`, so either
+  `SUNBEAM_CONFIGURATION_PROFILE=production docker compose up`, or put
+  `SUNBEAM_CONFIGURATION_PROFILE=production` in a `.env` file next to
+  `docker-compose.yaml` (Compose reads it automatically; `.env` is
+  gitignored). The server's profile is also the default the launch dialog
+  offers workers. Changing it takes a restart of the server container
+  (`docker compose up -d server` picks up a new value).
+
+Unset (or empty) everywhere means `[main].default_config`, and an unknown
+name fails at startup with the list of profiles that exist.
+
+**Adding a profile** (say, `staging`) is just `context.toml`: add a
+`staging = {...}` entry to every block of the service(s) that should offer
+it. A profile counts as available for a service only once *all* of that
+service's blocks define it; the dashboard picks new worker profiles up
+from `GET /configuration-profiles` without code changes.
 
 Each `telemetrydb` block also has `debug` and `debug_time`. With
 `debug = true`, **realtime** runs read InfluxDB through a fake clock that

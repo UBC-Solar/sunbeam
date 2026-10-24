@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 import pytest
 
@@ -6,10 +7,10 @@ pytest.importorskip("docker")
 
 from docker.errors import DockerException, NotFound
 
-from db.sunbeamdb.models import WorkerKind, WorkerRun, WorkerStatus
+from db.sunbeamdb.models import Event, WorkerKind, WorkerRun, WorkerStatus
 from server.services.metrics_cache import MetricsCache
 from server.services.worker_service import WorkerService
-from tests.infrastructure.conftest import naive_utcnow
+from tests.infrastructure.conftest import TEST_PROFILES, naive_utcnow
 
 
 class FakeContainer:
@@ -75,7 +76,12 @@ def fake_docker():
 
 @pytest.fixture
 def service(fake_docker):
-    return WorkerService(fake_docker, worker_network=None)
+    return WorkerService(
+        fake_docker,
+        worker_network=None,
+        configuration_profiles=TEST_PROFILES,
+        default_configuration_profile=TEST_PROFILES[0],
+    )
 
 
 @pytest.fixture
@@ -115,6 +121,43 @@ class TestLaunchWorker:
         assert run_kwargs["environment"]["SUNBEAM_EVENT_NAME"] == seeded_event.event_name
         assert run_kwargs["environment"]["SUNBEAM_WORKER_RUN_ID"] == str(worker.id)
         assert run_kwargs["labels"]["sunbeam.kind"] == "worker"
+
+    def test_launch_defaults_to_the_default_profile_without_reprocessing(self, service, fake_docker, db, seeded_event):
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0")
+
+        assert worker.configuration_profile == "debug"
+        assert worker.reprocess is False
+        environment = fake_docker.containers.run_calls[0]["environment"]
+        assert environment["SUNBEAM_CONFIGURATION_PROFILE"] == "debug"
+        assert environment["SUNBEAM_REPROCESS"] == "false"
+
+    def test_launch_passes_the_chosen_profile_and_reprocess(self, service, fake_docker, db, seeded_event):
+        worker = service.launch_worker(
+            db, event_id=seeded_event.event_id, pipeline_edition="v3_0",
+            configuration_profile="production", reprocess=True,
+        )
+
+        assert (worker.configuration_profile, worker.reprocess) == ("production", True)
+        environment = fake_docker.containers.run_calls[0]["environment"]
+        assert environment["SUNBEAM_CONFIGURATION_PROFILE"] == "production"
+        assert environment["SUNBEAM_REPROCESS"] == "true"
+
+    def test_launch_unknown_profile_rejected(self, service, fake_docker, db, seeded_event):
+        with pytest.raises(ValueError, match="Unknown configuration profile"):
+            service.launch_worker(
+                db, event_id=seeded_event.event_id, pipeline_edition="v3_0", configuration_profile="nope",
+            )
+
+        assert fake_docker.containers.run_calls == []
+
+    def test_replay_always_reprocesses(self, service, fake_docker, db, seeded_event):
+        db.get(Event, seeded_event.event_id).ends_at = datetime(2026, 7, 1, 13, 0, 0)
+        db.commit()
+
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", reprocess=False)
+
+        assert worker.reprocess is True
+        assert fake_docker.containers.run_calls[0]["environment"]["SUNBEAM_REPROCESS"] == "true"
 
     def test_launch_docker_failure_marks_worker_failed(
         self, service, fake_docker, db, seeded_event
@@ -156,6 +199,14 @@ class TestRegisterWorker:
         assert worker.container_id is None
         assert worker.host == "joshuas-laptop"
         assert worker.started_at is not None
+
+    def test_register_records_the_workers_profile_and_reprocess(self, service, db, seeded_event):
+        worker = service.register_worker(
+            db, event_name=seeded_event.event_name, pipeline_edition="v3_0", host="laptop",
+            configuration_profile="production", reprocess=True,
+        )
+
+        assert (worker.configuration_profile, worker.reprocess) == ("production", True)
 
     def test_registered_worker_can_heartbeat_and_complete(self, service, db, seeded_event):
         worker = service.register_worker(

@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Optional
 from sqlalchemy import (
     BigInteger,
@@ -58,6 +58,15 @@ class Event(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     vehicle: Mapped["Vehicle"] = relationship(back_populates="events")
     signals: Mapped[list["Signal"]] = relationship(back_populates="event")
+
+    def is_past(self) -> bool:
+        """ True if the event has ended, so a worker replays it rather than running it live. """
+        if self.ends_at is None:
+            return False
+
+        # SQLite (the default test suite) drops tzinfo; stored values are UTC
+        ends_at = self.ends_at if self.ends_at.tzinfo else self.ends_at.replace(tzinfo=UTC)
+        return ends_at < datetime.now(UTC)
 
 
 class Signal(Base):
@@ -192,6 +201,9 @@ class WorkerRun(Base):
     current_stage: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     status_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     stop_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # What the worker was started with. Null profile for runs from before these were recorded.
+    configuration_profile: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    reprocess: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     stop_requested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

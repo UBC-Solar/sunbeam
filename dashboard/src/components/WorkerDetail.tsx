@@ -142,6 +142,12 @@ export function WorkerDetail({worker, events, onClose, onStop}: WorkerDetailProp
           <dt>Pipeline edition</dt>
           <dd>{worker.pipeline_edition}</dd>
 
+          <dt>Profile</dt>
+          <dd>{worker.configuration_profile ?? "—"}</dd>
+
+          <dt>Reprocess</dt>
+          <dd>{worker.reprocess ? "Yes" : "No"}</dd>
+
           <dt>Host</dt>
           <dd>{worker.host ?? "—"}</dd>
 

@@ -3,6 +3,7 @@ import socket
 import uuid
 from collections.abc import Iterator
 from datetime import datetime, timezone
+from collections.abc import Sequence
 from typing import Any, Optional
 
 import docker
@@ -10,7 +11,7 @@ from docker.errors import DockerException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from config.context import Context
+from config.context import Context, ServiceType, configuration_profiles
 from db.sunbeamdb.models import TERMINAL_WORKER_STATUSES, Event, WorkerKind, WorkerRun, WorkerStatus
 from server.services.metrics_cache import MetricsCache
 from stage.stage_library import StageLibrary
@@ -25,6 +26,10 @@ def utcnow() -> datetime:
 _UNSET: Any = object()
 
 
+def _configured_worker_profiles() -> list[str]:
+    return configuration_profiles(ServiceType.Worker)
+
+
 class WorkerService:
     def __init__(
         self,
@@ -32,6 +37,8 @@ class WorkerService:
         *,
         library: StageLibrary | None = None,
         worker_network: str | None = _UNSET,
+        configuration_profiles: Sequence[str] | None = None,
+        default_configuration_profile: str | None = None,
     ) -> None:
         self._docker = docker_client if docker_client is not None else docker.from_env()
         self._library = library or StageLibrary()
@@ -42,6 +49,35 @@ class WorkerService:
             if worker_network is _UNSET
             else worker_network
         )
+        self._configuration_profiles = list(configuration_profiles) if configuration_profiles is not None else None
+        self._default_configuration_profile = default_configuration_profile
+
+    @property
+    def configuration_profiles(self) -> list[str]:
+        """ The profiles a launched worker can use: those context.toml defines for workers. """
+        if self._configuration_profiles is None:
+            self._configuration_profiles = _configured_worker_profiles()
+        return self._configuration_profiles
+
+    @property
+    def default_configuration_profile(self) -> str:
+        """ The server's own profile, if workers have it too; otherwise the first worker profile. """
+        if self._default_configuration_profile is None:
+            server_profile = Context().configuration_profile
+            profiles = self.configuration_profiles
+            self._default_configuration_profile = server_profile if server_profile in profiles else profiles[0]
+        return self._default_configuration_profile
+
+    def _resolve_configuration_profile(self, configuration_profile: str | None) -> str:
+        if configuration_profile is None:
+            return self.default_configuration_profile
+
+        if configuration_profile not in self.configuration_profiles:
+            raise ValueError(
+                f"Unknown configuration profile {configuration_profile!r}. "
+                f"Known profiles: {self.configuration_profiles}"
+            )
+        return configuration_profile
 
     def _validate_pipeline_edition(self, pipeline_edition: str) -> None:
         editions = list(self._library.pipeline_editions)
@@ -60,6 +96,8 @@ class WorkerService:
         *,
         event_id: int,
         pipeline_edition: str,
+        configuration_profile: str | None = None,
+        reprocess: bool = False,
     ) -> WorkerRun:
         event = db.get(Event, event_id)
         if event is None:
@@ -67,6 +105,9 @@ class WorkerService:
         event_name = event.name
 
         self._validate_pipeline_edition(pipeline_edition)
+        configuration_profile = self._resolve_configuration_profile(configuration_profile)
+        # The worker wipes a replayed event regardless; record what will actually happen
+        reprocess = reprocess or event.is_past()
 
         image_tag = self._image_tag_for(pipeline_edition)
 
@@ -75,6 +116,8 @@ class WorkerService:
             pipeline_edition=pipeline_edition,
             image_tag=image_tag,
             status=WorkerStatus.REQUESTED,
+            configuration_profile=configuration_profile,
+            reprocess=reprocess,
         )
 
         db.add(worker)
@@ -93,7 +136,8 @@ class WorkerService:
             "SUNBEAM_WORKER_RUN_ID": str(worker.id),
             "SUNBEAM_EVENT_NAME": event_name,
             "SUNBEAM_PIPELINE_EDITION": pipeline_edition,
-            "SUNBEAM_CONFIGURATION_PROFILE": "debug",
+            "SUNBEAM_CONFIGURATION_PROFILE": configuration_profile,
+            "SUNBEAM_REPROCESS": "true" if reprocess else "false",
         }
 
         try:
@@ -146,6 +190,8 @@ class WorkerService:
         event_name: str,
         pipeline_edition: str,
         host: str | None,
+        configuration_profile: str | None = None,
+        reprocess: bool = False,
     ) -> WorkerRun:
         """
         Register an externally launched worker (e.g. sunbeam.py run by hand).
@@ -166,6 +212,9 @@ class WorkerService:
             status=WorkerStatus.STARTING,
             host=host,
             started_at=utcnow(),
+            # Reported by the worker, which loaded its own (client) profile; recorded as-is for display
+            configuration_profile=configuration_profile,
+            reprocess=reprocess or event.is_past(),
         )
 
         db.add(worker)

@@ -72,6 +72,8 @@ def launch_worker(
             db,
             event_id=payload.event_id,
             pipeline_edition=payload.pipeline_edition,
+            configuration_profile=payload.configuration_profile,
+            reprocess=payload.reprocess,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -89,6 +91,8 @@ def register_worker(
             event_name=payload.event_name,
             pipeline_edition=payload.pipeline_edition,
             host=payload.host,
+            configuration_profile=payload.configuration_profile,
+            reprocess=payload.reprocess,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

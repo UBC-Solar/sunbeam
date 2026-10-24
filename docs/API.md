@@ -57,10 +57,14 @@ List all events, newest-starting first.
     "id": 2, "name": "realtime", "vehicle_id": 1,
     "starts_at": "2026-05-30T01:00:00Z", "ends_at": null,
     "pipeline_edition": "v3_0", "status": "ongoing",
-    "description": "Ongoing"
+    "description": "Ongoing", "is_replay": false
   }
 ]
 ```
+
+`is_replay` is `true` for an event whose `ends_at` has passed: a worker
+launched for it replays the event rather than running it live, and always
+reprocesses it (see [`USAGE.md`](USAGE.md#realtime-vs-replay-worker-runs)).
 
 `status` is one of `unprocessed`, `ongoing`, `processed` (`EventStatus`) —
 set to `ongoing` when a worker opens an `EventWriter` for the event, and
@@ -94,6 +98,7 @@ Every worker endpoint below returns (or lists) this shape:
   "image_tag": "sunbeam-worker:v3_0", "status": "running", "kind": "container",
   "host": "a1b2c3d4e5f6", "container_id": "a1b2c3...", "container_name": "sunbeam-worker-b3f1a2c4",
   "current_stage": "Array", "status_message": null, "stop_requested": false,
+  "configuration_profile": "debug", "reprocess": false,
   "created_at": "2026-07-20T12:00:00Z", "started_at": "2026-07-20T12:00:01Z",
   "last_heartbeat_at": "2026-07-20T12:05:32Z", "stopped_at": null,
   "failure_reason": null
@@ -105,7 +110,9 @@ Every worker endpoint below returns (or lists) this shape:
 first five are non-terminal, the last four are terminal
 (`TERMINAL_WORKER_STATUSES`). `image_tag`/`container_id`/`container_name`
 are `null` for `kind: "external"` workers (nothing to launch or inspect —
-see `USAGE.md`).
+see `USAGE.md`). `configuration_profile` and `reprocess` are what the worker
+was started with; `configuration_profile` is `null` for runs recorded before
+it was tracked.
 
 ### `GET /workers?active_only=<bool>`
 
@@ -117,15 +124,22 @@ non-terminal statuses only.
 Server-launches a Docker container. This is what the dashboard calls.
 
 ```json
-{"event_id": 2, "pipeline_edition": "v3_0"}
+{"event_id": 2, "pipeline_edition": "v3_0", "configuration_profile": "production", "reprocess": false}
 ```
+
+`configuration_profile` (optional) is the `context.toml` profile the worker
+loads — one of [`GET /configuration-profiles`](#get-configuration-profiles);
+omitted or `null` means the server's default. `reprocess` (optional,
+default `false`) wipes the event's earlier samples first; it is forced to
+`true` for a replay (`is_replay` events), which always rewrites the event.
 
 Creates a `WorkerRun` (`kind: "container"`, `status: "requested"` then
 immediately `"starting"`), runs
 `sunbeam-worker:{pipeline_edition}`, and passes `SUNBEAM_WORKER_RUN_ID` /
-`SUNBEAM_EVENT_NAME` / `SUNBEAM_PIPELINE_EDITION` as container environment.
-Returns the `WorkerRunRead`. `400` if `pipeline_edition` isn't a known
-edition or `event_id` doesn't exist. If the Docker launch itself fails
+`SUNBEAM_EVENT_NAME` / `SUNBEAM_PIPELINE_EDITION` /
+`SUNBEAM_CONFIGURATION_PROFILE` / `SUNBEAM_REPROCESS` as container
+environment. Returns the `WorkerRunRead`. `400` if `pipeline_edition` or
+`configuration_profile` isn't known, or `event_id` doesn't exist. If the Docker launch itself fails
 (daemon unreachable, image missing, ...), the row is still created but
 immediately marked `status: "failed"` with `failure_reason` set — the
 response is `200`, not an error; check `status` in the body.
@@ -138,8 +152,15 @@ the run ID; this is the only way a `kind: "external"` `WorkerRun` gets
 created.
 
 ```json
-{"event_name": "realtime", "pipeline_edition": "v3_0", "host": "joshuas-laptop"}
+{
+  "event_name": "realtime", "pipeline_edition": "v3_0", "host": "joshuas-laptop",
+  "configuration_profile": "debug", "reprocess": false
+}
 ```
+
+`configuration_profile` and `reprocess` (both optional) are what the worker
+is running with, recorded for display; the CLI sends the profile it loaded
+and its `--reprocess` flag.
 
 Returns a `WorkerRunRead` with `status: "starting"`, `kind: "external"`,
 `image_tag: null`. `400` for an unknown event name or pipeline edition.
@@ -276,6 +297,19 @@ stream below). Same `404` conditions as above.
 
 Every top-level table key in `stage/stage_registry.toml` — see
 [`STAGES.md`](STAGES.md#pipeline-editions-and-stage_registrytoml).
+
+## Configuration profiles
+
+### `GET /configuration-profiles`
+
+```json
+{"profiles": ["debug", "production"], "default": "debug"}
+```
+
+The `context.toml` profiles a launched worker can use (those every
+`[worker.*]` block defines), and the one it gets when the launch request
+doesn't name one: the server's own profile (see
+[`USAGE.md`](USAGE.md#configuration-profiles-debug-vs-production)).
 
 ---
 

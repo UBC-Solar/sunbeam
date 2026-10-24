@@ -14,6 +14,10 @@ from db.sunbeamdb.models import Base, Event, EventStatus, Signal, Vehicle
 from orchestration.control import WorkerControl
 
 
+# The configuration profiles test WorkerServices offer launched workers
+TEST_PROFILES = ["debug", "production"]
+
+
 TEST_CONFIG = {
     "main": {"default_config": "test"},
     "worker": {
@@ -302,7 +306,12 @@ def api_client(session_factory):
         finally:
             db.close()
 
-    service = WorkerService(FakeDockerClient(), worker_network=None)
+    service = WorkerService(
+        FakeDockerClient(),
+        worker_network=None,
+        configuration_profiles=TEST_PROFILES,
+        default_configuration_profile=TEST_PROFILES[0],
+    )
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_db_session_factory] = lambda: session_factory
