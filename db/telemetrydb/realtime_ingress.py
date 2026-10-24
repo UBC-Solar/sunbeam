@@ -135,7 +135,7 @@ class RealtimeIngressQuerier:
                         "value": record.get_value(),
                     }
 
-        except Exception:
+        except Exception as e:
             return _out
 
         return _out

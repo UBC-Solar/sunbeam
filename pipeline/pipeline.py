@@ -65,12 +65,12 @@ class Pipeline:
         waited_s = now - self._not_ready_since
         if waited_s > self._not_ready_grace_s:
             missing_signal = exc.args[0] if exc.args else "<unknown>"
-            raise RuntimeError(
-                f"Pipeline {self.name!r}: stage {stage.stage_name!r} is still "
-                f"missing input {missing_signal!r} after {waited_s:.2f}s "
-                f"(grace is {self._not_ready_grace_s:.2f}s). A producer "
-                f"upstream is not delivering."
-            ) from exc
+            # raise RuntimeError(
+            #     f"Pipeline {self.name!r}: stage {stage.stage_name!r} is still "
+            #     f"missing input {missing_signal!r} after {waited_s:.2f}s "
+            #     f"(grace is {self._not_ready_grace_s:.2f}s). A producer "
+            #     f"upstream is not delivering."
+            # ) from exc
 
         logger.debug("%s not ready to run yet. Yielding...", stage.stage_name)
 

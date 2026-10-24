@@ -1495,8 +1495,8 @@ wheels = [
 
 [[package]]
 name = "ubc-solar-data-tools"
-version = "2.0.3.dev1+g305768280"
-source = { git = "https://github.com/UBC-Solar/data_tools.git#3057682803f0ae60ccc91c11ad662d7deef3bd48" }
+version = "2.0.3.dev2+g786a2e1a5"
+source = { git = "https://github.com/UBC-Solar/data_tools.git#786a2e1a5bc1eabc964429458fbf289b5c060c92" }
 dependencies = [
     { name = "dill" },
     { name = "influxdb-client" },

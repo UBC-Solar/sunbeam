@@ -82,7 +82,7 @@ def parse_args():
 
     parser.add_argument(
         "--configuration",
-        default=os.environ.get("SUNBEAM_CONFIGURATION_PROFILE", None),
+        default=os.environ.get("SUNBEAM_CONFIGURATION_PROFILE", "production"),
         help=(
             "The context.toml configuration profile to use (e.g. debug or production). "
             "Defaults to SUNBEAM_CONFIGURATION_PROFILE, then context.toml's [main].default_config."
