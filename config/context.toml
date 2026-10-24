@@ -13,7 +13,7 @@ production = {database_host_ip = "localhost", database_port = 5432, database_nam
 
 [client.telemetrydb]
 debug = {database_url = "http://influxdb.telemetry.ubcsolar.com", bucket = "CAN_log", organization = "8a0b66d77a331e96", token = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==", debug = true, debug_time = "2024-07-16T14:10:00Z" }
-production = {database_url = "localhost", bucket = "CAN_prod", organization = "8a0b66d77a331e96", token = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==", debug = false, debug_time = "2024-07-16T14:10:00Z" }
+production = {database_url = "http://100.103.60.5:8086", bucket = "CAN_prod", organization = "548bd7667a26d3f1", token = "LW5fpLKS3fwOp1leVk7XKP7xH1eHyKn2q7YH9Ud_6wQeUYZhBZWuMWOe_TS-FX7wIhEJ4zykrFmlfrkjqw1LCg==", debug = false, debug_time = "2024-07-16T14:10:00Z" }
 
 # Worker
 
@@ -27,7 +27,7 @@ production = {database_host_ip = "db", database_port = 5432, database_name = "te
 
 [worker.telemetrydb]
 debug = {database_url = "http://influxdb.telemetry.ubcsolar.com", bucket = "CAN_log", organization = "8a0b66d77a331e96", token = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==", debug = true, debug_time = "2024-07-16T14:10:00Z" }
-production = {database_url = "localhost", bucket = "CAN_prod", organization = "8a0b66d77a331e96", token = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==", debug = false, debug_time = "2024-07-16T14:10:00Z" }
+production = {database_url = "http://100.103.60.5:8086", bucket = "CAN_prod", organization = "548bd7667a26d3f1", token = "LW5fpLKS3fwOp1leVk7XKP7xH1eHyKn2q7YH9Ud_6wQeUYZhBZWuMWOe_TS-FX7wIhEJ4zykrFmlfrkjqw1LCg==", debug = false, debug_time = "2024-07-16T14:10:00Z" }
 
 # Server
 
@@ -37,7 +37,7 @@ production = { server_url = "*", server_port = 8000, worker_network = "sunbeam-n
 
 [server.telemetrydb]
 debug = {database_url = "http://influxdb.telemetry.ubcsolar.com", bucket = "CAN_log", organization = "8a0b66d77a331e96", token = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==", debug = true, debug_time = "2024-07-16T14:10:00Z"}
-production = {database_url = "localhost", bucket = "CAN_prod", organization = "8a0b66d77a331e96", token = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==", debug = false, debug_time = "2024-07-16T14:10:00Z"}
+production = {database_url = "http://100.103.60.5:8086", bucket = "CAN_prod", organization = "548bd7667a26d3f1", token = "LW5fpLKS3fwOp1leVk7XKP7xH1eHyKn2q7YH9Ud_6wQeUYZhBZWuMWOe_TS-FX7wIhEJ4zykrFmlfrkjqw1LCg==", debug = false, debug_time = "2024-07-16T14:10:00Z" }
 
 [server.sunbeamdb]
 debug = {database_host_ip = "db", database_port = 5432, database_name = "telemetry", database_username = "telemetry", database_password = "telemetry"}

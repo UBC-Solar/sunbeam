@@ -900,8 +900,8 @@ name = "psycopg"
 version = "3.3.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "(python_full_version < '3.13' and extra == 'extra-7-sunbeam-executor') or (python_full_version < '3.13' and extra == 'extra-7-sunbeam-server') or (python_full_version < '3.13' and extra == 'extra-7-sunbeam-v3-0') or (extra == 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-server') or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
-    { name = "tzdata", marker = "(sys_platform == 'win32' and extra == 'extra-7-sunbeam-executor') or (sys_platform == 'win32' and extra == 'extra-7-sunbeam-server') or (sys_platform == 'win32' and extra == 'extra-7-sunbeam-v3-0') or (sys_platform != 'win32' and extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1') or (extra == 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-server') or (extra == 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-server') or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
+    { name = "tzdata", marker = "sys_platform == 'win32' or (extra == 'extra-7-sunbeam-executor' and extra == 'extra-7-sunbeam-server') or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/db/2f/cb91e5502ec9de1de6f1b76cfbf69531932725361168bb06963620c77e2e/psycopg-3.3.4.tar.gz", hash = "sha256:e21207764952cff81b6b8bdacad9a3939f2793367fdac2987b3aac36a651b5bc", size = 165799, upload-time = "2026-05-01T23:31:55.179Z" }
 wheels = [
@@ -1373,6 +1373,11 @@ v3-0 = [
     { name = "influxdb-client" },
     { name = "psycopg" },
 ]
+v4-0 = [
+    { name = "influxdb-client" },
+    { name = "psycopg" },
+    { name = "ubc-solar-data-tools" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -1397,10 +1402,12 @@ requires-dist = [
     { name = "docker", marker = "extra == 'server'", specifier = ">=7.1.0" },
     { name = "fastapi", marker = "extra == 'server'", specifier = ">=0.138.0" },
     { name = "influxdb-client", marker = "extra == 'v3-0'", specifier = ">=1.50.0" },
+    { name = "influxdb-client", marker = "extra == 'v4-0'", specifier = ">=1.50.0" },
     { name = "networkx", marker = "extra == 'executor'", specifier = ">=3.6.1" },
     { name = "psycopg", marker = "extra == 'executor'", specifier = ">=3.3.4" },
     { name = "psycopg", marker = "extra == 'server'", specifier = ">=3.3.4" },
     { name = "psycopg", marker = "extra == 'v3-0'", specifier = ">=3.3.4" },
+    { name = "psycopg", marker = "extra == 'v4-0'", specifier = ">=3.3.4" },
     { name = "psycopg-binary", marker = "extra == 'executor'", specifier = ">=3.3.4" },
     { name = "psycopg-binary", marker = "extra == 'server'", specifier = ">=3.3.4" },
     { name = "pydantic", marker = "extra == 'server'", specifier = ">=2.13.4" },
@@ -1408,11 +1415,12 @@ requires-dist = [
     { name = "rich", marker = "extra == 'executor'", specifier = ">=15.0.0" },
     { name = "sqlalchemy", marker = "extra == 'executor'", specifier = ">=2.0.49" },
     { name = "sqlalchemy", marker = "extra == 'server'", specifier = ">=2.0.49" },
-    { name = "ubc-solar-data-tools", marker = "extra == 'executor'", specifier = ">=2.0.2" },
-    { name = "ubc-solar-data-tools", marker = "extra == 'server'", specifier = ">=2.0.2" },
+    { name = "ubc-solar-data-tools", marker = "extra == 'executor'", git = "https://github.com/UBC-Solar/data_tools.git" },
+    { name = "ubc-solar-data-tools", marker = "extra == 'server'", git = "https://github.com/UBC-Solar/data_tools.git" },
+    { name = "ubc-solar-data-tools", marker = "extra == 'v4-0'", git = "https://github.com/UBC-Solar/data_tools.git" },
     { name = "uvicorn", marker = "extra == 'server'", specifier = ">=0.49.0" },
 ]
-provides-extras = ["server", "executor", "v3-0", "v3-1"]
+provides-extras = ["server", "executor", "v3-0", "v3-1", "v4-0"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1487,8 +1495,8 @@ wheels = [
 
 [[package]]
 name = "ubc-solar-data-tools"
-version = "2.0.2"
-source = { registry = "https://pypi.org/simple" }
+version = "2.0.3.dev1+g305768280"
+source = { git = "https://github.com/UBC-Solar/data_tools.git#3057682803f0ae60ccc91c11ad662d7deef3bd48" }
 dependencies = [
     { name = "dill" },
     { name = "influxdb-client" },
@@ -1502,10 +1510,9 @@ dependencies = [
     { name = "pytz" },
     { name = "requests" },
     { name = "scipy" },
-    { name = "solcast", marker = "extra == 'extra-7-sunbeam-executor' or extra == 'extra-7-sunbeam-server' or (extra == 'extra-7-sunbeam-v3-0' and extra == 'extra-7-sunbeam-v3-1')" },
+    { name = "solcast" },
     { name = "sqlalchemy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9c/f4/42dbe52d872b838d63e70ca0e560360c81de783b63500455f5f8a5b38c32/ubc_solar_data_tools-2.0.2.tar.gz", hash = "sha256:d84f935744695c935e29cec26e1580546c40dac9c595cc26a00ffb5fccf088df", size = 258739, upload-time = "2026-10-23T02:34:09.919Z" }
 
 [[package]]
 name = "urllib3"

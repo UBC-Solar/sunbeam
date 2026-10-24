@@ -32,6 +32,11 @@ v3_0 = [
     "psycopg>=3.3.4",
 ]
 v3_1 = []
+v4_0 = [
+    "ubc-solar-data-tools",
+    "influxdb-client>=1.50.0",
+    "psycopg>=3.3.4",
+]
 
 [dependency-groups]
 # Everything the full test suite needs on top of the executor+v3_0 extras:
@@ -62,6 +67,9 @@ conflicts = [
         { extra = "executor"}
     ]
 ]
+
+[tool.uv.sources]
+ubc-solar-data-tools = { git = "https://github.com/UBC-Solar/data_tools.git" }
 
 [tool.ruff]
 line-length = 120

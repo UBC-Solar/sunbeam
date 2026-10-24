@@ -44,3 +44,18 @@ class = "EnergyFromIntegratedPower"
 [v3_0.LatitudeLongitude]
 module = "stage.v3_0.latitude_longitude"
 class = "LatitudeLongitude"
+
+[v4_0]
+name = "Cascadia 2026"
+
+[v4_0.Offline_Ingress]
+module = "stage.v4_0.offline_ingress"
+class = "OfflineIngress"
+
+[v4_0.Ingress]
+module = "stage.v4_0.ingress"
+class = "Ingress"
+
+[v4_0.PackPower]
+module = "stage.v4_0.pack_power"
+class = "PackPower"
