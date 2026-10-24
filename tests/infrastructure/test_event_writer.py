@@ -104,3 +104,27 @@ class TestQueuedEventWriterAgainstDatabase:
 
         assert len(all_samples(engine)) == 5 * 2
         assert event_status(engine, seeded_event.event_id) == EventStatus.PROCESSED
+
+class TestEventWriterReprocess:
+    def test_reprocess_wipes_earlier_samples(self, engine, seeded_event):
+        ts = datetime(2026, 7, 1, 12, 0, 1)
+
+        writer = EventWriter(seeded_event.event_name, engine)
+        writer.write_frame(make_frame(ts, speed=1.0, power=1.0))
+        writer.close()
+
+        # Without the wipe, rewriting the same timestamp would violate the (event, signal, ts) primary key
+        writer = EventWriter(seeded_event.event_name, engine, reprocess=True)
+        writer.write_frame(make_frame(ts, speed=2.0, power=2.0))
+        writer.close()
+
+        assert [sample.value_f64 for sample in all_samples(engine)] == [2.0, 2.0]
+
+    def test_without_reprocess_earlier_samples_are_kept(self, engine, seeded_event):
+        writer = EventWriter(seeded_event.event_name, engine)
+        writer.write_frame(make_frame(datetime(2026, 7, 1, 12, 0, 1), speed=1.0, power=1.0))
+        writer.close()
+
+        EventWriter(seeded_event.event_name, engine).close()
+
+        assert len(all_samples(engine)) == 2

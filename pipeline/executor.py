@@ -141,9 +141,13 @@ class Executor:
             control: WorkerControl | None = None,
     ) -> "Executor":
         event = EventManager().get_event(event_name)
-        writer = QueuedEventWriter(EventWriter(event_name, engine, reprocess=reprocess))
-
         replay_window = replay_window_for(event)
+
+        # A replay rewrites the whole event, so samples from any earlier run must be wiped first or they collide with
+        # the new ones. Live runs only wipe when asked to, since they may be resuming an ongoing event.
+        wipe = reprocess or replay_window is not None
+        writer = QueuedEventWriter(EventWriter(event_name, engine, reprocess=wipe))
+
         ingress_reporter = IngressProgressReporter() if replay_window is not None else None
         pipelines, ingress_pipelines = build_event_pipelines(
             event, replay_window=replay_window, ingress_observer=ingress_reporter,

@@ -294,3 +294,41 @@ class TestReplayWindow:
         future = datetime.now(timezone.utc) + timedelta(days=1)
 
         assert replay_window_for(self._event(future)) is None
+
+
+class TestFromEventWipe:
+    @pytest.fixture
+    def writer_wipes(self, monkeypatch):
+        """ Builds an executor for an event ending at `ends_at`, and returns whether its EventWriter was told to wipe. """
+        import pipeline.executor as executor_module
+        from config.events import EventConfig, EventManager
+
+        def build(ends_at, reprocess=False):
+            calls = []
+
+            class FakeEventWriter(RecordingWriter):
+                def __init__(self, event_name, engine, reprocess=False):
+                    super().__init__()
+                    calls.append(reprocess)
+
+                def write_frames(self, frames):
+                    self.frames.extend(frames)
+
+            event = EventConfig(name="e", stages=[], pipeline_edition="v3_0", starts_at=REPLAY_START, ends_at=ends_at)
+            monkeypatch.setattr(EventManager, "get_event", lambda self, name: event)
+            monkeypatch.setattr(executor_module, "EventWriter", FakeEventWriter)
+            monkeypatch.setattr(executor_module, "build_event_pipelines", lambda *args, **kwargs: ([], []))
+
+            executor_module.Executor.from_event("e", engine=None, reprocess=reprocess)._writer.close()
+            return calls == [True]
+
+        return build
+
+    def test_replay_always_wipes(self, writer_wipes):
+        assert writer_wipes(REPLAY_START + timedelta(hours=1))
+
+    def test_live_run_keeps_samples_by_default(self, writer_wipes):
+        assert not writer_wipes(None)
+
+    def test_live_run_wipes_when_reprocessing(self, writer_wipes):
+        assert writer_wipes(None, reprocess=True)
