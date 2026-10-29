@@ -133,23 +133,19 @@ graph above imports either of them.
 
 ## `config`
 
-**Owns:** loading `*.toml` files into typed Python objects, and the
-process-wide `Context` singleton that answers "what database/server am I
-configured to talk to right now."
+**Owns:** loading `*.toml` files into typed Python objects, and `Context`,
+which answers "what database/server/InfluxDB am I configured to talk to"
+from the environment.
 
 **Provides:**
-- `Context` (`config/context.py`) — a singleton loaded once per process via
-  `Context.load(ServiceType.{Client,Worker,Server}, configuration_type=None)`.
-  `ServiceType` selects which `[client]` / `[worker]` / `[server]` block of
-  `context.toml` to read; `configuration_type` selects `debug` vs
-  `production` within that block (defaults to `context.toml`'s
-  `[main].default_config`). After the first `.load()`, later calls with
-  `configuration_type=None` return the already-configured singleton — so any
-  module can call `Context.load(...)` defensively without re-parsing TOML or
-  clobbering an explicit override made earlier by the entrypoint.
-  `Context().configuration_profile` names the profile that was loaded, and
-  `configuration_profiles(service)` lists the ones `context.toml` defines
-  for a service (what the server offers launched workers).
+- `Context` (`config/context.py`) — a stateless view of the environment:
+  `sunbeam_db` (`SUNBEAM_DATABASE_URL`), `telemetry_db` (`SUNBEAM_INFLUX_*`;
+  raises, naming the missing variables, if any is unset), `sunbeam_server`
+  (`SUNBEAM_SERVER_URL`), and the server-only `worker_network`,
+  `worker_server_url`, and `worker_database_url`. Each property reads the
+  environment when accessed, so there is nothing to load or reset.
+  `TelemetryDB.as_env()` is the inverse: the variables the server sets on a
+  worker it launches.
 - `EventManager`, `VehicleManager`, `SignalManager` (`config/events.py`,
   `vehicles.py`, `signals.py`) — read `events.toml` / `vehicles.toml` and
   `sync_*` them into the database (upsert by name; never delete). Also the
@@ -159,14 +155,14 @@ configured to talk to right now."
   worker replays the event or runs it live.
 
 **Contract:**
-- `Context` is a singleton **by design** — every module that needs
-  configuration calls `Context()` (after something has loaded it) rather
-  than having config threaded through every constructor. This is the one
-  deliberate global in the codebase; don't add a second one.
-- Tests must never let `Context.load()` touch the real `context.toml`.
-  Reset `Context._instance = None` and call `Context.from_config(dict, ...)`
-  with an in-memory config instead (see `tests/infrastructure/conftest.py`'s
-  `test_context` fixture).
+- The environment is the **only** source of connection details — every
+  module that needs them calls `Context()` rather than having config
+  threaded through every constructor, and nothing reads a config file or the
+  database for them. In particular a worker never looks up its InfluxDB
+  connection: the server resolves the dashboard's choice and passes it in.
+  This is the one deliberate global in the codebase; don't add a second one.
+- Tests set the variables with `monkeypatch` (see
+  `tests/infrastructure/conftest.py`'s `test_context` fixture).
 - Nothing in `config` imports `pipeline`, `stage`, `server`, or
   `orchestration`. It may import `db` (to sync into it).
 
@@ -376,12 +372,11 @@ at the end of it.
   `tests/infrastructure/test_executor.py` uses with fakes for every
   argument. If you need to test executor *behavior* (stop/crash/completion
   handling), use the second form — don't reach for `from_event`.
-- `pipeline` imports `config` (`pipeline_generator.py` reads `Context` for
-  the InfluxDB connection details used to build ingress stages, the
-  executor reads it for the realtime debug clock, and `EventManager` via
+- `pipeline` imports `config` (`pipeline_generator.py` and `preflight.py`
+  read `Context` for the InfluxDB connection details, and `EventManager` via
   `from_event`), `state`, `stage`, `db` (`db.sunbeamdb` for
   the concrete writer types used by `from_event`, `db.telemetrydb` for the
-  ingress protocols and the realtime debug clock, `DebugTimeProvider`), and `orchestration` (for
+  ingress protocols and the shared connection check), and `orchestration` (for
   `WorkerControl`). It does not import `server`.
 
 ## `orchestration`

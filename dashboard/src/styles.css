@@ -100,12 +100,12 @@ h3 {
   margin-bottom: 0.9rem;
 }
 
-select, button {
+select, button, input[type="text"], input[type="password"] {
   font-family: inherit;
   font-size: 0.85rem;
 }
 
-select {
+select, input[type="text"], input[type="password"] {
   background: var(--surface-2);
   color: var(--text-primary);
   border: 1px solid var(--border);
@@ -500,4 +500,50 @@ tbody tr.clickable:hover {
   justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 1.25rem;
+}
+
+input[type="text"].mono, input[type="password"].mono {
+  font-size: 0.8rem;
+}
+
+.segmented {
+  display: flex;
+  gap: 1rem;
+}
+
+.segmented label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.modal-actions .spacer {
+  flex: 1;
+}
+
+.test-steps {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1);
+  font-size: 0.8rem;
+}
+
+.test-steps li {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.15rem 0;
+}
+
+.test-steps .step-name {
+  min-width: 4.5rem;
+  color: var(--text-secondary);
+}
+
+.default-star {
+  color: var(--status-warning);
 }

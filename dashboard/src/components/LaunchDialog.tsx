@@ -1,19 +1,28 @@
 import {FormEvent, useEffect, useState} from "react";
-import {ConfigurationProfiles, Event, LaunchOptions} from "../api";
+import {Connection, Event, LaunchOptions} from "../api";
 
 type LaunchDialogProps = {
   event: Event;
   editions: string[];
-  profiles: ConfigurationProfiles;
+  connections: Connection[];
   onCancel: () => void;
   onLaunch: (options: LaunchOptions) => Promise<void>;
 };
 
-export function LaunchDialog({event, editions, profiles, onCancel, onLaunch}: LaunchDialogProps) {
+function lastTestLabel(connection: Connection): string {
+  if (connection.last_test_ok === null) return "";
+  return connection.last_test_ok ? " · last test passed" : " · last test failed";
+}
+
+export function LaunchDialog({event, editions, connections, onCancel, onLaunch}: LaunchDialogProps) {
   const [pipelineEdition, setPipelineEdition] = useState(
     editions.includes(event.pipeline_edition) ? event.pipeline_edition : (editions[0] ?? ""),
   );
-  const [configurationProfile, setConfigurationProfile] = useState(profiles.default);
+  const [connectionId, setConnectionId] = useState<number | null>(
+    (connections.find((c) => c.is_default) ?? connections[0])?.id ?? null,
+  );
+  const [source, setSource] = useState<"local" | "git">("local");
+  const [gitRef, setGitRef] = useState("");
   const [reprocess, setReprocess] = useState(event.is_replay);
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,13 +40,20 @@ export function LaunchDialog({event, editions, profiles, onCancel, onLaunch}: La
     setLaunching(true);
     setError(null);
     try {
-      // The server forces reprocess for replays too; sending it keeps the request honest
-      await onLaunch({pipelineEdition, configurationProfile, reprocess: reprocess || event.is_replay});
+      await onLaunch({
+        pipelineEdition,
+        influxConnectionId: connectionId,
+        sourceRef: source === "git" ? gitRef.trim() : null,
+        // The server forces reprocess for replays too; sending it keeps the request honest
+        reprocess: reprocess || event.is_replay,
+      });
     } catch (err) {
       setError((err as Error).message);
       setLaunching(false);
     }
   }
+
+  const missingRef = source === "git" && gitRef.trim() === "";
 
   return (
     <div className="modal-overlay" onClick={onCancel}>
@@ -69,17 +85,59 @@ export function LaunchDialog({event, editions, profiles, onCancel, onLaunch}: La
         </label>
 
         <label className="field">
-          <span className="field-label">Configuration profile</span>
-          <select value={configurationProfile} onChange={(e) => setConfigurationProfile(e.target.value)}>
-            {profiles.profiles.map((profile) => (
-              <option key={profile} value={profile}>
-                {profile}
-                {profile === profiles.default ? " (server default)" : ""}
+          <span className="field-label">InfluxDB connection</span>
+          <select
+            value={connectionId ?? ""}
+            onChange={(e) => setConnectionId(Number(e.target.value))}
+            disabled={connections.length === 0}
+          >
+            {connections.length === 0 && <option value="">No connections: add one first</option>}
+            {connections.map((connection) => (
+              <option key={connection.id} value={connection.id}>
+                {connection.name}
+                {connection.is_default ? " (default)" : ""}
+                {lastTestLabel(connection)}
               </option>
             ))}
           </select>
-          <span className="field-hint">Which context.toml profile the worker loads.</span>
+          <span className="field-hint">
+            Tested against this event before launching. The worker won't start if it can't see the event's data.
+          </span>
         </label>
+
+        <div className="field">
+          <span className="field-label">Source</span>
+          <div className="segmented">
+            <label>
+              <input
+                type="radio"
+                name="source"
+                checked={source === "local"}
+                onChange={() => setSource("local")}
+              />
+              Server's working copy
+            </label>
+            <label>
+              <input type="radio" name="source" checked={source === "git"} onChange={() => setSource("git")} />
+              Git ref
+            </label>
+          </div>
+          {source === "git" && (
+            <input
+              type="text"
+              className="mono"
+              placeholder="branch, tag, or full commit SHA"
+              value={gitRef}
+              onChange={(e) => setGitRef(e.target.value)}
+              autoFocus
+            />
+          )}
+          <span className="field-hint">
+            {source === "git"
+              ? "Cloned from GitHub and built on first use (this can take a few minutes); later launches of the same commit reuse the image."
+              : "The code the server was started with."}
+          </span>
+        </div>
 
         <label className="field field-checkbox">
           <input
@@ -102,8 +160,12 @@ export function LaunchDialog({event, editions, profiles, onCancel, onLaunch}: La
           <button type="button" onClick={onCancel} disabled={launching}>
             Cancel
           </button>
-          <button type="submit" className="primary" disabled={launching || !pipelineEdition}>
-            {launching ? "Launching…" : "Launch"}
+          <button
+            type="submit"
+            className="primary"
+            disabled={launching || !pipelineEdition || connectionId === null || missingRef}
+          >
+            {launching ? "Testing connection…" : "Launch"}
           </button>
         </div>
       </form>

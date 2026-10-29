@@ -25,7 +25,7 @@ class OrchestratorClient:
         raw_worker_id = worker_run_id or os.environ.get("SUNBEAM_WORKER_RUN_ID")
 
         if not self._base_url:
-            raise ValueError("Missing sunbeam_server configuration (check context.toml)")
+            raise ValueError("Missing Sunbeam server URL (set SUNBEAM_SERVER_URL)")
 
         if raw_worker_id is None:
             raise ValueError("Missing SUNBEAM_WORKER_RUN_ID")
@@ -39,7 +39,7 @@ class OrchestratorClient:
         event_name: str,
         pipeline_edition: str,
         base_url: Optional[str] = None,
-        configuration_profile: Optional[str] = None,
+        influx_connection_name: Optional[str] = None,
         reprocess: bool = False,
     ) -> "OrchestratorClient":
         """
@@ -54,7 +54,7 @@ class OrchestratorClient:
                 "event_name": event_name,
                 "pipeline_edition": pipeline_edition,
                 "host": socket.gethostname(),
-                "configuration_profile": configuration_profile,
+                "influx_connection_name": influx_connection_name,
                 "reprocess": reprocess,
             },
             timeout=5,

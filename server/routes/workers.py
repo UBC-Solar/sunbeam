@@ -20,6 +20,7 @@ from server.schemas import (
     WorkerRegisterRequest,
     WorkerRunRead,
 )
+from server.services.connection_service import ConnectionTestFailed
 from server.services.worker_service import WorkerService
 
 logger = logging.getLogger("sunbeam.server")
@@ -52,6 +53,7 @@ def list_workers(
             WorkerRun.status.in_(
                 [
                     WorkerStatus.REQUESTED,
+                    WorkerStatus.BUILDING,
                     WorkerStatus.STARTING,
                     WorkerStatus.RUNNING,
                     WorkerStatus.STOP_REQUESTED,
@@ -74,9 +76,12 @@ def launch_worker(
             db,
             event_id=payload.event_id,
             pipeline_edition=payload.pipeline_edition,
-            configuration_profile=payload.configuration_profile,
+            influx_connection_id=payload.influx_connection_id,
+            source_ref=payload.source_ref,
             reprocess=payload.reprocess,
         )
+    except ConnectionTestFailed as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -93,7 +98,7 @@ def register_worker(
             event_name=payload.event_name,
             pipeline_edition=payload.pipeline_edition,
             host=payload.host,
-            configuration_profile=payload.configuration_profile,
+            influx_connection_name=payload.influx_connection_name,
             reprocess=payload.reprocess,
         )
     except ValueError as exc:

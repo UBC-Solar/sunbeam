@@ -1,11 +1,13 @@
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Callable
 
 import requests
 from sqlalchemy import Engine, text
 
 from config.context import Context
+from db.telemetrydb.connection_check import check_influx
 
 logger = logging.getLogger("sunbeam.worker.preflight")
 
@@ -26,9 +28,9 @@ def _check_sunbeam_db(engine: Engine) -> PreflightResult:
         return PreflightResult("SunbeamDB", False, str(exc))
 
 
-def _check_telemetry_db() -> PreflightResult:
+def _check_telemetry_db(window: tuple[datetime, datetime] | None) -> PreflightResult:
     try:
-        from influxdb_client import InfluxDBClient
+        import influxdb_client  # noqa: F401
     except ImportError:
         # Not every pipeline edition depends on the influxdb-client extra
         # (see pyproject.toml); a missing package here just means this
@@ -38,37 +40,22 @@ def _check_telemetry_db() -> PreflightResult:
             "skipped: influxdb-client is not installed in this image",
         )
 
-    telemetry_db = Context().telemetry_db
-
     try:
-        client = InfluxDBClient(
-            url=telemetry_db.database_url,
-            token=telemetry_db.token,
-            org=telemetry_db.organization,
-            timeout=5_000,
-        )
-    except Exception as exc:
-        return PreflightResult("InfluxDB", False, f"failed to construct client: {exc}")
-
-    try:
-        if not client.ping():
-            return PreflightResult("InfluxDB", False, "server did not respond to ping")
-
-        bucket = client.buckets_api().find_bucket_by_name(telemetry_db.bucket)
-        if bucket is None:
-            return PreflightResult(
-                "InfluxDB", False,
-                f"bucket {telemetry_db.bucket!r} not found "
-                "(check the configured token, organization, and bucket name)",
-            )
-
-        return PreflightResult(
-            "InfluxDB", True, f"connected, bucket {telemetry_db.bucket!r} found",
-        )
-    except Exception as exc:
+        telemetry_db = Context().telemetry_db
+    except RuntimeError as exc:
         return PreflightResult("InfluxDB", False, str(exc))
-    finally:
-        client.close()
+
+    result = check_influx(
+        telemetry_db.database_url,
+        telemetry_db.organization,
+        telemetry_db.bucket,
+        telemetry_db.token,
+        window,
+    )
+    detail = result.detail
+    if result.ok and window is None:
+        detail += " (event has not started; no data to check yet)"
+    return PreflightResult("InfluxDB", result.ok, detail)
 
 
 def _check_server() -> PreflightResult:
@@ -82,8 +69,20 @@ def _check_server() -> PreflightResult:
         return PreflightResult("server", False, str(exc))
 
 
-def run_preflight_checks(engine: Engine, *, check_server: bool) -> list[PreflightResult]:
-    checks: list[Callable[[], PreflightResult]] = [lambda: _check_sunbeam_db(engine), _check_telemetry_db]
+def run_preflight_checks(
+    engine: Engine,
+    *,
+    check_server: bool,
+    window: tuple[datetime, datetime] | None = None,
+) -> list[PreflightResult]:
+    """
+    :param window: The span of the event that should already have telemetry (see
+        db.telemetrydb.connection_check.event_window); InfluxDB must have data in it
+    """
+    checks: list[Callable[[], PreflightResult]] = [
+        lambda: _check_sunbeam_db(engine),
+        lambda: _check_telemetry_db(window),
+    ]
 
     if check_server:
         checks.append(_check_server)

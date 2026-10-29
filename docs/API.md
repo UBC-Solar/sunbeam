@@ -1,14 +1,13 @@
 # API Reference
 
-The server (`server/main.py`, FastAPI) exposes four route groups:
-`/events`, `/workers`, `/pipeline-editions`, and the telemetry data API
+The server (`server/main.py`, FastAPI) exposes five route groups:
+`/events`, `/workers`, `/pipeline-editions`, `/connections`, and the telemetry data API
 (`/events/{event_name}/signals*`, also mounted under `/events`). All
 request/response bodies are JSON (Pydantic models in `server/schemas.py`)
 except the two SSE endpoints, which are `text/event-stream`.
 
-Base URL is whatever `context.toml`'s `[client].sunbeam-server` resolves
-to for your environment — `http://localhost:8000` for a local
-`docker compose up` or CLI run against the default profile. FastAPI's
+Base URL is wherever the server listens — `http://localhost:8000` for a
+local `docker compose up` (what `SUNBEAM_SERVER_URL` defaults to). FastAPI's
 interactive docs are also always available at `/docs` (Swagger) and
 `/redoc` on a running server — this document is the narrative companion,
 not a replacement.
@@ -98,21 +97,27 @@ Every worker endpoint below returns (or lists) this shape:
   "image_tag": "sunbeam-worker:v3_0", "status": "running", "kind": "container",
   "host": "a1b2c3d4e5f6", "container_id": "a1b2c3...", "container_name": "sunbeam-worker-b3f1a2c4",
   "current_stage": "Array", "status_message": null, "stop_requested": false,
-  "configuration_profile": "debug", "reprocess": false,
+  "influx_connection_id": 1, "influx_connection_name": "UBC Influx (CAN_log)",
+  "source_ref": null, "source_sha": null, "reprocess": false,
   "created_at": "2026-07-20T12:00:00Z", "started_at": "2026-07-20T12:00:01Z",
   "last_heartbeat_at": "2026-07-20T12:05:32Z", "stopped_at": null,
   "failure_reason": null
 }
 ```
 
-`status` is one of `requested`, `starting`, `running`, `stop_requested`,
-`stopping`, `completed`, `failed`, `lost`, `cancelled` (`WorkerStatus`); the
-first five are non-terminal, the last four are terminal
-(`TERMINAL_WORKER_STATUSES`). `image_tag`/`container_id`/`container_name`
-are `null` for `kind: "external"` workers (nothing to launch or inspect —
-see `USAGE.md`). `configuration_profile` and `reprocess` are what the worker
-was started with; `configuration_profile` is `null` for runs recorded before
-it was tracked.
+`status` is one of `requested`, `building`, `starting`, `running`,
+`stop_requested`, `stopping`, `completed`, `failed`, `lost`, `cancelled`
+(`WorkerStatus`); the first six are non-terminal, the last four are terminal
+(`TERMINAL_WORKER_STATUSES`). `building` means the worker's image is being
+built from a git ref and there is no container yet.
+`image_tag`/`container_id`/`container_name` are `null` for
+`kind: "external"` workers (nothing to launch or inspect — see `USAGE.md`).
+`influx_connection_name` is a snapshot of the connection's name at launch
+(so it survives a rename or delete, when `influx_connection_id` goes
+`null`); external workers report `"external: <url> / <bucket>"`. Both are
+`null` for runs recorded before they were tracked. `source_ref` is the git
+branch/tag/SHA the image was built from and `source_sha` its commit; both
+`null` for the server's own copy of the code.
 
 ### `GET /workers?active_only=<bool>`
 
@@ -124,22 +129,32 @@ non-terminal statuses only.
 Server-launches a Docker container. This is what the dashboard calls.
 
 ```json
-{"event_id": 2, "pipeline_edition": "v3_0", "configuration_profile": "production", "reprocess": false}
+{"event_id": 2, "pipeline_edition": "v3_0", "influx_connection_id": 1, "source_ref": null, "reprocess": false}
 ```
 
-`configuration_profile` (optional) is the `context.toml` profile the worker
-loads — one of [`GET /configuration-profiles`](#get-configuration-profiles);
-omitted or `null` means the server's default. `reprocess` (optional,
-default `false`) wipes the event's earlier samples first; it is forced to
-`true` for a replay (`is_replay` events), which always rewrites the event.
+`influx_connection_id` (optional) is one of [`GET /connections`](#connections);
+omitted or `null` means the default connection. `source_ref` (optional) is
+a git branch, tag, or full commit SHA to build the worker from (see
+[`USAGE.md`](USAGE.md#building-workers-from-git)); omitted, `null`, or blank
+means the server's own copy of the code. `reprocess` (optional, default
+`false`) wipes the event's earlier samples first; it is forced to `true` for
+a replay (`is_replay` events), which always rewrites the event.
 
-Creates a `WorkerRun` (`kind: "container"`, `status: "requested"` then
-immediately `"starting"`), runs
-`sunbeam-worker:{pipeline_edition}`, and passes `SUNBEAM_WORKER_RUN_ID` /
-`SUNBEAM_EVENT_NAME` / `SUNBEAM_PIPELINE_EDITION` /
-`SUNBEAM_CONFIGURATION_PROFILE` / `SUNBEAM_REPROCESS` as container
-environment. Returns the `WorkerRunRead`. `400` if `pipeline_edition` or
-`configuration_profile` isn't known, or `event_id` doesn't exist. If the Docker launch itself fails
+First **tests the connection** over the event's window (recording the
+result on the connection): `422` with the failing step in `detail`, and
+nothing created, if it can't reach InfluxDB, find the bucket, or see any
+data. Then creates a `WorkerRun` (`kind: "container"`) and runs
+`sunbeam-worker:{pipeline_edition}` — or, from a git ref,
+`sunbeam-worker:{pipeline_edition}-{sha12}`. If that image hasn't been built,
+the run is returned as `status: "building"` and starts once the background
+build finishes (or goes `failed` with the build log's tail in
+`failure_reason`). The container gets `SUNBEAM_WORKER_RUN_ID` /
+`SUNBEAM_EVENT_NAME` / `SUNBEAM_PIPELINE_EDITION` / `SUNBEAM_REPROCESS`,
+the connection as `SUNBEAM_INFLUX_URL` / `_ORG` / `_BUCKET` / `_TOKEN`, and
+`SUNBEAM_DATABASE_URL` / `SUNBEAM_SERVER_URL` as environment. Returns the
+`WorkerRunRead`. `400` if `pipeline_edition` (for a local build),
+`influx_connection_id`, or `source_ref` isn't known, or `event_id` doesn't
+exist. If the Docker launch itself fails
 (daemon unreachable, image missing, ...), the row is still created but
 immediately marked `status: "failed"` with `failure_reason` set — the
 response is `200`, not an error; check `status` in the body.
@@ -154,13 +169,13 @@ created.
 ```json
 {
   "event_name": "realtime", "pipeline_edition": "v3_0", "host": "joshuas-laptop",
-  "configuration_profile": "debug", "reprocess": false
+  "influx_connection_name": "external: http://influxdb.telemetry.ubcsolar.com / CAN_log", "reprocess": false
 }
 ```
 
-`configuration_profile` and `reprocess` (both optional) are what the worker
-is running with, recorded for display; the CLI sends the profile it loaded
-and its `--reprocess` flag.
+`influx_connection_name` and `reprocess` (both optional) are what the worker
+is running with, recorded for display; the CLI sends its InfluxDB URL and
+bucket and its `--reprocess` flag.
 
 Returns a `WorkerRunRead` with `status: "starting"`, `kind: "external"`,
 `image_tag: null`. `400` for an unknown event name or pipeline edition.
@@ -298,18 +313,73 @@ stream below). Same `404` conditions as above.
 Every top-level table key in `stage/stage_registry.toml` — see
 [`STAGES.md`](STAGES.md#pipeline-editions-and-stage_registrytoml).
 
-## Configuration profiles
+## Connections
 
-### `GET /configuration-profiles`
+InfluxDB connections workers can be launched with (see
+[`USAGE.md`](USAGE.md#connections)). Exactly one is the default whenever any
+exist: the first one created, then whichever was last made default; deleting
+the default promotes the oldest remaining one. Tokens are returned in
+full — everything is behind the team's Tailscale network.
+
+### `GET /connections`
 
 ```json
-{"profiles": ["debug", "production"], "default": "debug"}
+[{
+  "id": 1, "name": "UBC Influx (CAN_log)", "kind": "influxdb",
+  "url": "http://influxdb.telemetry.ubcsolar.com", "organization": "8a0b66d77a331e96",
+  "bucket": "CAN_log", "token": "…", "is_default": true,
+  "created_at": "…", "updated_at": "…",
+  "last_tested_at": "2026-10-28T12:00:00Z", "last_test_ok": true,
+  "last_test_detail": "found data in 'CAN_log' from 2024-07-16T14:00:00Z to 2024-07-16T22:00:00Z"
+}]
 ```
 
-The `context.toml` profiles a launched worker can use (those every
-`[worker.*]` block defines), and the one it gets when the launch request
-doesn't name one: the server's own profile (see
-[`USAGE.md`](USAGE.md#configuration-profiles-debug-vs-production)).
+Sorted by name.
+
+### `POST /connections`
+
+`{"name", "url", "organization", "bucket", "token", "is_default"?}` → `201`
+with the connection. `409` if the name is taken.
+
+### `PATCH /connections/{id}`
+
+Any of `name`, `url`, `organization`, `bucket`, `token`. Changing anything
+but the name clears the last test result. `404` / `409` as above.
+
+### `DELETE /connections/{id}`
+
+`204`. Past worker runs keep its name (`influx_connection_name`).
+
+### `POST /connections/{id}/default`
+
+Makes it the default; returns the connection.
+
+### `POST /connections/{id}/test?event_id=<id>`
+
+Tests a saved connection and records the result on it. With `event_id`, also
+requires at least one point in that event's window (the whole event if it's
+over, start-to-now if it's live; skipped if it hasn't started). `404` for an
+unknown connection or event.
+
+```json
+{
+  "ok": false, "detail": "bucket: bucket 'CAN_log' not found (check the token, organization, and bucket name)",
+  "steps": [
+    {"name": "connect", "ok": true, "detail": "http://influxdb.telemetry.ubcsolar.com reachable"},
+    {"name": "bucket", "ok": false, "detail": "bucket 'CAN_log' not found (check the token, organization, and bucket name)"}
+  ],
+  "window_start": null, "window_end": null
+}
+```
+
+Steps run in order — `connect`, `bucket`, then `data` with a window — and
+stop at the first failure. `window_start`/`window_end` are the span checked
+for data.
+
+### `POST /connections/test`
+
+The same test for unsaved settings: `{"url", "organization", "bucket",
+"token", "event_id"?}`. Nothing is recorded.
 
 ---
 

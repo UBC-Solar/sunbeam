@@ -3,6 +3,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
 export type WorkerStatus =
   | "requested"
+  | "building"
   | "starting"
   | "running"
   | "stop_requested"
@@ -14,6 +15,7 @@ export type WorkerStatus =
 
 export const ACTIVE_STATUSES: WorkerStatus[] = [
   "requested",
+  "building",
   "starting",
   "running",
   "stop_requested",
@@ -24,7 +26,7 @@ export type WorkerRun = {
   id: string;
   event_id: number;
   pipeline_edition: string;
-  image_tag: string;
+  image_tag: string | null;
   status: WorkerStatus;
   host: string | null;
   container_id: string | null;
@@ -32,7 +34,12 @@ export type WorkerRun = {
   current_stage: string | null;
   status_message: string | null;
   stop_requested: boolean;
-  configuration_profile: string | null;
+  influx_connection_id: number | null;
+  // A snapshot of the connection's name at launch; external workers report their URL and bucket instead
+  influx_connection_name: string | null;
+  // The git ref the image was built from (null: the server's own copy of the code), and its commit
+  source_ref: string | null;
+  source_sha: string | null;
   reprocess: boolean;
   created_at: string;
   started_at: string | null;
@@ -52,14 +59,38 @@ export type Event = {
   is_replay: boolean;
 };
 
-export type ConfigurationProfiles = {
-  profiles: string[];
-  default: string;
+export type ConnectionFields = {
+  url: string;
+  organization: string;
+  bucket: string;
+  token: string;
+};
+
+export type Connection = ConnectionFields & {
+  id: number;
+  name: string;
+  kind: "influxdb";
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+  last_tested_at: string | null;
+  last_test_ok: boolean | null;
+  last_test_detail: string | null;
+};
+
+export type ConnectionTestResult = {
+  ok: boolean;
+  detail: string;
+  steps: {name: string; ok: boolean; detail: string}[];
+  window_start: string | null;
+  window_end: string | null;
 };
 
 export type LaunchOptions = {
   pipelineEdition: string;
-  configurationProfile: string;
+  influxConnectionId: number | null;
+  // A git branch, tag, or full commit SHA; null builds from the server's own copy of the code
+  sourceRef: string | null;
   reprocess: boolean;
 };
 
@@ -108,9 +139,27 @@ export type WorkerLogs = {
 
 async function asJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
+    // FastAPI puts the reason in "detail"; fall back to the status line when there isn't one
+    let detail: unknown = null;
+    try {
+      detail = (await response.json()).detail;
+    } catch {
+      // Not JSON
+    }
+    throw new Error(typeof detail === "string" ? detail : `${response.status} ${response.statusText}`);
+  }
+  if (response.status === 204) {
+    return undefined as T;
   }
   return response.json();
+}
+
+function jsonRequest(method: string, body?: unknown): RequestInit {
+  return {
+    method,
+    headers: {"Content-Type": "application/json"},
+    body: body === undefined ? undefined : JSON.stringify(body),
+  };
 }
 
 export async function getEvents(): Promise<Event[]> {
@@ -125,21 +174,58 @@ export async function getWorkers(): Promise<WorkerRun[]> {
   return asJson(await fetch(`${API_BASE_URL}/workers?active_only=false`));
 }
 
-export async function getConfigurationProfiles(): Promise<ConfigurationProfiles> {
-  return asJson(await fetch(`${API_BASE_URL}/configuration-profiles`));
+export async function getConnections(): Promise<Connection[]> {
+  return asJson(await fetch(`${API_BASE_URL}/connections`));
+}
+
+export async function createConnection(
+  fields: ConnectionFields & {name: string; is_default?: boolean},
+): Promise<Connection> {
+  return asJson(await fetch(`${API_BASE_URL}/connections`, jsonRequest("POST", fields)));
+}
+
+export async function updateConnection(
+  id: number,
+  fields: Partial<ConnectionFields & {name: string}>,
+): Promise<Connection> {
+  return asJson(await fetch(`${API_BASE_URL}/connections/${id}`, jsonRequest("PATCH", fields)));
+}
+
+export async function deleteConnection(id: number): Promise<void> {
+  return asJson(await fetch(`${API_BASE_URL}/connections/${id}`, {method: "DELETE"}));
+}
+
+export async function makeDefaultConnection(id: number): Promise<Connection> {
+  return asJson(await fetch(`${API_BASE_URL}/connections/${id}/default`, {method: "POST"}));
+}
+
+// Test settings before they're saved; with an event, also require data over its window
+export async function testConnectionFields(
+  fields: ConnectionFields,
+  eventId: number | null,
+): Promise<ConnectionTestResult> {
+  return asJson(
+    await fetch(`${API_BASE_URL}/connections/test`, jsonRequest("POST", {...fields, event_id: eventId})),
+  );
+}
+
+// Test a saved connection; the result is recorded on it
+export async function testConnection(id: number, eventId: number | null): Promise<ConnectionTestResult> {
+  const query = eventId === null ? "" : `?event_id=${eventId}`;
+  return asJson(await fetch(`${API_BASE_URL}/connections/${id}/test${query}`, {method: "POST"}));
 }
 
 export async function launchWorker(eventId: number, options: LaunchOptions): Promise<WorkerRun> {
-  const response = await fetch(`${API_BASE_URL}/workers/launch`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({
+  const response = await fetch(
+    `${API_BASE_URL}/workers/launch`,
+    jsonRequest("POST", {
       event_id: eventId,
       pipeline_edition: options.pipelineEdition,
-      configuration_profile: options.configurationProfile,
+      influx_connection_id: options.influxConnectionId,
+      source_ref: options.sourceRef,
       reprocess: options.reprocess,
     }),
-  });
+  );
 
   return asJson(response);
 }

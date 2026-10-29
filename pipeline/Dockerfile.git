@@ -1,0 +1,26 @@
+# A worker built from a git commit instead of the server's own copy of the code. The server resolves the branch or
+# tag to a commit first (server/services/image_builder.py) and builds this with no other context, so GIT_REF is
+# always a full SHA: that keeps Docker's layer cache keyed on the commit, not on a branch name that moves.
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+
+ARG PIPELINE_EDITION="v3_0"
+ARG GIT_REMOTE="https://github.com/UBC-Solar/sunbeam.git"
+ARG GIT_REF
+
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
+
+RUN test -n "${GIT_REF}" || (echo "GIT_REF is required" >&2; exit 1)
+
+RUN git init -q /app \
+    && git -C /app fetch -q --depth 1 "${GIT_REMOTE}" "${GIT_REF}" \
+    && git -C /app checkout -q FETCH_HEAD
+
+WORKDIR /app
+
+# Older commits read connections from config/context.toml, which the server no longer controls
+RUN test -f db/telemetrydb/connection_check.py \
+    || (echo "${GIT_REF} predates server-managed connections (SUNBEAM_INFLUX_*); it can't be launched from here" >&2; exit 1)
+
+RUN uv sync --locked --extra executor --extra "${PIPELINE_EDITION}"
+
+CMD ["uv", "run", "sunbeam.py"]

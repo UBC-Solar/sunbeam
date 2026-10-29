@@ -15,8 +15,7 @@ pytest.importorskip("docker")
 
 from db.sunbeamdb.models import WorkerRun, WorkerStatus
 from server.services.watchdog_service import WatchdogService
-from server.services.worker_service import WorkerService
-from tests.infrastructure.conftest import wait_until, TEST_PROFILES
+from tests.infrastructure.conftest import make_worker_service, wait_until
 from tests.infrastructure.test_worker_service import FakeDockerClient
 
 pytestmark = pytest.mark.postgres
@@ -49,12 +48,7 @@ class TestHeartbeatBacksOffAfterWatchdogWins:
     def test_blocked_heartbeat_sees_terminal_status_and_backs_off(
         self, pg_session_factory, worker_id
     ):
-        service = WorkerService(
-            FakeDockerClient(),
-            worker_network=None,
-            configuration_profiles=TEST_PROFILES,
-            default_configuration_profile=TEST_PROFILES[0],
-        )
+        service = make_worker_service(FakeDockerClient())
         result = {}
 
         def heartbeat():

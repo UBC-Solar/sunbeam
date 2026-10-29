@@ -37,12 +37,12 @@ Run `uv run alembic history --verbose` to see the current chain.
 1. `config.attributes["sunbeam_database_url"]` — set programmatically by
    `server/migrations.py` when the server runs migrations on its own
    startup (see below); you won't set this by hand.
-2. the `SUNBEAM_DATABASE_URL` environment variable.
-3. `context.toml`'s `[client].sunbeamdb` (or `[worker]`, depending on
-   `ServiceType` — see [`USAGE.md`](USAGE.md#configuration-profiles-debug-vs-production)).
+2. the `SUNBEAM_DATABASE_URL` environment variable, which defaults to the
+   `docker compose` database on `localhost:5432` (see
+   [`USAGE.md`](USAGE.md#connections)).
 
 So against your normal local `docker compose` Postgres, plain
-`uv run alembic <command>` just works via `context.toml`. Point at a
+`uv run alembic <command>` just works. Point at a
 different database explicitly with:
 
 ```bash

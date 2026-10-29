@@ -116,14 +116,21 @@ Once it's up:
 1. Open `http://localhost:5173` — the dashboard lists events (marked
    *Realtime* or *Replay*) and lets you launch a worker for one. **Launch
    worker…** opens a settings dialog: the pipeline edition (defaulting to
-   the event's own), the configuration profile the worker loads (defaulting
-   to the server's), and whether to reprocess (always on, and locked, for
-   replays). See [`API.md`](API.md#post-workerslaunch).
-2. The server launches a `sunbeam-worker:<edition>` container for that
-   event, mounted onto the same `sunbeam-net` Docker network as the server
-   and database (`config.toml`'s `[worker]` block points `sunbeamdb` at
-   `db` and `sunbeam-server` at `server` — the in-network hostnames, not
-   `localhost`).
+   the event's own), the InfluxDB connection the worker reads from
+   (defaulting to the default connection — see [Connections](#connections)),
+   where its code comes from (the server's working copy, or a git ref — see
+   [Building workers from git](#building-workers-from-git)), and whether to
+   reprocess (always on, and locked, for replays). See
+   [`API.md`](API.md#post-workerslaunch).
+2. The server **tests the connection against the event first** — it must
+   reach InfluxDB, find the bucket, and see at least one point in the
+   event's window — and refuses the launch (HTTP 422, shown in the dialog)
+   if it can't. Then it launches a `sunbeam-worker:<edition>` container for
+   that event on the same `sunbeam-net` Docker network as the server and
+   database, handing it every connection it needs as environment variables
+   (`SUNBEAM_INFLUX_*`, plus the server's own `SUNBEAM_DATABASE_URL` and
+   `SUNBEAM_SERVER_URL=http://server:8000` — the in-network hostnames, not
+   `localhost`). The worker reads no config file or database to find them.
 3. The worker registers no run ID itself here — the server already created
    its `WorkerRun` row and passes the ID via the `SUNBEAM_WORKER_RUN_ID`
    environment variable when it starts the container (see
@@ -155,7 +162,36 @@ widget consuming that stream; delete `server/routes/debug.py` and
 changed pipeline/stage code, `docker compose up --build server` alone is
 enough to pick it up in the next-launched worker container (worker images
 are built lazily by the server on its own startup, from the same source
-tree the server container was built from).
+tree the server container was built from). To run code you haven't
+rebuilt the server with, launch from a git ref instead (see
+[Building workers from git](#building-workers-from-git)).
+
+Local builds work offline as long as Docker's layer cache already has their
+steps: the `apt-get` and `uv sync` layers only rerun (and need the network)
+when `pipeline/Dockerfile`, `pyproject.toml`, or `uv.lock` change.
+
+### Building workers from git
+
+Choosing **Git ref** in the launch dialog (or `source_ref` in
+`POST /workers/launch`) builds the worker from a branch, tag, or full commit
+SHA of `https://github.com/UBC-Solar/sunbeam` instead of the server's copy of
+the code. The server resolves the ref to a commit (`git ls-remote`), then
+builds `pipeline/Dockerfile.git`, which clones that commit itself, into
+`sunbeam-worker:<edition>-<sha12>`. The run shows as **Building image**
+until the build finishes (the watchdog allows 20 minutes); a later launch
+of the same commit reuses the image and starts at once, while a branch
+that has moved builds its new commit.
+
+Notes:
+
+- Short SHAs can't be resolved remotely; give the full 40 characters.
+- The edition must exist in that commit — it isn't checked against the
+  server's own `stage_registry.toml`, so a ref can run an edition the
+  server doesn't know yet. A missing edition fails the build.
+- Commits from before server-managed connections (they read
+  `config/context.toml`) can't be launched this way; their build fails with
+  a message saying so.
+- Git builds need the server host to reach GitHub.
 
 ## Mode 2: the CLI (`sunbeam.py`)
 
@@ -175,7 +211,9 @@ uv run sunbeam.py --event_name realtime
 | `--event_name` | `$SUNBEAM_EVENT_NAME` or `"realtime"` | Which event (from `events.toml`) to run. |
 | `--serverless` | off | Run with no server at all — see below. |
 | `--reprocess` | `$SUNBEAM_REPROCESS` or `false` | Delete the event's existing `aligned_sample` rows before writing. Replays always do this regardless (see below), so this only matters for realtime runs, which otherwise append to whatever an earlier run wrote. |
-| `--configuration` | `$SUNBEAM_CONFIGURATION_PROFILE` | `debug` or `production` — which `context.toml` block to load. Defaults to whatever `context.toml`'s `[main].default_config` says. |
+| `--influx-url`, `--influx-org`, `--influx-bucket`, `--influx-token` | `$SUNBEAM_INFLUX_URL`, `_ORG`, `_BUCKET`, `_TOKEN` | The InfluxDB to read telemetry from. Required (as flags or variables); there are no defaults. |
+| `--database-url` | `$SUNBEAM_DATABASE_URL` | The Sunbeam Postgres to write to. Defaults to the `docker compose` database on `localhost:5432`. |
+| `--server-url` | `$SUNBEAM_SERVER_URL` | The Sunbeam server to register with. Defaults to `http://localhost:8000`. |
 
 Every flag also has an environment-variable fallback, because that's how
 the Docker worker container is actually configured (see
@@ -259,7 +297,7 @@ than force-killing it (there's nothing to kill).
 
 ```bash
 # server already running (Docker or otherwise), reachable at
-# config.toml's [client.sunbeam-server] address
+# $SUNBEAM_SERVER_URL (default http://localhost:8000)
 uv run sunbeam.py --event_name realtime
 ```
 
@@ -271,53 +309,43 @@ it never silently falls back to serverless.
 
 Before doing anything else, both `Sunbeam.run()` (CLI) and worker container
 startup run `pipeline/preflight.py`'s checks: can it reach the Sunbeam
-Postgres database, can it reach InfluxDB (skipped gracefully if
-`influxdb-client` isn't installed in this edition's image — see the
-dependency-group discussion above), and — for orchestrated modes only —
+Postgres database, can it reach InfluxDB, find its bucket, and **see data
+in the event's window** (the whole event for a replay, start-to-now for a
+live one; nothing to check yet for one that hasn't started), using the same
+check the server runs before a launch (`db/telemetrydb/connection_check.py`;
+skipped gracefully if `influxdb-client` isn't installed in this edition's
+image — see the dependency-group discussion above), and — for orchestrated
+modes only —
 can it reach the server's `/health` endpoint. A failed preflight reports
 failure to the server (if reachable) and exits with a nonzero status before
 ever building a pipeline; look here first if a worker won't start.
 
-## Configuration Profiles (`debug` vs `production`)
+## Connections
 
-`config/context.toml` has three top-level blocks — `[client]`, `[worker]`,
-`[server]` — one per `ServiceType`, each with a `debug` and `production`
-sub-block. Which `ServiceType` loads depends on how the process starts
-(`sunbeam.py` picks `Worker` if `SUNBEAM_WORKER_RUN_ID` is set, else
-`Client`; `server/main.py` always loads `Server`); which profile
-(`debug`/`production`) loads is `--configuration`/`SUNBEAM_CONFIGURATION_PROFILE`,
-defaulting to `context.toml`'s `[main].default_config`. This is what lets
-the same `context.toml` describe both a `docker compose` deployment (where
-`worker.sunbeam-server` points at the Docker-network hostname `server`) and
-a bare CLI run against `localhost`, without code changes.
+Where everything lives is read from the environment (`config/context.py`)
+— there is no config file.
 
-**Choosing a profile:**
+- **InfluxDB** connections are rows the dashboard manages (**InfluxDB
+  connections** card: add, edit, delete, make default, and **Test**, either
+  just the server and bucket or for data in a chosen event). Editing a URL or
+  token takes effect on the next launch, with no rebuild. A test result is
+  recorded on the connection, and editing its settings clears it. Migration
+  `c7e2a91f5d3b` seeds the two hosts `context.toml` used to
+  hold: `UBC Influx (CAN_log)` (the default) and `Production (CAN_prod)`.
+- **Postgres** is not a connection: the server and every worker it launches
+  share one database, `SUNBEAM_DATABASE_URL`. `docker-compose.yaml` sets it
+  to the compose `db` service; override it in the shell or a `.env` file next
+  to `docker-compose.yaml`, then `docker compose up -d server`. Outside
+  compose it defaults to `localhost:5432`.
 
-- **CLI worker:** `--configuration production` (or
-  `SUNBEAM_CONFIGURATION_PROFILE=production`).
-- **Dashboard-launched worker:** pick it in the launch dialog; the server
-  passes it to the container as `SUNBEAM_CONFIGURATION_PROFILE`.
-- **Server:** `docker-compose.yaml` passes `SUNBEAM_CONFIGURATION_PROFILE`
-  through from wherever you run `docker compose`, so either
-  `SUNBEAM_CONFIGURATION_PROFILE=production docker compose up`, or put
-  `SUNBEAM_CONFIGURATION_PROFILE=production` in a `.env` file next to
-  `docker-compose.yaml` (Compose reads it automatically; `.env` is
-  gitignored). The server's profile is also the default the launch dialog
-  offers workers. Changing it takes a restart of the server container
-  (`docker compose up -d server` picks up a new value).
+| Variable | Read by | Default |
+|---|---|---|
+| `SUNBEAM_DATABASE_URL` | server, alembic, workers | `postgresql+psycopg://telemetry:telemetry@localhost:5432/telemetry` (compose: `…@db:5432/…`) |
+| `SUNBEAM_INFLUX_URL` / `_ORG` / `_BUCKET` / `_TOKEN` | workers | none — set by the server at launch, or by hand for a CLI run |
+| `SUNBEAM_SERVER_URL` | workers | `http://localhost:8000` |
+| `SUNBEAM_WORKER_SERVER_URL` | server | `http://server:8000` — what launched workers get as `SUNBEAM_SERVER_URL` |
+| `SUNBEAM_WORKER_DATABASE_URL` | server | the server's own `SUNBEAM_DATABASE_URL` — set it when workers reach the database by another name |
+| `SUNBEAM_WORKER_NETWORK` | server | `sunbeam-net`; empty for none |
 
-Unset (or empty) everywhere means `[main].default_config`, and an unknown
-name fails at startup with the list of profiles that exist.
-
-**Adding a profile** (say, `staging`) is just `context.toml`: add a
-`staging = {...}` entry to every block of the service(s) that should offer
-it. A profile counts as available for a service only once *all* of that
-service's blocks define it; the dashboard picks new worker profiles up
-from `GET /configuration-profiles` without code changes.
-
-Each `telemetrydb` block also has `debug` and `debug_time`. With
-`debug = true`, **realtime** runs read InfluxDB through a fake clock that
-starts at `debug_time` and then advances in real time, so a recorded
-session can be played back through the live path as if it were happening
-now. It has no effect on replays, which always read their event's own
-window.
+Everything here is reachable only over the team's Tailscale network, which
+is why tokens are stored and returned in plain text.

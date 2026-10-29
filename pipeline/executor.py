@@ -9,12 +9,10 @@ from rich.console import Console
 from sqlalchemy import Engine
 
 from config import EventManager
-from config.context import Context
 from config.events import EventConfig
 from db.sunbeamdb.queued_writer import QueuedEventWriter
 from db.sunbeamdb.writer import EventWriter
 from db.telemetrydb.protocols import IngressObserver, TimeProvider
-from db.telemetrydb.realtime_ingress import DebugTimeProvider
 from orchestration.control import OrchestratedWorkerControl, ServerlessWorkerControl, WorkerControl
 from pipeline.output import (
     CombinedOutputManager,
@@ -65,8 +63,7 @@ def build_event_pipelines(
     """
     Build the compute and ingress pipelines for an event from its
     configuration (events.toml + stage registry). With a replay window the
-    ingress fetches that whole window up front; otherwise it polls live,
-    against a fake clock starting at telemetrydb.debug_time in debug mode.
+    ingress fetches that whole window up front; otherwise it polls live.
     """
     stage_library = stage_library or StageLibrary(event.pipeline_edition)
 
@@ -83,12 +80,7 @@ def build_event_pipelines(
         start, end = replay_window
         ingress_factory = OfflineIngressFactory(stage_library, start, end, observer=ingress_observer)
     else:
-        telemetry_db = Context().telemetry_db
-        time_provider: TimeProvider
-        if telemetry_db.debug:
-            time_provider = DebugTimeProvider(start_time=datetime.fromisoformat(telemetry_db.debug_time))
-        else:
-            time_provider = datetime  # type: ignore[assignment]
+        time_provider: TimeProvider = datetime  # type: ignore[assignment]
         ingress_factory = RealtimeIngressFactory(stage_library, event.starts_at.date(), time_provider)
 
     return generate_pipelines(pipeline_stages, ingress_factory)

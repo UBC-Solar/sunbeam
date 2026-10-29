@@ -13,8 +13,7 @@ from db.sunbeamdb.models import Event, WorkerRun, WorkerStatus
 from server.deps import get_db
 from server.routes.workers import get_worker_service
 from server.services.metrics_cache import MetricsCache
-from server.services.worker_service import WorkerService
-from tests.infrastructure.conftest import TEST_PROFILES, naive_utcnow
+from tests.infrastructure.conftest import FakeChecker, make_worker_service, naive_utcnow
 from tests.infrastructure.test_worker_service import FakeDockerClient
 
 
@@ -36,7 +35,12 @@ def fake_docker():
 
 
 @pytest.fixture
-def client(session_factory, fake_docker):
+def checker():
+    return FakeChecker()
+
+
+@pytest.fixture
+def client(session_factory, fake_docker, checker):
     from server.main import create_app
 
     app = create_app(lifespan=None)
@@ -48,12 +52,7 @@ def client(session_factory, fake_docker):
         finally:
             db.close()
 
-    service = WorkerService(
-        fake_docker,
-        worker_network=None,
-        configuration_profiles=TEST_PROFILES,
-        default_configuration_profile=TEST_PROFILES[0],
-    )
+    service = make_worker_service(fake_docker, session_factory, checker=checker)
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_worker_service] = lambda: service
@@ -128,11 +127,6 @@ class TestEventRoutes:
         assert client.get(f"/events/{seeded_event.event_id}").json()["is_replay"] is True
 
 
-class TestConfigurationProfileRoutes:
-    def test_lists_profiles_and_default(self, client):
-        assert client.get("/configuration-profiles").json() == {"profiles": TEST_PROFILES, "default": "debug"}
-
-
 class TestPipelineEditionRoutes:
     def test_lists_registered_editions(self, client):
         response = client.get("/pipeline-editions")
@@ -159,30 +153,47 @@ class TestLaunchRoute:
         assert response.status_code == 400
         assert "Unknown pipeline edition" in response.json()["detail"]
 
-    def test_launch_with_profile_and_reprocess(self, client, seeded_event, fake_docker):
+    def test_launch_with_connection_and_reprocess(self, client, seeded_event, fake_docker):
         response = client.post(
             "/workers/launch",
             json={
                 "event_id": seeded_event.event_id, "pipeline_edition": "v3_0",
-                "configuration_profile": "production", "reprocess": True,
+                "influx_connection_id": seeded_event.connection_id, "reprocess": True,
             },
         )
 
         worker = response.json()
-        assert worker["configuration_profile"] == "production"
+        assert worker["influx_connection_id"] == seeded_event.connection_id
+        assert worker["influx_connection_name"] == "test-influx"
+        assert worker["source_ref"] is None
         assert worker["reprocess"] is True
         environment = fake_docker.containers.run_calls[0]["environment"]
-        assert environment["SUNBEAM_CONFIGURATION_PROFILE"] == "production"
+        assert environment["SUNBEAM_INFLUX_BUCKET"] == "test-bucket"
         assert environment["SUNBEAM_REPROCESS"] == "true"
 
-    def test_launch_unknown_profile_is_400(self, client, seeded_event):
+    def test_launch_unknown_connection_is_400(self, client, seeded_event):
         response = client.post(
             "/workers/launch",
-            json={"event_id": seeded_event.event_id, "pipeline_edition": "v3_0", "configuration_profile": "nope"},
+            json={"event_id": seeded_event.event_id, "pipeline_edition": "v3_0", "influx_connection_id": 999},
         )
 
         assert response.status_code == 400
-        assert "Unknown configuration profile" in response.json()["detail"]
+        assert "No connection exists" in response.json()["detail"]
+
+    def test_launch_with_a_failing_connection_is_422_and_launches_nothing(
+        self, client, seeded_event, fake_docker, checker,
+    ):
+        checker.fail_with = "no data in 'test-bucket'"
+
+        response = client.post(
+            "/workers/launch",
+            json={"event_id": seeded_event.event_id, "pipeline_edition": "v3_0"},
+        )
+
+        assert response.status_code == 422
+        assert "no data in 'test-bucket'" in response.json()["detail"]
+        assert fake_docker.containers.run_calls == []
+        assert client.get("/workers").json() == []
 
     def test_launch_unknown_event_is_400(self, client):
         response = client.post(

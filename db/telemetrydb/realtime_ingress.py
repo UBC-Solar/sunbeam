@@ -6,32 +6,6 @@ from typing import Any
 from typing import Iterable
 
 
-class DebugTimeProvider:
-    """
-    Assistant class to debug real-time ingress by producing a now() function which does not return the current time
-    but pretending to return the current time in the past by computing the time since the class instantiation.
-
-    Concretely, if the class is instantiated at time ``t1``  and provided the start time ``t0``,
-
-        DebugTimeProvider.now() => t0 + (system.now() - t1)
-
-    where system.now() is the genuine, real time. Note that `system.now() - t1` computes the time since instantiation.
-
-    Basically, the class pretends that it was instantiated at ``start_time`` and counts from then to give
-    the "current" time.
-    """
-    def __init__(self, start_time: datetime):
-        self._start_time = datetime.now(timezone.utc)
-        self._query_start_time = start_time
-
-    def now(self, tz: timezone) -> datetime:
-        now = datetime.now(tz)
-        time_elapsed = now - self._start_time
-        timestamp = self._query_start_time + time_elapsed
-
-        return timestamp
-
-
 class RealtimeIngressQuerier:
     """
     Fast path for:
@@ -45,10 +19,10 @@ class RealtimeIngressQuerier:
 
     def __init__(
             self,
-            bucket: str | None = "CAN_log",
-            organization: str | None = "8a0b66d77a331e96",
-            url: str | None = "http://influxdb.telemetry.ubcsolar.com",
-            token: str | None = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==",
+            bucket: str | None = None,
+            organization: str | None = None,
+            url: str | None = None,
+            token: str | None = None,
             timeout_s: float = 1.0,
             fields: Iterable[str] | None = None,
             time_provider: TimeProvider = datetime
@@ -154,14 +128,17 @@ class RealtimeIngressQuerier:
 
 
 if __name__ == "__main__":
-    from datetime import datetime, timezone
     import sys
     import time
 
-    reader = RealtimeIngressQuerier(bucket="CAN_log",
-            organization="8a0b66d77a331e96",
-            url="http://influxdb.telemetry.ubcsolar.com",
-            token="s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==",
+    from config.context import Context
+
+    telemetry_db = Context().telemetry_db
+    reader = RealtimeIngressQuerier(
+            bucket=telemetry_db.bucket,
+            organization=telemetry_db.organization,
+            url=telemetry_db.database_url,
+            token=telemetry_db.token,
             fields=(
                 "TotalPackVoltage",
                 "PackCurrent",
@@ -171,9 +148,6 @@ if __name__ == "__main__":
                 "BatteryCurrent",
                 "BatteryVoltage",
             ),
-            time_provider=DebugTimeProvider(
-                start_time=datetime(2024, 7, 16, 14, 10, tzinfo=timezone.utc)
-            )
     )
 
     try:

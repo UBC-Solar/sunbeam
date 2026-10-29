@@ -128,9 +128,47 @@ class AlignedSample(Base):
         ),
     )
 
+class ConnectionKind(enum.Enum):
+    # Telemetry a worker reads. (Postgres is not a Connection: the server and its
+    # workers always share the one database the server was started against.)
+    INFLUXDB = "influxdb"
+
+
+class Connection(Base):
+    """ Somewhere a worker can read telemetry from, chosen per launch on the dashboard. """
+    __tablename__ = "connection"
+
+    id: Mapped[int] = mapped_column(BigIntegerPK, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    kind: Mapped[ConnectionKind] = mapped_column(
+        Enum(ConnectionKind),
+        nullable=False,
+        default=ConnectionKind.INFLUXDB,
+    )
+    url: Mapped[str] = mapped_column(String(1024), nullable=False)
+    organization: Mapped[str] = mapped_column(String(255), nullable=False)
+    bucket: Mapped[str] = mapped_column(String(255), nullable=False)
+    token: Mapped[str] = mapped_column(Text, nullable=False)
+    # What a launch uses when it doesn't name a connection; at most one per kind
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now(),
+    )
+
+    # The most recent test, from the dashboard or a launch
+    last_tested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_test_ok: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    last_test_detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
 class WorkerStatus(enum.Enum):
 
     REQUESTED = "requested"
+
+    # Building the worker's image from a git ref, before there is a container
+    BUILDING = "building"
 
     STARTING = "starting"
 
@@ -201,8 +239,17 @@ class WorkerRun(Base):
     current_stage: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     status_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     stop_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    # What the worker was started with. Null profile for runs from before these were recorded.
-    configuration_profile: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # What the worker was started with. The name is a snapshot, so it survives the connection being renamed or
+    # deleted; external workers report their URL and bucket instead. Null for runs from before these were recorded.
+    influx_connection_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("connection.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    influx_connection_name: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    # The git branch/tag/commit the image was built from, and the commit it resolved to; null ref means the
+    # server's own (local) copy of the code
+    source_ref: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    source_sha: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     reprocess: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     stop_requested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(

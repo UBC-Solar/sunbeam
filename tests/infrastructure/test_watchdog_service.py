@@ -37,6 +37,7 @@ def watchdog(fake_docker, session_factory):
         heartbeat_timeout_s=10.0,
         startup_grace_s=60.0,
         stop_grace_s=30.0,
+        build_timeout_s=600.0,
     )
 
 
@@ -50,6 +51,7 @@ def make_worker(session_factory, seeded_event):
         stop_requested_age_s: float | None = None,
         container_id: str | None = None,
         kind=WorkerKind.CONTAINER,
+        started_age_s: float | None = None,
     ) -> uuid.UUID:
         now = naive_utcnow()
         worker = WorkerRun(
@@ -60,6 +62,7 @@ def make_worker(session_factory, seeded_event):
             container_id=container_id,
             kind=kind,
             created_at=now - timedelta(seconds=age_s),
+            started_at=now - timedelta(seconds=started_age_s) if started_age_s is not None else None,
             last_heartbeat_at=(
                 now - timedelta(seconds=heartbeat_age_s)
                 if heartbeat_age_s is not None
@@ -116,6 +119,44 @@ class TestNeverLaunched:
         worker = get_worker(worker_id)
         assert worker.status == WorkerStatus.LOST
         assert "never launched" in worker.status_message
+
+
+class TestBuilding:
+    def test_build_outlasting_startup_grace_left_alone(self, watchdog, make_worker, get_worker):
+        worker_id = make_worker(status=WorkerStatus.BUILDING, age_s=300)
+
+        watchdog._sweep()
+
+        assert get_worker(worker_id).status == WorkerStatus.BUILDING
+
+    def test_build_past_its_timeout_fails(self, watchdog, make_worker, get_worker):
+        worker_id = make_worker(status=WorkerStatus.BUILDING, age_s=900)
+
+        watchdog._sweep()
+
+        worker = get_worker(worker_id)
+        assert worker.status == WorkerStatus.FAILED
+        assert "build timed out" in worker.status_message
+
+    def test_stopped_while_building_is_cancelled(self, watchdog, make_worker, get_worker):
+        worker_id = make_worker(status=WorkerStatus.STOP_REQUESTED, age_s=5, stop_requested_age_s=1)
+
+        watchdog._sweep()
+
+        assert get_worker(worker_id).status == WorkerStatus.CANCELLED
+
+    def test_startup_grace_counts_from_launch_not_creation(
+        self, watchdog, fake_docker, make_worker, get_worker,
+    ):
+        # Built for ten minutes, then launched five seconds ago
+        container = add_container(fake_docker)
+        worker_id = make_worker(
+            status=WorkerStatus.STARTING, age_s=600, started_age_s=5, container_id=container.id,
+        )
+
+        watchdog._sweep()
+
+        assert get_worker(worker_id).status == WorkerStatus.STARTING
 
 
 class TestContainerGone:

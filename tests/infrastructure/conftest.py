@@ -9,55 +9,72 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from config.context import Context, ServiceType
-from db.sunbeamdb.models import Base, Event, EventStatus, Signal, Vehicle
+from db.sunbeamdb.models import Base, Connection, ConnectionKind, Event, EventStatus, Signal, Vehicle
+from db.telemetrydb.connection_check import CheckResult, CheckStep
 from orchestration.control import WorkerControl
 
 
-# The configuration profiles test WorkerServices offer launched workers
-TEST_PROFILES = ["debug", "production"]
+# What test_context puts in the environment (see config/context.py)
+TEST_ENV = {
+    "SUNBEAM_DATABASE_URL": "postgresql+psycopg://test:test@localhost:5432/sunbeam_test",
+    "SUNBEAM_SERVER_URL": "http://localhost:8000",
+    "SUNBEAM_INFLUX_URL": "http://localhost:8086",
+    "SUNBEAM_INFLUX_ORG": "test-org",
+    "SUNBEAM_INFLUX_BUCKET": "test-bucket",
+    "SUNBEAM_INFLUX_TOKEN": "test-token",
+}
 
-
-TEST_CONFIG = {
-    "main": {"default_config": "test"},
-    "worker": {
-        "sunbeamdb": {
-            "test": {
-                "database_host_ip": "localhost",
-                "database_port": 5432,
-                "database_name": "sunbeam_test",
-                "database_username": "test",
-                "database_password": "test",
-            }
-        },
-        "telemetrydb": {
-            "test": {
-                "database_url": "http://localhost:8086",
-                "bucket": "test-bucket",
-                "organization": "test-org",
-                "token": "test-token",
-                "debug": True,
-                "debug_time": "2026-07-01T00:00:00",
-            }
-        },
-        "sunbeam-server": {
-            "test": {
-                "server_url": "localhost",
-                "server_port": 8000,
-                "worker_network": None,
-            }
-        },
-    },
+# The connection seed_basic_event makes the default
+TEST_CONNECTION = {
+    "name": "test-influx",
+    "url": "http://influx.test:8086",
+    "organization": "test-org",
+    "bucket": "test-bucket",
+    "token": "test-token",
 }
 
 
 @pytest.fixture
-def test_context():
-    """A Context singleton configured from an in-memory dict, torn down after."""
-    Context._instance = None
-    ctx = Context.from_config(TEST_CONFIG, ServiceType.Worker, "test")
-    yield ctx
-    Context._instance = None
+def test_context(monkeypatch):
+    """ The environment a worker would be launched with; monkeypatch restores it after. """
+    for name, value in TEST_ENV.items():
+        monkeypatch.setenv(name, value)
+
+
+class FakeChecker:
+    """ Stands in for check_influx: records each call, passes unless told to fail. """
+
+    def __init__(self):
+        self.calls = []
+        self.fail_with: str | None = None
+
+    def __call__(self, url, organization, bucket, token, window=None):
+        self.calls.append({"url": url, "organization": organization, "bucket": bucket, "token": token, "window": window})
+        if self.fail_with is not None:
+            return CheckResult([CheckStep("connect", True, "reachable"), CheckStep("data", False, self.fail_with)])
+        return CheckResult([CheckStep("connect", True, "reachable"), CheckStep("bucket", True, "found")])
+
+
+def make_worker_service(docker_client, session_factory=None, *, checker=None, ls_remote=None, **overrides):
+    """ A WorkerService with no real network, database, InfluxDB, or git; git builds run inline. """
+    from server.services.connection_service import ConnectionService
+    from server.services.image_builder import WorkerImageBuilder
+    from server.services.worker_service import WorkerService
+
+    kwargs = {
+        "worker_network": None,
+        "connections": ConnectionService(checker=checker or FakeChecker()),
+        "image_builder": WorkerImageBuilder(
+            docker_client,
+            ls_remote=ls_remote or (lambda remote, ref: ""),
+        ),
+        "session_factory": session_factory,
+        "run_in_background": lambda build: build(),
+        "worker_database_url": "postgresql+psycopg://telemetry:telemetry@db:5432/telemetry",
+        "worker_server_url": "http://server:8000",
+    }
+    kwargs.update(overrides)
+    return WorkerService(docker_client, **kwargs)
 
 
 class FakeClock:
@@ -230,11 +247,15 @@ class SeededEvent:
     event_name: str
     vehicle_id: int
     signal_ids: dict[str, int]
+    connection_id: int
 
 
 def seed_basic_event(engine) -> SeededEvent:
-    """Insert a vehicle, an unprocessed event, and two signals ('speed', 'power')."""
+    """Insert a vehicle, an unprocessed event, two signals ('speed', 'power'), and a default InfluxDB connection."""
     with Session(engine) as session:
+        connection = Connection(kind=ConnectionKind.INFLUXDB, is_default=True, **TEST_CONNECTION)
+        session.add(connection)
+
         vehicle = Vehicle(name="TestVehicle", description="test")
         session.add(vehicle)
         session.flush()
@@ -271,6 +292,7 @@ def seed_basic_event(engine) -> SeededEvent:
             event_name=event.name,
             vehicle_id=vehicle.id,
             signal_ids=signal_ids,
+            connection_id=connection.id,
         )
 
 
@@ -293,8 +315,9 @@ def api_client(session_factory):
 
     from server.deps import get_db, get_db_session_factory
     from server.main import create_app
+    from server.routes.connections import get_connection_service
     from server.routes.workers import get_worker_service
-    from server.services.worker_service import WorkerService
+    from server.services.connection_service import ConnectionService
     from tests.infrastructure.test_worker_service import FakeDockerClient
 
     app = create_app(lifespan=None)
@@ -306,16 +329,14 @@ def api_client(session_factory):
         finally:
             db.close()
 
-    service = WorkerService(
-        FakeDockerClient(),
-        worker_network=None,
-        configuration_profiles=TEST_PROFILES,
-        default_configuration_profile=TEST_PROFILES[0],
-    )
+    checker = FakeChecker()
+    service = make_worker_service(FakeDockerClient(), session_factory, checker=checker)
+    connections = ConnectionService(checker=checker)
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_db_session_factory] = lambda: session_factory
     app.dependency_overrides[get_worker_service] = lambda: service
+    app.dependency_overrides[get_connection_service] = lambda: connections
 
     with TestClient(app) as client:
         yield client

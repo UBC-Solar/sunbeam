@@ -2,6 +2,7 @@ import {WorkerStatus} from "../api";
 
 const STATUS_META: Record<WorkerStatus, {label: string; color: string}> = {
   requested: {label: "Requested", color: "var(--status-warning)"},
+  building: {label: "Building image", color: "var(--status-warning)"},
   starting: {label: "Starting", color: "var(--status-warning)"},
   running: {label: "Running", color: "var(--status-good)"},
   stop_requested: {label: "Stop requested", color: "var(--status-warning)"},

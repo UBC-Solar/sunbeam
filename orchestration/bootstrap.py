@@ -19,6 +19,14 @@ from orchestration.control import (
 logger = logging.getLogger("sunbeam.worker")
 
 
+def _describe_influx_connection() -> str | None:
+    try:
+        telemetry_db = Context().telemetry_db
+    except RuntimeError:
+        return None
+    return f"external: {telemetry_db.database_url} / {telemetry_db.bucket}"
+
+
 def build_control(serverless: bool, event_name: str, *, reprocess: bool = False) -> WorkerControl:
     if serverless:
         return ServerlessWorkerControl()
@@ -37,7 +45,7 @@ def build_control(serverless: bool, event_name: str, *, reprocess: bool = False)
             event_name=event_name,
             pipeline_edition=pipeline_edition,
             # Shown on the dashboard for this worker
-            configuration_profile=Context().configuration_profile,
+            influx_connection_name=_describe_influx_connection(),
             reprocess=reprocess,
         )
     except requests.exceptions.ConnectionError as exc:

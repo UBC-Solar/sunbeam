@@ -26,9 +26,9 @@ class TestBuildControl:
         registrations = []
 
         def fake_register(
-                cls=None, *, event_name, pipeline_edition, base_url=None, configuration_profile=None, reprocess=False,
+                cls=None, *, event_name, pipeline_edition, base_url=None, influx_connection_name=None, reprocess=False,
         ):
-            registrations.append((event_name, pipeline_edition, configuration_profile, reprocess))
+            registrations.append((event_name, pipeline_edition, influx_connection_name, reprocess))
             return OrchestratorClient(
                 base_url="http://server:9000", worker_run_id=uuid.uuid4()
             )
@@ -38,8 +38,8 @@ class TestBuildControl:
         control = build_control(False, "realtime")
 
         assert isinstance(control, OrchestratedWorkerControl)
-        # The pipeline edition comes from events.toml for the event; the profile is the one this process loaded
-        assert registrations == [("realtime", "v3_0", "test", False)]
+        # The pipeline edition comes from events.toml for the event; the connection is the one this process was given
+        assert registrations == [("realtime", "v3_0", "external: http://localhost:8086 / test-bucket", False)]
 
     def test_unreachable_server_exits_with_guidance(self, monkeypatch, test_context):
         monkeypatch.delenv("SUNBEAM_WORKER_RUN_ID", raising=False)

@@ -5,12 +5,14 @@ import pytest
 
 pytest.importorskip("docker")
 
-from docker.errors import DockerException, NotFound
+from docker.errors import BuildError, DockerException, ImageNotFound, NotFound
 
-from db.sunbeamdb.models import Event, WorkerKind, WorkerRun, WorkerStatus
+from db.sunbeamdb.models import Connection, Event, WorkerKind, WorkerRun, WorkerStatus
+from server.services.connection_service import ConnectionTestFailed
 from server.services.metrics_cache import MetricsCache
-from server.services.worker_service import WorkerService
-from tests.infrastructure.conftest import TEST_PROFILES, naive_utcnow
+from tests.infrastructure.conftest import FakeChecker, make_worker_service, naive_utcnow
+
+SHA = "0123456789abcdef0123456789abcdef01234567"
 
 
 class FakeContainer:
@@ -50,9 +52,29 @@ class FakeContainers:
         return self.by_id[container_id]
 
 
+class FakeImages:
+    def __init__(self):
+        self.tags: set[str] = set()
+        self.build_calls = []
+        self.fail_build_with = None
+
+    def get(self, tag):
+        if tag not in self.tags:
+            raise ImageNotFound(f"No such image: {tag}")
+        return tag
+
+    def build(self, **kwargs):
+        self.build_calls.append(kwargs)
+        if self.fail_build_with is not None:
+            raise self.fail_build_with
+        self.tags.add(kwargs["tag"])
+        return kwargs["tag"], iter([])
+
+
 class FakeDockerClient:
     def __init__(self):
         self.containers = FakeContainers()
+        self.images = FakeImages()
 
 
 @pytest.fixture(autouse=True)
@@ -75,13 +97,20 @@ def fake_docker():
 
 
 @pytest.fixture
-def service(fake_docker):
-    return WorkerService(
-        fake_docker,
-        worker_network=None,
-        configuration_profiles=TEST_PROFILES,
-        default_configuration_profile=TEST_PROFILES[0],
-    )
+def checker():
+    return FakeChecker()
+
+
+def fake_ls_remote(remote, ref):
+    return {
+        "v4_0": f"{SHA}\trefs/heads/v4_0\n{'f' * 40}\trefs/heads/feature/v4_0\n",
+        "v1.0": f"{'a' * 40}\trefs/tags/v1.0\n{SHA}\trefs/tags/v1.0^{{}}\n",
+    }.get(ref, "")
+
+
+@pytest.fixture
+def service(fake_docker, session_factory, checker):
+    return make_worker_service(fake_docker, session_factory, checker=checker, ls_remote=fake_ls_remote)
 
 
 @pytest.fixture
@@ -122,33 +151,70 @@ class TestLaunchWorker:
         assert run_kwargs["environment"]["SUNBEAM_WORKER_RUN_ID"] == str(worker.id)
         assert run_kwargs["labels"]["sunbeam.kind"] == "worker"
 
-    def test_launch_defaults_to_the_default_profile_without_reprocessing(self, service, fake_docker, db, seeded_event):
+    def test_launch_defaults_to_the_default_connection_without_reprocessing(
+        self, service, fake_docker, db, seeded_event,
+    ):
         worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0")
 
-        assert worker.configuration_profile == "debug"
+        assert (worker.influx_connection_id, worker.influx_connection_name) == (seeded_event.connection_id, "test-influx")
         assert worker.reprocess is False
         environment = fake_docker.containers.run_calls[0]["environment"]
-        assert environment["SUNBEAM_CONFIGURATION_PROFILE"] == "debug"
         assert environment["SUNBEAM_REPROCESS"] == "false"
 
-    def test_launch_passes_the_chosen_profile_and_reprocess(self, service, fake_docker, db, seeded_event):
+    def test_launch_hands_the_worker_every_connection(self, service, fake_docker, db, seeded_event):
+        service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0")
+
+        environment = fake_docker.containers.run_calls[0]["environment"]
+        assert environment["SUNBEAM_INFLUX_URL"] == "http://influx.test:8086"
+        assert environment["SUNBEAM_INFLUX_ORG"] == "test-org"
+        assert environment["SUNBEAM_INFLUX_BUCKET"] == "test-bucket"
+        assert environment["SUNBEAM_INFLUX_TOKEN"] == "test-token"
+        assert environment["SUNBEAM_DATABASE_URL"] == "postgresql+psycopg://telemetry:telemetry@db:5432/telemetry"
+        assert environment["SUNBEAM_SERVER_URL"] == "http://server:8000"
+        assert "SUNBEAM_CONFIGURATION_PROFILE" not in environment
+
+    def test_launch_uses_the_chosen_connection_and_reprocess(self, service, fake_docker, db, seeded_event):
+        other = Connection(name="other", url="http://other:8086", organization="o", bucket="b2", token="t2")
+        db.add(other)
+        db.commit()
+
         worker = service.launch_worker(
             db, event_id=seeded_event.event_id, pipeline_edition="v3_0",
-            configuration_profile="production", reprocess=True,
+            influx_connection_id=other.id, reprocess=True,
         )
 
-        assert (worker.configuration_profile, worker.reprocess) == ("production", True)
+        assert (worker.influx_connection_name, worker.reprocess) == ("other", True)
         environment = fake_docker.containers.run_calls[0]["environment"]
-        assert environment["SUNBEAM_CONFIGURATION_PROFILE"] == "production"
+        assert environment["SUNBEAM_INFLUX_BUCKET"] == "b2"
         assert environment["SUNBEAM_REPROCESS"] == "true"
 
-    def test_launch_unknown_profile_rejected(self, service, fake_docker, db, seeded_event):
-        with pytest.raises(ValueError, match="Unknown configuration profile"):
+    def test_launch_unknown_connection_rejected(self, service, fake_docker, db, seeded_event):
+        with pytest.raises(ValueError, match="No connection exists"):
             service.launch_worker(
-                db, event_id=seeded_event.event_id, pipeline_edition="v3_0", configuration_profile="nope",
+                db, event_id=seeded_event.event_id, pipeline_edition="v3_0", influx_connection_id=999,
             )
 
         assert fake_docker.containers.run_calls == []
+
+    def test_launch_tests_the_connection_over_the_event(self, service, checker, db, seeded_event):
+        db.get(Event, seeded_event.event_id).ends_at = datetime(2026, 7, 1, 13, 0, 0)
+        db.commit()
+
+        service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0")
+
+        start, stop = checker.calls[0]["window"]
+        assert (start.hour, stop.hour) == (12, 13)
+        assert db.get(Connection, seeded_event.connection_id).last_test_ok is True
+
+    def test_failing_connection_fails_fast_without_a_worker(self, service, checker, fake_docker, db, seeded_event):
+        checker.fail_with = "no data in 'test-bucket'"
+
+        with pytest.raises(ConnectionTestFailed, match="no data in 'test-bucket'"):
+            service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0")
+
+        assert fake_docker.containers.run_calls == []
+        assert db.query(WorkerRun).count() == 0
+        assert db.get(Connection, seeded_event.connection_id).last_test_ok is False
 
     def test_replay_always_reprocesses(self, service, fake_docker, db, seeded_event):
         db.get(Event, seeded_event.event_id).ends_at = datetime(2026, 7, 1, 13, 0, 0)
@@ -183,6 +249,102 @@ class TestLaunchWorker:
             service.launch_worker(db, event_id=999_999, pipeline_edition="v3_0")
 
 
+class TestGitSource:
+    def test_branch_is_resolved_and_built_before_launch(self, service, fake_docker, db, seeded_event):
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref="v4_0")
+
+        db.refresh(worker)
+        assert (worker.source_ref, worker.source_sha) == ("v4_0", SHA)
+        assert worker.image_tag == f"sunbeam-worker:v3_0-{SHA[:12]}"
+        assert worker.status == WorkerStatus.STARTING
+
+        build = fake_docker.images.build_calls[0]
+        assert build["tag"] == worker.image_tag
+        assert build["buildargs"]["GIT_REF"] == SHA
+        assert build["buildargs"]["PIPELINE_EDITION"] == "v3_0"
+        assert "path" not in build  # the Dockerfile clones the code; there is no local build context
+        assert fake_docker.containers.run_calls[0]["image"] == worker.image_tag
+
+    def test_annotated_tag_resolves_to_its_commit(self, service, db, seeded_event):
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref="v1.0")
+
+        assert worker.source_sha == SHA
+
+    def test_full_sha_is_used_as_is(self, service, db, seeded_event):
+        sha = "b" * 40
+
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref=sha)
+
+        assert worker.source_sha == sha
+
+    def test_already_built_commit_skips_the_build(self, service, fake_docker, db, seeded_event):
+        fake_docker.images.tags.add(f"sunbeam-worker:v3_0-{SHA[:12]}")
+
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref="v4_0")
+
+        assert fake_docker.images.build_calls == []
+        assert worker.status == WorkerStatus.STARTING
+
+    def test_new_build_starts_as_building(self, fake_docker, session_factory, db, seeded_event):
+        builds = []
+        service = make_worker_service(
+            fake_docker, session_factory, ls_remote=fake_ls_remote, run_in_background=builds.append,
+        )
+
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref="v4_0")
+
+        assert worker.status == WorkerStatus.BUILDING
+        assert worker.container_id is None
+        assert len(builds) == 1 and fake_docker.containers.run_calls == []
+
+    def test_stop_while_building_launches_nothing(self, fake_docker, session_factory, db, seeded_event):
+        builds = []
+        service = make_worker_service(
+            fake_docker, session_factory, ls_remote=fake_ls_remote, run_in_background=builds.append,
+        )
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref="v4_0")
+        service.request_stop(db, worker.id)
+
+        builds[0]()
+
+        db.refresh(worker)
+        assert worker.status == WorkerStatus.CANCELLED
+        assert fake_docker.containers.run_calls == []
+
+    def test_failed_build_fails_the_worker_with_the_log(self, service, fake_docker, db, seeded_event):
+        fake_docker.images.fail_build_with = BuildError(
+            "The command returned a non-zero code: 1",
+            [{"stream": "Step 5/7 : RUN test -f ..."}, {"error": "predates server-managed connections"}],
+        )
+
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref="v4_0")
+
+        db.refresh(worker)
+        assert worker.status == WorkerStatus.FAILED
+        assert "predates server-managed connections" in worker.failure_reason
+        assert fake_docker.containers.run_calls == []
+
+    def test_unknown_ref_rejected(self, service, db, seeded_event):
+        with pytest.raises(ValueError, match="No branch or tag named 'nope'"):
+            service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref="nope")
+
+    def test_short_sha_rejected_with_guidance(self, service, db, seeded_event):
+        with pytest.raises(ValueError, match="full 40-character SHA"):
+            service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref="abc1234")
+
+    def test_ref_skips_the_local_edition_check(self, service, db, seeded_event):
+        # A newer commit may define editions this copy of the code doesn't know
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v9_9", source_ref="v4_0")
+
+        assert worker.image_tag == f"sunbeam-worker:v9_9-{SHA[:12]}"
+
+    def test_blank_ref_means_local(self, service, fake_docker, db, seeded_event):
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref="  ")
+
+        assert worker.source_ref is None
+        assert fake_docker.containers.run_calls[0]["image"] == "sunbeam-worker:v3_0"
+
+
 class TestRegisterWorker:
     def test_register_creates_external_worker(self, service, db, seeded_event):
         worker = service.register_worker(
@@ -200,13 +362,13 @@ class TestRegisterWorker:
         assert worker.host == "joshuas-laptop"
         assert worker.started_at is not None
 
-    def test_register_records_the_workers_profile_and_reprocess(self, service, db, seeded_event):
+    def test_register_records_the_workers_connection_and_reprocess(self, service, db, seeded_event):
         worker = service.register_worker(
             db, event_name=seeded_event.event_name, pipeline_edition="v3_0", host="laptop",
-            configuration_profile="production", reprocess=True,
+            influx_connection_name="external: http://localhost:8086 / CAN_log", reprocess=True,
         )
 
-        assert (worker.configuration_profile, worker.reprocess) == ("production", True)
+        assert (worker.influx_connection_name, worker.reprocess) == ("external: http://localhost:8086 / CAN_log", True)
 
     def test_registered_worker_can_heartbeat_and_complete(self, service, db, seeded_event):
         worker = service.register_worker(

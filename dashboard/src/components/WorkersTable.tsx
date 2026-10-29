@@ -51,7 +51,7 @@ export function WorkersTable({workers, events, onSelect, onStop}: WorkersTablePr
           <tr>
             <th>Status</th>
             <th>Event</th>
-            <th>Edition · profile</th>
+            <th>Edition · connection</th>
             {tab === "active" ? (
               <>
                 <th>Stage</th>
@@ -84,7 +84,8 @@ export function WorkersTable({workers, events, onSelect, onStop}: WorkersTablePr
               <td>{eventNameById.get(String(worker.event_id)) ?? worker.event_id}</td>
               <td className="text-secondary">
                 {worker.pipeline_edition}
-                {worker.configuration_profile ? ` · ${worker.configuration_profile}` : ""}
+                {worker.source_ref ? ` @ ${worker.source_ref}` : ""}
+                {worker.influx_connection_name ? ` · ${worker.influx_connection_name}` : ""}
               </td>
               {tab === "active" ? (
                 <>

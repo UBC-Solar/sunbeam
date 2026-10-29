@@ -43,6 +43,7 @@ class WatchdogService:
         heartbeat_timeout_s: float = 10.0,
         startup_grace_s: float = 60.0,
         stop_grace_s: float = 30.0,
+        build_timeout_s: float = 20 * 60.0,
     ) -> None:
         self._docker = docker_client if docker_client is not None else docker.from_env()
         # A zero-arg callable returning a Session; resolved lazily so tests
@@ -52,6 +53,7 @@ class WatchdogService:
         self._heartbeat_timeout_s = heartbeat_timeout_s
         self._startup_grace_s = startup_grace_s
         self._stop_grace_s = stop_grace_s
+        self._build_timeout_s = build_timeout_s
 
         self._shutdown_event = threading.Event()
         self._thread = threading.Thread(
@@ -127,8 +129,18 @@ class WatchdogService:
             return
 
         if worker.container_id is None:
-            age_s = (now - worker.created_at).total_seconds()
-            if age_s > self._startup_grace_s:
+            if worker.stop_requested:
+                # The image build checks for this before launching anything
+                self._resolve(db, worker, WorkerStatus.CANCELLED, "Stopped before its container launched.")
+                return
+
+            if worker.status == WorkerStatus.BUILDING:
+                if (now - worker.created_at).total_seconds() > self._build_timeout_s:
+                    self._resolve(db, worker, WorkerStatus.FAILED, "Worker image build timed out.")
+                return
+
+            # started_at is stamped when the launch begins, which for a git build is long after created_at
+            if (now - (worker.started_at or worker.created_at)).total_seconds() > self._startup_grace_s:
                 self._resolve(
                     db, worker, WorkerStatus.LOST,
                     "Worker never launched a container.",
@@ -183,7 +195,7 @@ class WatchdogService:
                 return
 
         if worker.status in (WorkerStatus.REQUESTED, WorkerStatus.STARTING):
-            if (now - worker.created_at).total_seconds() > self._startup_grace_s:
+            if (now - (worker.started_at or worker.created_at)).total_seconds() > self._startup_grace_s:
                 self._resolve(db, worker, WorkerStatus.LOST, "Worker never became healthy.")
 
     def _check_external_worker(self, db, worker: WorkerRun, now: datetime) -> None:

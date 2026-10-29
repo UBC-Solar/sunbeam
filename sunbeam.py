@@ -1,6 +1,8 @@
 from orchestration.bootstrap import build_control
 from orchestration.control import ServerlessWorkerControl, OrchestratedWorkerControl
-from config.context import Context, ServiceType
+from config import EventManager
+from config.context import INFLUX_ENV, Context
+from db.telemetrydb.connection_check import event_window
 from pipeline.preflight import run_preflight_checks
 from sqlalchemy import create_engine
 from pipeline import Executor
@@ -28,7 +30,12 @@ class Sunbeam:
         resolved_control = control or ServerlessWorkerControl()
         is_orchestrated = isinstance(resolved_control, OrchestratedWorkerControl)
 
-        results = run_preflight_checks(self._engine, check_server=is_orchestrated)
+        event = EventManager().get_event(event_name)
+        results = run_preflight_checks(
+            self._engine,
+            check_server=is_orchestrated,
+            window=event_window(event.starts_at, event.ends_at),
+        )
         failures = [r for r in results if not r.ok]
 
         if failures:
@@ -51,6 +58,24 @@ class Sunbeam:
             control=resolved_control,
         )
         executor.run()
+
+
+_CONNECTION_FLAGS = {
+    "influx-url": INFLUX_ENV["database_url"],
+    "influx-org": INFLUX_ENV["organization"],
+    "influx-bucket": INFLUX_ENV["bucket"],
+    "influx-token": INFLUX_ENV["token"],
+    "database-url": "SUNBEAM_DATABASE_URL",
+    "server-url": "SUNBEAM_SERVER_URL",
+}
+
+
+def apply_connection_flags(args: argparse.Namespace) -> None:
+    """ Context reads only the environment, so flags given on the command line become variables. """
+    for flag, env in _CONNECTION_FLAGS.items():
+        value = getattr(args, flag.replace("-", "_"))
+        if value:
+            os.environ[env] = value
 
 
 def parse_args():
@@ -80,14 +105,10 @@ def parse_args():
         help="Reprocess an existing event.",
     )
 
-    parser.add_argument(
-        "--configuration",
-        default=os.environ.get("SUNBEAM_CONFIGURATION_PROFILE", "production"),
-        help=(
-            "The context.toml configuration profile to use (e.g. debug or production). "
-            "Defaults to SUNBEAM_CONFIGURATION_PROFILE, then context.toml's [main].default_config."
-        ),
-    )
+    # Where to find everything; each defaults to its environment variable (see config/context.py). A worker the
+    # server launches gets these set for it, from the connection chosen on the dashboard.
+    for flag, env in _CONNECTION_FLAGS.items():
+        parser.add_argument(f"--{flag}", default=None, help=f"Overrides ${env}.")
 
     return parser.parse_args()
 
@@ -100,7 +121,7 @@ if __name__ == "__main__":
 
     args = parse_args()
 
-    configuration_profile = args.configuration.lower() if args.configuration else None
+    apply_connection_flags(args)
 
     is_worker = "SUNBEAM_WORKER_RUN_ID" in os.environ
 
@@ -109,13 +130,10 @@ if __name__ == "__main__":
     else:
         is_serverless = args.serverless
 
-    service_type = ServiceType.Worker if is_worker else ServiceType.Client
-    Context.load(service_type, configuration_profile)
-
     logger.info(
         "Resolved worker configuration: %s",
         {
-            "service_type": service_type.value,
+            "launched_by_server": is_worker,
             "is_serverless": is_serverless,
             "worker_run_id": os.environ.get("SUNBEAM_WORKER_RUN_ID"),
             "pipeline_edition": os.environ.get("SUNBEAM_PIPELINE_EDITION"),

@@ -20,6 +20,7 @@ EXPECTED_TABLES = {
     "event",
     "signal",
     "worker_run",
+    "connection",
     "raw_sample",
     "aligned_sample",
 }
@@ -82,6 +83,52 @@ class TestMigrations:
             engine.dispose()
 
         assert EXPECTED_TABLES.isdisjoint(tables)
+
+
+class TestConnectionsMigration:
+    """ c7e2a91f5d3b: context.toml's profiles become connection rows. """
+
+    def test_seeds_connections_and_maps_old_profiles(self, alembic_config):
+        from sqlalchemy import create_engine
+
+        config, url = alembic_config
+        command.upgrade(config, "a3c1e7d2b9f4")
+
+        engine = create_engine(url)
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("INSERT INTO vehicle (name) VALUES ('Brightside')"))
+                conn.execute(text(
+                    "INSERT INTO event (name, vehicle_id, starts_at, pipeline_edition, status) "
+                    "SELECT 'e', id, now(), 'v3_0', 'UNPROCESSED' FROM vehicle"
+                ))
+                for profile in ("debug", "production", "staging"):
+                    conn.execute(
+                        text(
+                            "INSERT INTO worker_run (id, event_id, pipeline_edition, status, stop_requested, "
+                            "configuration_profile) SELECT gen_random_uuid(), id, 'v3_0', 'COMPLETED', false, :p "
+                            "FROM event"
+                        ),
+                        {"p": profile},
+                    )
+
+            command.upgrade(config, "head")
+
+            with engine.connect() as conn:
+                connections = conn.execute(
+                    text("SELECT name, bucket, is_default FROM connection ORDER BY id")
+                ).all()
+                runs = dict(conn.execute(text(
+                    "SELECT influx_connection_name, influx_connection_id IS NOT NULL FROM worker_run"
+                )).all())
+                statuses = set(conn.scalars(text("SELECT unnest(enum_range(NULL::workerstatus))::text")))
+        finally:
+            engine.dispose()
+
+        assert connections == [("UBC Influx (CAN_log)", "CAN_log", True), ("Production (CAN_prod)", "CAN_prod", False)]
+        # Known profiles link to their connection; an unknown one keeps its name only
+        assert runs == {"UBC Influx (CAN_log)": True, "Production (CAN_prod)": True, "staging": False}
+        assert "BUILDING" in statuses
 
 
 class TestServerStartupUpgrade:

@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 import pytest
 from data_tools.localization import CanonicalName
 
-from db.telemetrydb.realtime_ingress import DebugTimeProvider
 from stage.v3_0.ingress import Ingress, MissingDataTracker
 from state.frame import FrameView
 
@@ -85,11 +84,18 @@ CURRENT_FIELD = "PackCurrent"
 TIME_PROVIDER_START = datetime(2024, 7, 16, 14, 0, tzinfo=timezone.utc)
 
 
+class FixedTimeProvider:
+    """ A clock stopped at TIME_PROVIDER_START, so signals localize to that day's tables. """
+
+    def now(self, tz: timezone) -> datetime:
+        return TIME_PROVIDER_START.astimezone(tz)
+
+
 def make_ingress(responses: list[dict], data_grace_s: float = 1.0) -> Ingress:
     return Ingress(
         output_signals=[SPEED, CURRENT],
         frequency=10.0,
-        time_provider=DebugTimeProvider(start_time=TIME_PROVIDER_START),
+        time_provider=FixedTimeProvider(),
         ingress_client=FakeRealtimeIngress(responses),
         data_grace_s=data_grace_s,
     )

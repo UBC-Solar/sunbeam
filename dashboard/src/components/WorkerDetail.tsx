@@ -142,8 +142,19 @@ export function WorkerDetail({worker, events, onClose, onStop}: WorkerDetailProp
           <dt>Pipeline edition</dt>
           <dd>{worker.pipeline_edition}</dd>
 
-          <dt>Profile</dt>
-          <dd>{worker.configuration_profile ?? "—"}</dd>
+          <dt>Source</dt>
+          <dd>
+            {worker.source_ref ? (
+              <>
+                {worker.source_ref} <span className="mono text-secondary">{worker.source_sha?.slice(0, 7)}</span>
+              </>
+            ) : (
+              "Server's working copy"
+            )}
+          </dd>
+
+          <dt>InfluxDB</dt>
+          <dd>{worker.influx_connection_name ?? "—"}</dd>
 
           <dt>Reprocess</dt>
           <dd>{worker.reprocess ? "Yes" : "No"}</dd>

@@ -1,4 +1,3 @@
-import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -22,24 +21,16 @@ def _database_url() -> str:
     Resolution order:
       1. config.attributes["sunbeam_database_url"] (programmatic callers,
          e.g. server startup passing its own engine's URL)
-      2. SUNBEAM_DATABASE_URL environment variable (CI, ad-hoc targets)
-      3. The server configuration from context.toml (normal operation)
+      2. SUNBEAM_DATABASE_URL, defaulting to the docker-compose database on
+         localhost (see config/context.py)
     """
     url = config.attributes.get("sunbeam_database_url")
     if url:
         return url
 
-    url = os.environ.get("SUNBEAM_DATABASE_URL")
-    if url:
-        return url
+    from config.context import Context
 
-    from config.context import Context, ServiceType
-
-    return (
-        Context.load(ServiceType.Server)
-        .sunbeam_db.build_url()
-        .render_as_string(hide_password=False)
-    )
+    return Context().sunbeam_db.build_url().render_as_string(hide_password=False)
 
 
 def run_migrations_offline() -> None:

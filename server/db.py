@@ -1,7 +1,7 @@
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import sessionmaker
 
-from config.context import Context, ServiceType
+from config.context import Context
 
 # Created lazily so that importing server modules never requires a resolved
 # database configuration (e.g. in tests, which override get_db instead).
@@ -13,7 +13,7 @@ def get_engine() -> Engine:
     global _engine
     if _engine is None:
         _engine = create_engine(
-            Context.load(ServiceType.Server).sunbeam_db.build_url(),
+            Context().sunbeam_db.build_url(),
             echo=False,
             pool_pre_ping=True,
         )

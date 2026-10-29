@@ -12,9 +12,8 @@ from sqlalchemy.orm import Session
 
 from db.sunbeamdb.models import WorkerRun, WorkerStatus
 from server.services.watchdog_service import WatchdogService
-from server.services.worker_service import WorkerService
 from tests.infrastructure.test_worker_service import FakeDockerClient
-from tests.infrastructure.conftest import TEST_PROFILES
+from tests.infrastructure.conftest import make_worker_service
 
 pytestmark = pytest.mark.postgres
 
@@ -40,12 +39,7 @@ class TestAwareDatetimeRoundTrips:
         self, pg_engine, pg_session_factory, pg_seeded_event
     ):
         worker = make_worker(pg_session_factory, pg_seeded_event)
-        service = WorkerService(
-            FakeDockerClient(),
-            worker_network=None,
-            configuration_profiles=TEST_PROFILES,
-            default_configuration_profile=TEST_PROFILES[0],
-        )
+        service = make_worker_service(FakeDockerClient())
 
         with pg_session_factory() as db:
             service.heartbeat(

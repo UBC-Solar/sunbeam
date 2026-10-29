@@ -1,16 +1,17 @@
 import {useEffect, useMemo, useState} from "react";
 import {
-  ConfigurationProfiles,
+  Connection,
   Event,
   LaunchOptions,
   WorkerRun,
-  getConfigurationProfiles,
+  getConnections,
   getEvents,
   getPipelineEditions,
   getWorkers,
   launchWorker,
   stopWorker,
 } from "./api";
+import {ConnectionsPanel} from "./components/ConnectionsPanel";
 import {LaunchDialog} from "./components/LaunchDialog";
 import {WorkerDetail} from "./components/WorkerDetail";
 import {WorkersTable} from "./components/WorkersTable";
@@ -19,7 +20,7 @@ function App() {
   const [events, setEvents] = useState<Event[]>([]);
   const [workers, setWorkers] = useState<WorkerRun[]>([]);
   const [editions, setEditions] = useState<string[]>([]);
-  const [profiles, setProfiles] = useState<ConfigurationProfiles | null>(null);
+  const [connections, setConnections] = useState<Connection[]>([]);
   const [launchingEvent, setLaunchingEvent] = useState<Event | null>(null);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
 
@@ -28,17 +29,17 @@ function App() {
 
   async function refresh() {
     try {
-      const [eventsData, workersData, editionsData, profilesData] = await Promise.all([
+      const [eventsData, workersData, editionsData, connectionsData] = await Promise.all([
         getEvents(),
         getWorkers(),
         getPipelineEditions(),
-        getConfigurationProfiles(),
+        getConnections(),
       ]);
 
       setEvents(eventsData);
       setWorkers(workersData);
       setEditions(editionsData);
-      setProfiles(profilesData);
+      setConnections(connectionsData);
       setError(null);
       setLoaded(true);
     } catch (err) {
@@ -107,7 +108,8 @@ function App() {
                       <button
                         className="primary"
                         onClick={() => setLaunchingEvent(event)}
-                        disabled={profiles === null}
+                        disabled={connections.length === 0}
+                        title={connections.length === 0 ? "Add an InfluxDB connection first" : undefined}
                       >
                         Launch worker…
                       </button>
@@ -124,14 +126,16 @@ function App() {
             onSelect={(worker) => setSelectedWorkerId(worker.id)}
             onStop={onStop}
           />
+
+          <ConnectionsPanel connections={connections} events={events} onChanged={refresh} />
         </>
       )}
 
-      {launchingEvent && profiles && (
+      {launchingEvent && (
         <LaunchDialog
           event={launchingEvent}
           editions={editions}
-          profiles={profiles}
+          connections={connections}
           onCancel={() => setLaunchingEvent(null)}
           onLaunch={(options) => onLaunch(launchingEvent, options)}
         />

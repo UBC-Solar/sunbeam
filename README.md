@@ -78,7 +78,7 @@ tests/          v3_0/ (pure stage unit tests), infrastructure/ (everything else,
 
 ### Configuration Files
 ```
-config/*.toml              events.toml, vehicles.toml, context.toml (deployment config)
+config/*.toml              events.toml, vehicles.toml (connections come from the environment and the dashboard; see docs/USAGE.md)
 stage/stage_registry.toml  Stage name -> class registry, per pipeline edition
 ```
 

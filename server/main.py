@@ -1,19 +1,18 @@
-from server.routes import configuration_profiles, data, debug, events, workers, pipeline_editions
+from server.routes import connections, data, debug, events, workers, pipeline_editions
+from server.services.image_builder import WorkerImageBuilder
 from server.services.watchdog_service import WatchdogService
 from server.preflight import check_docker, check_postgres
 from server.db import get_engine
 from server.migrations import upgrade_database
 from config import VehicleManager, EventManager, SignalManager
 from fastapi.middleware.cors import CORSMiddleware
-from config.context import Context, ServiceType
+from config.context import Context
 from stage.stage_library import StageLibrary
 from sqlalchemy import create_engine, text
 from dataclasses import dataclass
 from docker.errors import DockerException
 from fastapi import FastAPI, HTTPException
 from typing import Mapping
-import os
-import pathlib
 import logging
 from contextlib import asynccontextmanager
 import docker
@@ -50,41 +49,21 @@ async def lifespan(app: FastAPI):
     on_shutdown()
 
 
-PROJECT_ROOT = pathlib.Path(__file__).parent.parent.absolute()
-
-
 def build_workers() -> Mapping[str, PipelineWorker]:
+    """ One image per pipeline edition from this copy of the code; launches from a git ref build their own. """
     library = StageLibrary()
-    client = docker.from_env()
+    builder = WorkerImageBuilder(docker.from_env())
 
-    worker_versions = {}
-    for pipeline_edition in library.pipeline_editions:
-        tag = f"sunbeam-worker:{pipeline_edition}"
-        logger.info("Building worker image: %s", tag)
-
-        client.images.build(
-            path=str(PROJECT_ROOT),
-            dockerfile="pipeline/Dockerfile",
-            tag=tag,
-            rm=True,
-            buildargs={
-                "PIPELINE_EDITION": pipeline_edition,
-            },
-        )
-
-        worker_versions[pipeline_edition] = PipelineWorker(pipeline_edition, tag)
-        logger.info("Built worker image: %s", tag)
-
-    return worker_versions
+    return {
+        pipeline_edition: PipelineWorker(pipeline_edition, builder.build_local(pipeline_edition))
+        for pipeline_edition in library.pipeline_editions
+    }
 
 
 def on_shutdown():
     pass
 
 def on_startup() -> None:
-    # e.g. `SUNBEAM_CONFIGURATION_PROFILE=production docker compose up`; unset or empty means context.toml's default
-    Context.load(ServiceType.Server, os.environ.get("SUNBEAM_CONFIGURATION_PROFILE") or None)
-
     logger.info("Resolved server configuration: %s", Context().describe())
 
     engine = create_engine(Context().sunbeam_db.build_url(), echo=False)
@@ -145,7 +124,7 @@ def create_app(lifespan=lifespan) -> FastAPI:
     app.include_router(events.router)
     app.include_router(workers.router)
     app.include_router(pipeline_editions.router)
-    app.include_router(configuration_profiles.router)
+    app.include_router(connections.router)
     app.include_router(data.router)
     app.include_router(debug.router)
 

@@ -26,10 +26,10 @@ class OfflineIngressQuerier:
 
     def __init__(
             self,
-            bucket: str | None = "CAN_log",
-            organization: str | None = "8a0b66d77a331e96",
-            url: str | None = "http://influxdb.telemetry.ubcsolar.com",
-            token: str | None = "s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==",
+            bucket: str | None = None,
+            organization: str | None = None,
+            url: str | None = None,
+            token: str | None = None,
             timeout_s: float = 30.0,
             fields: Iterable[CanonicalName] | None = None,
             observer: IngressObserver | None = None,
@@ -80,11 +80,14 @@ class OfflineIngressQuerier:
 
 if __name__ == "__main__":
 
+    from config.context import Context
+
+    telemetry_db = Context().telemetry_db
     reader = OfflineIngressQuerier(
-        bucket="CAN_log",
-        organization="8a0b66d77a331e96",
-        url="http://influxdb.telemetry.ubcsolar.com",
-        token="s4Z9_S6_O09kDzYn1KZcs7LVoCA2cVK9_ObY44vR4xMh-wYLSWBkypS0S0ZHQgBvEV2A5LgvQ1IKr8byHes2LA==",
+        bucket=telemetry_db.bucket,
+        organization=telemetry_db.organization,
+        url=telemetry_db.database_url,
+        token=telemetry_db.token,
         fields=(
             "TotalPackVoltage",
             "PackCurrent",

@@ -27,10 +27,9 @@ services:
     init: true
     environment:
       PYTHONUNBUFFERED: "1"
-      # Which context.toml profile the server loads, and the default for workers it launches. Set it in the
-      # shell (`SUNBEAM_CONFIGURATION_PROFILE=production docker compose up`) or in a .env file next to this one;
-      # unset means context.toml's [main].default_config.
-      SUNBEAM_CONFIGURATION_PROFILE: ${SUNBEAM_CONFIGURATION_PROFILE:-}
+      # The Postgres the server uses, and hands to every worker it launches. Defaults to the `db` service above;
+      # override in the shell or a .env file next to this one. InfluxDB connections live in the dashboard.
+      SUNBEAM_DATABASE_URL: ${SUNBEAM_DATABASE_URL:-postgresql+psycopg://telemetry:telemetry@db:5432/telemetry}
     depends_on:
       - db
     build:
