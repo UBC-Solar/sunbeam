@@ -11,26 +11,13 @@ def create_schema(engine) -> None:
     Base.metadata.create_all(engine)
 
     with engine.begin() as conn:
-        # Convert tables to hypertables.
+        # Convert the sample table to a hypertable.
         # if_not_exists => true avoids errors on repeated runs.
         conn.execute(
             text(
                 """
                 SELECT create_hypertable(
-                    'raw_sample',
-                    'ts',
-                    chunk_time_interval => INTERVAL '1 day',
-                    if_not_exists => TRUE
-                );
-                """
-            )
-        )
-
-        conn.execute(
-            text(
-                """
-                SELECT create_hypertable(
-                    'aligned_sample',
+                    'sample',
                     'ts',
                     chunk_time_interval => INTERVAL '1 day',
                     if_not_exists => TRUE
@@ -43,8 +30,8 @@ def create_schema(engine) -> None:
         conn.execute(
             text(
                 """
-                CREATE INDEX IF NOT EXISTS aligned_sample_event_signal_ts_idx
-                ON aligned_sample (event_id, signal_id, ts DESC);
+                CREATE INDEX IF NOT EXISTS sample_event_signal_ts_idx
+                ON sample (event_id, signal_id, ts DESC);
                 """
             )
         )
@@ -52,8 +39,8 @@ def create_schema(engine) -> None:
         conn.execute(
             text(
                 """
-                CREATE INDEX IF NOT EXISTS aligned_sample_event_ts_idx
-                ON aligned_sample (event_id, ts DESC);
+                CREATE INDEX IF NOT EXISTS sample_event_ts_idx
+                ON sample (event_id, ts DESC);
                 """
             )
         )

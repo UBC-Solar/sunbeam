@@ -77,15 +77,19 @@ def check_influx(
 
     :param timeout_s: For the ping and bucket lookup, which answer at once from a healthy server
     :param data_timeout_s: For the data query, which scans the window and can legitimately take longer
-    :param client_factory: Builds the InfluxDBClient; tests pass a fake
+    :param client_factory: Builds the data_tools InfluxDBClient; tests pass a fake
     """
     result = CheckResult()
 
     if client_factory is None:
-        from influxdb_client.client.influxdb_client import InfluxDBClient as client_factory
+        from data_tools.query import InfluxDBClient
+        client_factory = InfluxDBClient
+
+    def connect(timeout: float):
+        return client_factory(url=url, influxdb_token=token, influxdb_org=organization, timeout=timeout)
 
     try:
-        client = client_factory(url=url, token=token, org=organization, timeout=int(timeout_s * 1000))
+        client = connect(timeout_s)
     except Exception as exc:
         result.steps.append(CheckStep("connect", False, f"failed to construct client: {exc}"))
         return result
@@ -103,11 +107,11 @@ def check_influx(
         result.steps.append(CheckStep("connect", True, f"{url} reachable"))
 
         try:
-            found = client.buckets_api().find_bucket_by_name(bucket)
+            found = client.bucket_exists(bucket)
         except Exception as exc:
             result.steps.append(CheckStep("bucket", False, str(exc)))
             return result
-        if found is None:
+        if not found:
             result.steps.append(CheckStep(
                 "bucket", False,
                 f"bucket {bucket!r} not found (check the token, organization, and bucket name)",
@@ -118,20 +122,14 @@ def check_influx(
         if window is None:
             return result
 
-        start, stop = window
-        query = (
-            f'from(bucket: "{bucket}") '
-            f'|> range(start: {_flux_time(start)}, stop: {_flux_time(stop)}) '
-            f'|> limit(n: 1)'
-        )
+        start, stop = (_as_utc(t) for t in window)
         span = f"{_flux_time(start)} to {_flux_time(stop)}"
         try:
             # The client's timeout covers every request it makes, so the slower query gets a client of its own
-            data_client = client_factory(url=url, token=token, org=organization, timeout=int(data_timeout_s * 1000))
+            data_client = connect(data_timeout_s)
             try:
-                # Streamed so the first record is enough; nothing else is read
-                records = data_client.query_api().query_stream(query, org=organization)
-                has_data = next(iter(records), None) is not None
+                # Localized like the ingress's own queries, so this looks where the worker will
+                has_data = data_client.has_data(bucket, start, stop)
             finally:
                 data_client.close()
         except Exception as exc:

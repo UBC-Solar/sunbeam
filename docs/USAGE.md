@@ -19,9 +19,9 @@ working and mysteriously failing:
 
 | Name | Kind | What it's for |
 |---|---|---|
-| `server` | extra | Everything the FastAPI server needs: `fastapi`, `docker` (SDK), `sqlalchemy`, `psycopg`, etc. |
-| `executor` | extra | Everything a worker process needs to *run a pipeline*: `networkx` (graph building), `sqlalchemy`, `psycopg`, `rich` (terminal output). |
-| `v3_0` | extra | Dependencies **specific to the `v3_0` pipeline edition's stages** — currently `influxdb-client` (ingress) plus the `pytest` toolchain for that edition's unit tests. |
+| `server` | extra | Everything the FastAPI server needs: `fastapi`, `docker` (SDK), `sqlalchemy`, `psycopg`, `ubc-solar-data-tools` (testing InfluxDB connections), etc. |
+| `executor` | extra | Everything a worker process needs to *run a pipeline*: `networkx` (graph building), `sqlalchemy`, `psycopg`, `rich` (terminal output), and `ubc-solar-data-tools`, through which everything talks to InfluxDB. |
+| `v3_0` | extra | Dependencies **specific to the `v3_0` pipeline edition's stages**, beyond `executor`'s. |
 | `v3_1` | extra | Same idea, for a future edition. Currently empty — a placeholder showing the pattern. |
 | `test` | group | Everything the *full* test suite needs beyond an edition + `executor`: `fastapi`, `docker`, `httpx2`, `testcontainers`. |
 | `dev` | group | `ruff`, `mypy`, `alembic` — tooling, not runtime dependencies. |
@@ -39,8 +39,8 @@ Two conflict rules in `[tool.uv].conflicts` are load-bearing:
 This is the one worth internalizing: **a pipeline edition's stage code can
 depend on arbitrary third-party packages, and different editions may need
 different (even conflicting) versions or entirely different packages.**
-`v3_0`'s ingress currently needs `influxdb-client`; a hypothetical `v3_1`
-targeting a different telemetry backend might need something else instead,
+A hypothetical `v3_1` targeting a different telemetry backend might need
+something `v3_0` doesn't,
 or a newer major version of a shared dependency that isn't compatible with
 what `v3_0` pins. Making each edition its own `uv` extra — rather than
 lumping every edition's dependencies into `executor` — means:
@@ -210,7 +210,7 @@ uv run sunbeam.py --event_name realtime
 |---|---|---|
 | `--event_name` | `$SUNBEAM_EVENT_NAME` or `"realtime"` | Which event (from `events.toml`) to run. |
 | `--serverless` | off | Run with no server at all — see below. |
-| `--reprocess` | `$SUNBEAM_REPROCESS` or `false` | Delete the event's existing `aligned_sample` rows before writing. Replays always do this regardless (see below), so this only matters for realtime runs, which otherwise append to whatever an earlier run wrote. |
+| `--reprocess` | `$SUNBEAM_REPROCESS` or `false` | Delete the event's existing `sample` rows before writing. Replays always do this regardless (see below), so this only matters for realtime runs, which otherwise append to whatever an earlier run wrote. |
 | `--influx-url`, `--influx-org`, `--influx-bucket`, `--influx-token` | `$SUNBEAM_INFLUX_URL`, `_ORG`, `_BUCKET`, `_TOKEN` | The InfluxDB to read telemetry from. Required (as flags or variables); there are no defaults. |
 | `--database-url` | `$SUNBEAM_DATABASE_URL` | The Sunbeam Postgres to write to. Defaults to the `docker compose` database on `localhost:5432`. |
 | `--server-url` | `$SUNBEAM_SERVER_URL` | The Sunbeam server to register with. Defaults to `http://localhost:8000`. |
@@ -237,11 +237,11 @@ vars rather than CLI args).
   warning if that's noticeably shorter than the event), then runs the
   compute pipelines over that window as fast as possible, never sleeping.
   Reaching the end of the window completes the worker successfully. A
-  replay always deletes the event's earlier `aligned_sample` rows first,
+  replay always deletes the event's earlier `sample` rows first,
   since it rewrites the whole event, and would otherwise collide with an
   earlier run's samples on the `(event, signal, ts)` primary key.
 
-Both modes write the same derived signals to `aligned_sample`; a replay
+Both modes write the same derived signals to `sample`; a replay
 also writes the raw ingress signals it fetched.
 
 What you see depends on the mode and on whether output is a terminal:
@@ -312,10 +312,8 @@ startup run `pipeline/preflight.py`'s checks: can it reach the Sunbeam
 Postgres database, can it reach InfluxDB, find its bucket, and **see data
 in the event's window** (the whole event for a replay, start-to-now for a
 live one; nothing to check yet for one that hasn't started), using the same
-check the server runs before a launch (`db/telemetrydb/connection_check.py`;
-skipped gracefully if `influxdb-client` isn't installed in this edition's
-image — see the dependency-group discussion above), and — for orchestrated
-modes only —
+check the server runs before a launch (`db/telemetrydb/connection_check.py`),
+and — for orchestrated modes only —
 can it reach the server's `/health` endpoint. A failed preflight reports
 failure to the server (if reachable) and exits with a nonzero status before
 ever building a pipeline; look here first if a worker won't start.

@@ -64,14 +64,14 @@ class TestDataQueryTimezones:
     ):
         from sqlalchemy.orm import Session
 
-        from db.sunbeamdb.models import AlignedSample
+        from db.sunbeamdb.models import Sample
         from server.services.data_service import get_signal, query_samples
 
         base = datetime(2026, 7, 20, 12, 0, 0, tzinfo=timezone.utc)
         with Session(pg_engine) as session:
             for i in range(5):
                 session.add(
-                    AlignedSample(
+                    Sample(
                         event_id=pg_seeded_event.event_id,
                         ts=base + timedelta(seconds=i),
                         signal_id=pg_seeded_event.signal_ids["speed"],

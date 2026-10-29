@@ -20,7 +20,7 @@ nothing else produces automatically get their data from generated
 polling InfluxDB in step with the wall clock; a past event is **replayed**,
 fetching its whole window up front and processing it as fast as possible
 (see [`docs/USAGE.md`](docs/USAGE.md#realtime-vs-replay-worker-runs)). Output frames flow through a batching,
-non-blocking writer into `aligned_sample` table in `sunbeamdb`, Sunbeam's PostgreSQL database. A worker can run
+non-blocking writer into `sample` table in `sunbeamdb`, Sunbeam's PostgreSQL database. A worker can run
 standalone (`--serverless`), or report in to the **server** — a FastAPI
 app (`server/`) that can launch workers as Docker containers, supervise
 them via heartbeats and a watchdog, and serve derived telemetry back out
@@ -69,7 +69,7 @@ state/          In-memory State (signal blackboard) and Frame/FrameView
 stage/          The Stage base class, StageLibrary, and per-edition stage implementations
 pipeline/       Graph building, scheduling, the Executor, timing/metrics
 orchestration/  Worker<->server protocol: WorkerControl, OrchestratorClient, bootstrap
-db/             SQLAlchemy models, event/aligned-sample writers, InfluxDB readers
+db/             SQLAlchemy models, event/sample writers, InfluxDB readers
 server/         The FastAPI app: routes, services, the debug stream viewer
 alembic/        Database migration chain (see docs/ALEMBIC.md)
 dashboard/      The React/Vite operator dashboard

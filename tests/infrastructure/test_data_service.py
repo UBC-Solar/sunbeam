@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from db.sunbeamdb.models import AlignedSample
+from db.sunbeamdb.models import Sample
 from server.services.data_service import (
     get_signal,
     list_signals,
@@ -29,9 +29,15 @@ class TestResolveTimeWindow:
         assert end == NOW
         assert start == NOW - timedelta(seconds=30)
 
-    def test_no_mode_selected_rejected(self):
-        with pytest.raises(ValueError, match="either start"):
-            resolve_time_window(None, None, None)
+    def test_no_mode_is_everything(self):
+        assert resolve_time_window(None, None, None, now=NOW) == (None, None)
+
+    def test_end_only_is_everything_before_it(self):
+        assert resolve_time_window(None, NOW, None) == (None, NOW)
+
+    def test_naive_end_alone_rejected(self):
+        with pytest.raises(ValueError, match="timezone-aware"):
+            resolve_time_window(None, NOW.replace(tzinfo=None), None)
 
     def test_both_modes_rejected(self):
         with pytest.raises(ValueError, match="cannot be combined"):
@@ -60,7 +66,7 @@ def seed_samples(session_factory, seeded_event, *, count=10, signal="speed", sta
     with session_factory() as session:
         for i in range(count):
             session.add(
-                AlignedSample(
+                Sample(
                     event_id=seeded_event.event_id,
                     ts=start + timedelta(seconds=i),
                     signal_id=signal_id,
@@ -94,6 +100,22 @@ class TestSignalLookup:
         signals = list_signals(db, seeded_event.event_name)
         assert [signal.name for signal in signals] == ["power", "speed"]
 
+    def test_list_signals_with_data_skips_unwritten_ones(self, db, session_factory, seeded_event):
+        seed_samples(session_factory, seeded_event, signal="speed")
+
+        signals = list_signals(db, seeded_event.event_name, with_data=True)
+
+        assert [signal.name for signal in signals] == ["speed"]
+
+    def test_only_null_samples_is_no_data(self, db, session_factory, seeded_event):
+        with session_factory() as session:
+            session.add(Sample(
+                event_id=seeded_event.event_id, ts=BASE, signal_id=seeded_event.signal_ids["power"], value_f64=None,
+            ))
+            session.commit()
+
+        assert list_signals(db, seeded_event.event_name, with_data=True) == []
+
 
 class TestQuerySamples:
     def test_window_is_half_open(self, db, session_factory, seeded_event):
@@ -118,6 +140,14 @@ class TestQuerySamples:
         )
 
         assert (timestamps, values, truncated) == ([], [], False)
+
+    def test_unbounded_window_is_every_sample(self, db, session_factory, seeded_event):
+        seed_samples(session_factory, seeded_event, count=5)
+        signal = get_signal(db, seeded_event.event_name, "speed")
+
+        _, values, truncated = query_samples(db, signal, None, None)
+
+        assert (values, truncated) == ([0.0, 1.0, 2.0, 3.0, 4.0], False)
 
     def test_truncation_keeps_most_recent(self, db, session_factory, seeded_event):
         seed_samples(session_factory, seeded_event, count=10)

@@ -18,7 +18,7 @@ after it - no gaps, no duplicates.
 """
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -35,9 +35,10 @@ router = APIRouter(prefix="/events", tags=["data"])
 
 
 @router.get("/{event_name}/signals", response_model=list[SignalInfo])
-def list_signals(event_name: str, db: Session = Depends(get_db)):
+def list_signals(event_name: str, with_data: bool = False, db: Session = Depends(get_db)):
+    """ with_data=true lists only signals with at least one sample to query. """
     try:
-        return data_service.list_signals(db, event_name)
+        return data_service.list_signals(db, event_name, with_data=with_data)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -68,13 +69,17 @@ def query_signal_data(
         db, signal, window_start, window_end, limit=limit
     )
 
+    # An unbounded side of the window reports the event's own bound
+    event = signal.event
     return SignalDataResponse(
         event_name=event_name,
         signal=signal_name,
         unit=signal.unit,
         frequency=signal.frequency,
-        start=window_start,
-        end=window_end,
+        source=signal.source,
+        description=signal.description,
+        start=window_start or event.starts_at,
+        end=window_end or event.ends_at or datetime.now(timezone.utc),
         count=len(timestamps),
         truncated=truncated,
         timestamps=timestamps,

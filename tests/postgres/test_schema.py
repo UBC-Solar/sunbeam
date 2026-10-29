@@ -6,7 +6,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from db import create_schema
-from db.sunbeamdb.models import AlignedSample, EventStatus, Event, WorkerRun, WorkerStatus
+from db.sunbeamdb.models import Sample, EventStatus, Event, WorkerRun, WorkerStatus
 from db.sunbeamdb.writer import EventWriter
 from state.frame import FrameView
 
@@ -24,7 +24,7 @@ class TestCreateSchema:
                 )
             )
 
-        assert {"raw_sample", "aligned_sample"} <= hypertables
+        assert hypertables == {"sample"}
 
     def test_create_schema_is_idempotent(self, pg_engine):
         # The fixture already ran create_schema once; a second run must not
@@ -60,7 +60,7 @@ class TestCreateSchema:
 
 
 class TestEventWriterOnHypertable:
-    def test_frames_persist_into_aligned_sample(self, pg_engine, pg_seeded_event):
+    def test_frames_persist_into_sample(self, pg_engine, pg_seeded_event):
         writer = EventWriter(pg_seeded_event.event_name, pg_engine)
         ts = datetime(2026, 7, 1, 12, 0, 1, tzinfo=timezone.utc)
 
@@ -68,7 +68,7 @@ class TestEventWriterOnHypertable:
         writer.close()
 
         with Session(pg_engine) as session:
-            samples = session.scalars(select(AlignedSample)).all()
+            samples = session.scalars(select(Sample)).all()
             event = session.get(Event, pg_seeded_event.event_id)
 
         assert len(samples) == 2

@@ -4,7 +4,7 @@ from data_tools.collections import TimeSeries
 from sqlalchemy import Engine, delete, insert, select
 from sqlalchemy.orm import Session
 
-from db.sunbeamdb.models import AlignedSample, Event, EventStatus, Signal
+from db.sunbeamdb.models import Sample, Event, EventStatus, Signal
 from state.frame import FrameView
 
 
@@ -23,7 +23,7 @@ class EventWriter:
 
             # Bulk delete directly on the database, so reprocessing doesn't duplicate samples
             if reprocess:
-                session.execute(delete(AlignedSample).where(AlignedSample.event_id == self._event_id))
+                session.execute(delete(Sample).where(Sample.event_id == self._event_id))
 
             event.status = EventStatus.ONGOING
             session.commit()
@@ -61,7 +61,7 @@ class EventWriter:
             return
 
         with Session(self._engine) as session:
-            session.execute(insert(AlignedSample), rows)
+            session.execute(insert(Sample), rows)
             session.commit()
 
     def write_series(self, signal: str, series: TimeSeries):
@@ -80,7 +80,7 @@ class EventWriter:
             assert driver_connection is not None, "COPY needs a live psycopg connection"
 
             with driver_connection.cursor() as cursor, cursor.copy(
-                f"COPY {AlignedSample.__tablename__} (event_id, signal_id, ts, value_f64) FROM STDIN"
+                f"COPY {Sample.__tablename__} (event_id, signal_id, ts, value_f64) FROM STDIN"
             ) as copy:
                 for ts, value in zip(timestamps, values, strict=True):
                     copy.write_row((self._event_id, signal_id, ts, value))

@@ -16,7 +16,7 @@ from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from db.sunbeamdb.models import AlignedSample, Event, Signal
+from db.sunbeamdb.models import Event, Sample, Signal
 
 logger = logging.getLogger("sunbeam.server")
 
@@ -33,13 +33,16 @@ def resolve_time_window(
     last_seconds: Optional[float],
     *,
     now: Optional[datetime] = None,
-) -> tuple[datetime, datetime]:
+) -> tuple[Optional[datetime], Optional[datetime]]:
     """
-    Turn the three query modes into one half-open window [start, end).
+    Turn the query modes into one half-open window [start, end), where a
+    None bound is unbounded.
 
       start + end          -> between the two instants
       start only           -> from start until now
       last_seconds only    -> the trailing window ending now
+      end only             -> everything before end
+      none of them         -> everything (the whole event)
 
     Raises ValueError for invalid combinations; datetimes must be
     timezone-aware.
@@ -53,16 +56,17 @@ def resolve_time_window(
             raise ValueError("last_seconds must be positive.")
         return now - timedelta(seconds=last_seconds), now
 
+    if end is not None and end.tzinfo is None:
+        raise ValueError("end must be timezone-aware.")
+
     if start is None:
-        raise ValueError("Provide either start (with optional end) or last_seconds.")
+        return None, end
 
     if start.tzinfo is None:
         raise ValueError("start must be timezone-aware.")
 
     if end is None:
         end = now
-    elif end.tzinfo is None:
-        raise ValueError("end must be timezone-aware.")
 
     if start >= end:
         raise ValueError("start must be before end.")
@@ -87,16 +91,30 @@ def get_signal(db: Session, event_name: str, signal_name: str) -> Signal:
     return signal
 
 
-def list_signals(db: Session, event_name: str) -> list[Signal]:
+def list_signals(db: Session, event_name: str, *, with_data: bool = False) -> list[Signal]:
+    """
+    The event's signals, by name. A signal exists as soon as the event is synced,
+    whether or not a worker has written it; with_data keeps only those with at
+    least one (non-null) sample to query.
+    """
     event = db.scalar(select(Event).where(Event.name == event_name))
     if event is None:
         raise LookupError(f"No event named {event_name!r}.")
 
-    return list(
-        db.scalars(
-            select(Signal).where(Signal.event_id == event.id).order_by(Signal.name)
+    stmt = select(Signal).where(Signal.event_id == event.id)
+    if with_data:
+        # An index lookup per signal on (event_id, signal_id, ts), not a scan
+        stmt = stmt.where(
+            select(Sample.ts)
+            .where(
+                Sample.event_id == Signal.event_id,
+                Sample.signal_id == Signal.id,
+                Sample.value_f64.is_not(None),
+            )
+            .exists()
         )
-    )
+
+    return list(db.scalars(stmt.order_by(Signal.name)))
 
 
 def _epoch_ms(ts: datetime) -> int:
@@ -118,26 +136,26 @@ def _from_epoch_us(cursor_us: int) -> datetime:
 def query_samples(
     db: Session,
     signal: Signal,
-    start: datetime,
-    end: datetime,
+    start: Optional[datetime],
+    end: Optional[datetime],
     limit: int = MAX_POINTS,
 ) -> tuple[list[int], list[Optional[float]], bool]:
     """
-    Samples for one signal in [start, end), ascending. When the window holds
-    more than `limit` rows, the MOST RECENT `limit` are returned and the
-    truncated flag is set.
+    Samples for one signal in [start, end), ascending; a None bound is
+    unbounded. When the window holds more than `limit` rows, the MOST RECENT
+    `limit` are returned and the truncated flag is set, so a client wanting
+    everything pages backwards by passing the earliest timestamp it got as
+    the next request's end.
     """
-    stmt = (
-        select(AlignedSample.ts, AlignedSample.value_f64)
-        .where(
-            AlignedSample.event_id == signal.event_id,
-            AlignedSample.signal_id == signal.id,
-            AlignedSample.ts >= start,
-            AlignedSample.ts < end,
-        )
-        .order_by(AlignedSample.ts.desc())
-        .limit(limit + 1)
+    stmt = select(Sample.ts, Sample.value_f64).where(
+        Sample.event_id == signal.event_id,
+        Sample.signal_id == signal.id,
     )
+    if start is not None:
+        stmt = stmt.where(Sample.ts >= start)
+    if end is not None:
+        stmt = stmt.where(Sample.ts < end)
+    stmt = stmt.order_by(Sample.ts.desc()).limit(limit + 1)
 
     rows = list(db.execute(stmt).all())
 
@@ -210,13 +228,13 @@ def stream_batches(
 
         with session_factory() as db:
             stmt = (
-                select(AlignedSample.ts, AlignedSample.value_f64, AlignedSample.signal_id)
+                select(Sample.ts, Sample.value_f64, Sample.signal_id)
                 .where(
-                    AlignedSample.event_id == event_id,
-                    AlignedSample.signal_id.in_(ids_to_names.keys()),
-                    AlignedSample.ts > _from_epoch_us(cursor_us),
+                    Sample.event_id == event_id,
+                    Sample.signal_id.in_(ids_to_names.keys()),
+                    Sample.ts > _from_epoch_us(cursor_us),
                 )
-                .order_by(AlignedSample.ts.asc())
+                .order_by(Sample.ts.asc())
                 .limit(STREAM_POLL_ROW_LIMIT)
             )
             rows = db.execute(stmt).all()

@@ -398,7 +398,10 @@ as they land). See the worked client in
 
 ### `GET /events/{event_name}/signals`
 
-List every signal recorded for an event, with metadata.
+List the event's signals, with metadata. Every signal the event defines is
+listed, whether or not a worker has written any of it; `?with_data=true`
+lists only signals with at least one sample to query (what data_tools'
+`SunbeamClient.list_signals` asks for by default).
 
 ```json
 [
@@ -411,25 +414,32 @@ List every signal recorded for an event, with metadata.
 
 ### `GET /events/{event_name}/signals/{signal_name}/data`
 
-Windowed, single-signal query — **for post-mortem analysis**. Exactly one
-of three window modes must be selected via query parameters:
+Windowed, single-signal query — **for post-mortem analysis**. The window
+is selected via query parameters:
 
 | Mode | Parameters | Window |
 |---|---|---|
+| Everything | none | the whole event |
 | Between | `start`, `end` | `[start, end)` |
 | Since | `start` only | `[start, now)` |
+| Before | `end` only | everything before `end` |
 | Trailing | `last_seconds` | `[now − last_seconds, now)` |
 
 `start`/`end` are timezone-aware ISO 8601 datetimes; `last_seconds` is a
-positive number of seconds. Combining `last_seconds` with `start`/`end`, or
-providing none of them, is a `422`. So is a naive datetime, or `start >=
-end`.
+positive number of seconds. Combining `last_seconds` with `start`/`end` is
+a `422`. So is a naive datetime, or `start >= end`. In the response, an
+unbounded side of the window reports the event's own `starts_at` (or
+`ends_at`, or now for a live event).
 
 `limit` (query param, default and max `360000` — ten hours of a 10 Hz
 signal) bounds the response size. A window with more than `limit` samples
 returns the **most recent** `limit` of them, with `truncated: true` — never
-an error; narrow the window or raise `limit` (up to the max) if you need
-more.
+an error. To fetch everything, page backwards: pass the earliest timestamp
+you got as the next request's `end` until a response isn't truncated (what
+data_tools' `SunbeamClient.get_time_series` does).
+
+`source` (`raw` or `derived`) and `description` are the signal's, for
+labelling the data.
 
 ```
 GET /events/realtime/signals/VehicleSpeed/data?last_seconds=600
@@ -438,6 +448,7 @@ GET /events/realtime/signals/VehicleSpeed/data?last_seconds=600
 ```json
 {
   "event_name": "realtime", "signal": "VehicleSpeed", "unit": "m/s", "frequency": 5.0,
+  "source": "raw", "description": null,
   "start": "2026-07-20T11:50:00Z", "end": "2026-07-20T12:00:00Z",
   "count": 2841, "truncated": false,
   "timestamps": [1752968400123, 1752968400323, "..."],

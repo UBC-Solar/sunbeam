@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12, <3.14"
+dependencies = [
+    "ubc-solar-data-tools",
+]
 
 [project.optional-dependencies]
 server = [
@@ -11,8 +14,6 @@ server = [
     "coolname>=5.0.0",
     "docker>=7.1.0",
     "fastapi>=0.138.0",
-    # Testing InfluxDB connections (db/telemetrydb/connection_check.py)
-    "influxdb-client>=1.50.0",
     "psycopg>=3.3.4",
     "psycopg-binary>=3.3.4",
     "pydantic>=2.13.4",
@@ -30,13 +31,11 @@ executor = [
     "ubc-solar-data-tools>=2.0.2",
 ]
 v3_0 = [
-    "influxdb-client>=1.50.0",
     "psycopg>=3.3.4",
 ]
 v3_1 = []
 v4_0 = [
-    "ubc-solar-data-tools",
-    "influxdb-client>=1.50.0",
+    "ubc-solar-data-tools>=2.0.2",
     "psycopg>=3.3.4",
 ]
 
@@ -71,7 +70,7 @@ conflicts = [
 ]
 
 [tool.uv.sources]
-ubc-solar-data-tools = { git = "https://github.com/UBC-Solar/data_tools.git" }
+ubc-solar-data-tools = { git = "https://github.com/UBC-Solar/data_tools.git", branch = "sunbeam_update" }
 
 [tool.ruff]
 line-length = 120

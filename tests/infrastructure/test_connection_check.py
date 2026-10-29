@@ -7,19 +7,20 @@ WINDOW = (datetime(2026, 7, 1, 12, 0, tzinfo=UTC), datetime(2026, 7, 1, 13, 0, t
 
 
 class FakeInflux:
-    """ Just enough of InfluxDBClient for check_influx. """
+    """ Just enough of data_tools' InfluxDBClient for check_influx. """
 
-    def __init__(self, *, ping: bool | Exception = True, bucket_found=True, records=("a record",), query_error=None):
+    def __init__(self, *, ping: bool | Exception = True, bucket_found=True, has_data=True, query_error=None):
         self._ping = ping
         self._bucket_found = bucket_found
-        self._records = records
+        self._has_data = has_data
         self._query_error = query_error
-        self.queries = []
-        self.closed = False
+        self.windows = []
+        self.timeouts = []
+        self.closed = 0
 
     def __call__(self, **kwargs):
         self.kwargs = kwargs
-        self.timeouts = [*getattr(self, "timeouts", []), kwargs["timeout"]]
+        self.timeouts.append(kwargs["timeout"])
         return self
 
     def ping(self):
@@ -27,23 +28,17 @@ class FakeInflux:
             raise self._ping
         return self._ping
 
-    def buckets_api(self):
-        return self
+    def bucket_exists(self, bucket):
+        return self._bucket_found
 
-    def find_bucket_by_name(self, name):
-        return object() if self._bucket_found else None
-
-    def query_api(self):
-        return self
-
-    def query_stream(self, query, org):
-        self.queries.append(query)
+    def has_data(self, bucket, start, stop):
+        self.windows.append((start, stop))
         if self._query_error is not None:
             raise self._query_error
-        return iter(self._records)
+        return self._has_data
 
     def close(self):
-        self.closed = True
+        self.closed += 1
 
 
 def run(fake, window=None):
@@ -58,24 +53,24 @@ class TestCheckInflux:
 
         assert result.ok
         assert [step.name for step in result.steps] == ["connect", "bucket", "data"]
-        assert fake.closed
-        assert fake.kwargs["token"] == "token"
+        assert fake.closed == 2  # the ping/bucket client and the data client
+        assert fake.kwargs["influxdb_token"] == "token"
 
     def test_checks_time_out_fast_but_the_data_query_gets_longer(self):
         fake = FakeInflux()
 
         run(fake, WINDOW)
 
-        assert fake.timeouts == [5_000, 15_000]
+        assert fake.timeouts == [5.0, 15.0]
 
     def test_without_a_window_data_is_not_checked(self):
-        fake = FakeInflux(records=())
+        fake = FakeInflux(has_data=False)
 
         result = run(fake)
 
         assert result.ok
         assert [step.name for step in result.steps] == ["connect", "bucket"]
-        assert fake.queries == []
+        assert fake.windows == []
 
     def test_unreachable_server_stops_at_connect(self):
         result = run(FakeInflux(ping=ConnectionError("refused")), WINDOW)
@@ -91,18 +86,17 @@ class TestCheckInflux:
         assert result.detail.startswith("bucket: bucket 'CAN_log' not found")
 
     def test_no_data_in_window_fails(self):
-        result = run(FakeInflux(records=()), WINDOW)
+        result = run(FakeInflux(has_data=False), WINDOW)
 
         assert not result.ok
         assert result.detail == "data: no data in 'CAN_log' from 2026-07-01T12:00:00Z to 2026-07-01T13:00:00Z"
 
-    def test_query_is_bounded_to_the_window(self):
+    def test_data_is_looked_for_over_the_window(self):
         fake = FakeInflux()
 
         run(fake, WINDOW)
 
-        assert "range(start: 2026-07-01T12:00:00Z, stop: 2026-07-01T13:00:00Z)" in fake.queries[0]
-        assert "limit(n: 1)" in fake.queries[0]
+        assert fake.windows == [WINDOW]
 
     def test_query_error_fails_the_data_step(self):
         result = run(FakeInflux(query_error=RuntimeError("bad flux")), WINDOW)

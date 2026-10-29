@@ -1,9 +1,11 @@
-from data_tools.localization import TemporalLocalization # type: ignore
+from data_tools.query import InfluxDBClient  # type: ignore
 from db.telemetrydb.protocols import TimeProvider
 from datetime import datetime, timedelta, timezone
-from influxdb_client import InfluxDBClient
 from typing import Any
 from typing import Iterable
+
+# How far back to look for each field's latest value
+LOOKBACK = timedelta(seconds=10)
 
 
 class RealtimeIngressQuerier:
@@ -12,9 +14,9 @@ class RealtimeIngressQuerier:
       'get the last value of these three fields before timestamp T'
 
     Notes:
-    - Reuses one InfluxDBClient and one QueryApi.
-    - Uses one Flux query for all fields.
-    - Uses query_stream() to avoid heavier table/dataframe materialization.
+    - Reuses one InfluxDBClient.
+    - Uses one Flux query for all fields (InfluxDBClient.query_last_values), which streams its results rather
+      than materializing tables or dataframes, and corrects InfluxDB's timezone errors (temporal localization).
     """
 
     def __init__(
@@ -35,93 +37,36 @@ class RealtimeIngressQuerier:
 
         self._client = InfluxDBClient(
             url=self._url,
-            token=self._token,
-            org=self._organization,
-            timeout=timeout_s * 1000,
-            enable_gzip=False,
+            influxdb_token=self._token,
+            influxdb_org=self._organization,
+            timeout=timeout_s,
         )
-        self._query_api = self._client.query_api()
 
         self.now = lambda: time_provider.now(timezone.utc)
-        self._timezone_fix = TemporalLocalization.localize(self.now())
 
-    @staticmethod
-    def _flux_time(dt: datetime) -> str:
-        """ Creates a timestamp for Flux, query language of InfluxDB
-
-        :param datetime dt: original timestamp
-        :raises ValueError: Timestamp must be timezone aware
-        :return str: Timestamp for Flux
-        """        
-        if dt.tzinfo is None:
-            raise ValueError("timestamp must be timezone-aware")
-        return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-
-    def _get_fields_filter(self):
-        field_filter = " or ".join(
-            f'r["_field"] == "{_field}"' for _field in self._fields
-        )
-        return field_filter
-
-    def _build_last_value_query(self, stop_time: datetime) -> str:
-        """ Creates the InfluxDB query for the 10 seconds before the stop time
+    def _query_last_values(self, stop_time: datetime) -> dict[str, dict[str, Any] | None]:
+        """ The latest value of each field in the LOOKBACK before ``stop_time``; None for any without one.
 
         :param datetime stop_time: Stop time for the query
-        :return str: Influx DB query
-        """        
-        stop_flux = self._flux_time(stop_time - self._timezone_fix)
-        start_time = self._flux_time(stop_time - self._timezone_fix - timedelta(seconds=10))
-
-        field_filter = self._get_fields_filter()
-
-        return f'''
-                    from(bucket: "{self._bucket}")
-                      |> range(start: {start_time}, stop: {stop_flux})
-                      |> filter(fn: (r) => {field_filter})
-                      |> last()
-                      |> keep(columns: ["_field", "_value", "_time"])
-                    '''.strip()
-
-    def _process_query(self, query: str):
-        """ Processes the InfluxDB query and returns a list of fields alongside their values and time.
-
-        :param str query: InfluxDB query
         :return dict[str, dict[str, Any] | None]: List of fields alongside their values and time
-        """        
-        _out: dict[str, dict[str, Any] | None] = {
-            _field: None for _field in self._fields
-        }
-
+        """
         try:
-            stream = self._query_api.query_stream(query=query, org=self._organization)
+            latest = self._client.query_last_values(self._bucket, self._fields, stop_time - LOOKBACK, stop_time)
+        except Exception:
+            # A failed poll is a poll with no data; the ingress stage tracks how long that lasts
+            return {_field: None for _field in self._fields}
 
-            if stream is None:
-                return _out  # nothing returned at all
-
-            for record in stream:
-                if record is None:
-                    continue
-
-                _field = record.get_field()
-                if _field in _out:
-                    _out[_field] = {
-                        "time": record.get_time() + self._timezone_fix,
-                        "value": record.get_value(),
-                    }
-
-        except Exception as e:
-            return _out
-
-        return _out
+        return {
+            _field: None if point is None else {"time": point[0], "value": point[1]}
+            for _field, point in latest.items()
+        }
 
     def get_last_values(self) -> dict[str, dict[str, Any] | None]:
         """ Returns the latest values from InfluxDB
 
         :return dict[str, dict[str, Any] | None]: List of fields alongside their values and time
         """        
-        query = self._build_last_value_query(self.now())
-        out = self._process_query(query)
-        return out
+        return self._query_last_values(self.now())
 
     def close(self) -> None:
         self._client.close()

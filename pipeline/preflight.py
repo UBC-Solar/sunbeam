@@ -30,17 +30,6 @@ def _check_sunbeam_db(engine: Engine) -> PreflightResult:
 
 def _check_telemetry_db(window: tuple[datetime, datetime] | None) -> PreflightResult:
     try:
-        import influxdb_client  # noqa: F401
-    except ImportError:
-        # Not every pipeline edition depends on the influxdb-client extra
-        # (see pyproject.toml); a missing package here just means this
-        # edition's image was never meant to talk to InfluxDB.
-        return PreflightResult(
-            "InfluxDB", True,
-            "skipped: influxdb-client is not installed in this image",
-        )
-
-    try:
         telemetry_db = Context().telemetry_db
     except RuntimeError as exc:
         return PreflightResult("InfluxDB", False, str(exc))

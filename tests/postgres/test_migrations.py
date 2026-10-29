@@ -21,8 +21,7 @@ EXPECTED_TABLES = {
     "signal",
     "worker_run",
     "connection",
-    "raw_sample",
-    "aligned_sample",
+    "sample",
 }
 
 
@@ -66,7 +65,8 @@ class TestMigrations:
             engine.dispose()
 
         assert EXPECTED_TABLES <= tables
-        assert {"raw_sample", "aligned_sample"} <= hypertables
+        assert hypertables == {"sample"}
+        assert "raw_sample" not in tables
 
     def test_downgrade_base_removes_schema(self, alembic_config):
         config, url = alembic_config
@@ -129,6 +129,64 @@ class TestConnectionsMigration:
         # Known profiles link to their connection; an unknown one keeps its name only
         assert runs == {"UBC Influx (CAN_log)": True, "Production (CAN_prod)": True, "staging": False}
         assert "BUILDING" in statuses
+
+
+class TestSampleTableMigration:
+    """ d4b8e1f06a92: raw_sample is dropped and aligned_sample becomes sample, data and all. """
+
+    def test_samples_survive_and_names_follow_the_table(self, alembic_config):
+        from sqlalchemy import create_engine
+
+        config, url = alembic_config
+        command.upgrade(config, "c7e2a91f5d3b")
+
+        engine = create_engine(url)
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("INSERT INTO vehicle (name) VALUES ('Brightside')"))
+                conn.execute(text(
+                    "INSERT INTO event (name, vehicle_id, starts_at, pipeline_edition, status) "
+                    "SELECT 'e', id, now(), 'v3_0', 'UNPROCESSED' FROM vehicle"
+                ))
+                conn.execute(text("INSERT INTO signal (name, source, event_id) SELECT 'speed', 'derived', id FROM event"))
+                conn.execute(text(
+                    "INSERT INTO aligned_sample (event_id, signal_id, ts, value_f64) "
+                    "SELECT event_id, id, now(), 4.2 FROM signal"
+                ))
+
+            command.upgrade(config, "head")
+
+            with engine.connect() as conn:
+                tables = set(inspect(conn).get_table_names())
+                value = conn.scalar(text("SELECT value_f64 FROM sample"))
+                names = set(conn.scalars(text(
+                    "SELECT conname FROM pg_constraint WHERE conrelid = 'sample'::regclass "
+                    "UNION SELECT indexname FROM pg_indexes WHERE tablename = 'sample'"
+                )))
+                hypertables = set(conn.scalars(text("SELECT hypertable_name FROM timescaledb_information.hypertables")))
+        finally:
+            engine.dispose()
+
+        assert "raw_sample" not in tables and "aligned_sample" not in tables
+        assert value == 4.2
+        assert hypertables == {"sample"}
+        assert {"pk_sample", "sample_event_signal_ts_idx", "sample_event_ts_idx", "sample_ts_idx"} <= names
+        assert not any(name.startswith("aligned_sample") for name in names)
+
+    def test_downgrade_restores_both_tables(self, alembic_config):
+        from sqlalchemy import create_engine
+
+        config, url = alembic_config
+        command.upgrade(config, "head")
+        command.downgrade(config, "c7e2a91f5d3b")
+
+        engine = create_engine(url)
+        try:
+            tables = set(inspect(engine).get_table_names())
+        finally:
+            engine.dispose()
+
+        assert {"raw_sample", "aligned_sample"} <= tables and "sample" not in tables
 
 
 class TestServerStartupUpgrade:

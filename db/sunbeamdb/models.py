@@ -87,31 +87,9 @@ class Signal(Base):
     )
 
 
-class RawSample(Base):
-    __tablename__ = "raw_sample"
-
-    event_id: Mapped[int] = mapped_column(ForeignKey("event.id"), nullable=False)
-    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    signal_id: Mapped[int] = mapped_column(ForeignKey("signal.id"), nullable=False)
-
-    value_f64: Mapped[float] = mapped_column(Float, nullable=False)
-
-    ingest_ts: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-    )
-
-    source_message_type: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    source_sequence: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-
-    __table_args__ = (
-        PrimaryKeyConstraint("event_id", "signal_id", "ts", name="pk_raw_sample"),
-    )
-
-
-class AlignedSample(Base):
-    __tablename__ = "aligned_sample"
+class Sample(Base):
+    """ One value of one signal at one instant """
+    __tablename__ = "sample"
 
     event_id: Mapped[int] = mapped_column(ForeignKey("event.id"), nullable=False)
     ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -124,7 +102,7 @@ class AlignedSample(Base):
             "event_id",
             "signal_id",
             "ts",
-            name="pk_aligned_sample",
+            name="pk_sample",
         ),
     )
 

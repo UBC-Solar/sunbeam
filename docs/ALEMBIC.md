@@ -17,7 +17,7 @@ which link of the chain it's currently at. `alembic upgrade head` means
 "walk the chain from wherever this database is to the newest revision,
 executing each `upgrade()` along the way."
 
-Right now the chain has two links:
+The first links in the chain:
 
 1. `f3f709edb0e7` — baseline: all six tables
    (`vehicle`, `event`, `signal`, `worker_run`, `raw_sample`,
@@ -27,6 +27,9 @@ Right now the chain has two links:
 2. `6044f7bdb7d9` — adds `worker_run.kind` (`WorkerKind`, for
    self-registered workers — see [`USAGE.md`](USAGE.md)) and makes
    `worker_run.image_tag` nullable.
+
+Later, `d4b8e1f06a92` drops `raw_sample` (nothing ever wrote to it) and
+renames `aligned_sample`, with its constraints and indexes, to `sample`.
 
 Run `uv run alembic history --verbose` to see the current chain.
 
@@ -159,8 +162,8 @@ def upgrade():
     op.execute("UPDATE event SET lap_number = 0 WHERE lap_number IS NULL")
 ```
 
-Keep these idempotent where practical. Anything touching `raw_sample` or
-`aligned_sample` (the hypertables — potentially millions of rows) deserves
+Keep these idempotent where practical. Anything touching `sample` (the
+hypertable — potentially millions of rows) deserves
 extra care: prefer batched raw SQL, and think about how long the migration
 holds locks given the `lock_timeout` behavior above.
 

@@ -19,6 +19,13 @@ class TestSignalsListing:
         assert signals["speed"]["frequency"] == 10.0
         assert signals["speed"]["unit"] == "unit"
 
+    def test_with_data_lists_only_queryable_signals(self, api_client, session_factory, seeded_event):
+        seed_samples(session_factory, seeded_event, signal="power")
+
+        response = api_client.get(f"/events/{seeded_event.event_name}/signals", params={"with_data": True})
+
+        assert [signal["name"] for signal in response.json()] == ["power"]
+
     def test_unknown_event_is_404(self, api_client):
         assert api_client.get("/events/nope/signals").status_code == 404
 
@@ -99,8 +106,26 @@ class TestQueryEndpoint:
         assert response.status_code == 422
         assert "cannot be combined" in response.json()["detail"]
 
-    def test_no_mode_is_422(self, api_client, seeded_event):
-        assert api_client.get(self.url(seeded_event)).status_code == 422
+    def test_no_window_returns_the_whole_event(self, api_client, session_factory, seeded_event):
+        seed_samples(session_factory, seeded_event, count=10)
+
+        body = api_client.get(self.url(seeded_event)).json()
+
+        assert body["values"] == [float(i) for i in range(10)]
+        assert body["truncated"] is False
+        # The unbounded start reports the event's own
+        assert body["start"].startswith("2026-07-01T12:00:00")
+        assert (body["source"], body["description"]) == ("derived", None)
+
+    def test_paging_backwards_with_end_covers_everything(self, api_client, session_factory, seeded_event):
+        seed_samples(session_factory, seeded_event, count=10)
+
+        newest = api_client.get(self.url(seeded_event), params={"limit": 4}).json()
+        end = datetime.fromtimestamp(newest["timestamps"][0] / 1000, tz=timezone.utc)
+        older = api_client.get(self.url(seeded_event), params={"limit": 6, "end": end.isoformat()}).json()
+
+        assert newest["truncated"] is True and older["truncated"] is False
+        assert older["values"] + newest["values"] == [float(i) for i in range(10)]
 
     def test_naive_start_is_422(self, api_client, seeded_event):
         response = api_client.get(

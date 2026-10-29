@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from db.sunbeamdb.models import AlignedSample, Event, EventStatus
+from db.sunbeamdb.models import Sample, Event, EventStatus
 from db.sunbeamdb.queued_writer import QueuedEventWriter
 from db.sunbeamdb.writer import EventWriter
 from state.frame import FrameView
@@ -18,10 +18,10 @@ def event_status(engine, event_id) -> EventStatus:
         return session.get(Event, event_id).status
 
 
-def all_samples(engine) -> list[AlignedSample]:
+def all_samples(engine) -> list[Sample]:
     with Session(engine) as session:
         return session.scalars(
-            select(AlignedSample).order_by(AlignedSample.ts, AlignedSample.signal_id)
+            select(Sample).order_by(Sample.ts, Sample.signal_id)
         ).all()
 
 

@@ -98,7 +98,7 @@ imports `server`, and (as above) `server` never imports `pipeline`,
 │  event)          │     in --serverless mode)              │
 └───┬───────────┬──┘                                        │ reads/writes Vehicle, Event,
     │           │                                           │ Signal, WorkerRun
-    │           │  writes aligned_sample rows;              ▼
+    │           │  writes sample rows;              ▼
     │           │  reads for preflight checks    ┌───────────────────────────┐
     │           └───────────────────────────────►│  Postgres / TimescaleDB   │
     │                                            └───────────────────────────┘
@@ -118,7 +118,7 @@ Server *creates, inspects, and kills* that container, not a separate
 process with its own connections; the worker process inside still talks to
 Postgres/InfluxDB and to the Server exactly as drawn. And the Server and
 every Worker connect to Postgres **directly and independently** — the
-Server is not a proxy for worker writes; `aligned_sample` rows never pass
+Server is not a proxy for worker writes; `sample` rows never pass
 through the Server process at all. See
 [`USAGE.md`](USAGE.md#the-three-ways-a-cli-worker-can-run) for the three
 ways a worker can come to exist (dashboard-launched container,
@@ -178,7 +178,7 @@ values, `OfflineIngressQuerier` for a whole window as `TimeSeries`).
 
 `EventWriter` bulk-inserts plain values and loads `TimeSeries` values (a
 replay's raw ingress signals) with Postgres `COPY`; constructed with
-`reprocess=True`, it first deletes the event's existing `aligned_sample`
+`reprocess=True`, it first deletes the event's existing `sample`
 rows. `QueuedEventWriter` wraps it with a bounded queue and a background
 flush thread: frames are never dropped (a full queue blocks the caller), a
 dead flush thread makes the next `write_frame`/`close` raise
@@ -191,22 +191,20 @@ the schema evolves):
 | Table | Holds | Relates to |
 |---|---|---|
 | `vehicle` | One row per physical car (currently just `Brightside`), synced from `config/vehicles.toml`. | Parent of `event`. |
-| `event` | One row per race/session/debug run (`FSGP_2024_Day_1`, `realtime`, ...), synced from `config/events.toml`. Carries `status` (`unprocessed` → `ongoing` while a worker's `EventWriter` is open → `processed` once it closes, success or failure) and `pipeline_edition` (which stage code applies — see [`STAGES.md`](STAGES.md#versioning-stages-what-v3_0-vs-v3_1-means)). | Belongs to a `vehicle`; parent of `signal`, `worker_run`, and (via `event_id`) every `raw_sample`/`aligned_sample` row. |
-| `signal` | One row per `(event, CanonicalName)` pair actually relevant to that event, with `unit`/`frequency`/`source` metadata — populated by `SignalManager.sync_signals` from the localization tables, not hand-edited. | Belongs to an `event`; referenced by `signal_id` from both sample tables. |
+| `event` | One row per race/session/debug run (`FSGP_2024_Day_1`, `realtime`, ...), synced from `config/events.toml`. Carries `status` (`unprocessed` → `ongoing` while a worker's `EventWriter` is open → `processed` once it closes, success or failure) and `pipeline_edition` (which stage code applies — see [`STAGES.md`](STAGES.md#versioning-stages-what-v3_0-vs-v3_1-means)). | Belongs to a `vehicle`; parent of `signal`, `worker_run`, and (via `event_id`) every `sample` row. |
+| `signal` | One row per `(event, CanonicalName)` pair actually relevant to that event, with `unit`/`frequency`/`source` metadata — populated by `SignalManager.sync_signals` from the localization tables, not hand-edited. | Belongs to an `event`; referenced by `signal_id` from `sample`. |
 | `worker_run` | One row per worker process, ever — the orchestration/supervision record described in the paragraph below and in full in [`API.md`](API.md#workers). `kind` distinguishes a Docker-launched worker from a self-registered one (see [`USAGE.md`](USAGE.md#the-three-ways-a-cli-worker-can-run)). | Belongs to an `event`. |
-| `raw_sample` | Unaligned, as-ingested telemetry — one row per `(event, signal, timestamp)` as it arrived, with ingest metadata (`source_message_type`, `source_sequence`). Schema exists and is migrated/hypertabled, but **nothing in this repo currently writes to it** — no code constructs a `RawSample` today; treat it as reserved for a future raw-ingestion path rather than an active part of the pipeline. | TimescaleDB hypertable, chunked on `ts`. |
-| `aligned_sample` | **The actual pipeline output** — one row per `(event, signal, timestamp)` for every value a stage or ingress produced, written by every running worker via `EventWriter`/`QueuedEventWriter`. This is what the telemetry query and stream API (`server/routes/data.py`) reads back out. | TimescaleDB hypertable, chunked on `ts`, indexed on `(event_id, signal_id, ts DESC)` and `(event_id, ts DESC)` — exactly the access patterns `server/services/data_service.py` queries. |
+| `sample` | **The actual pipeline output** — one row per `(event, signal, timestamp)` for every value a stage or ingress produced, written by every running worker via `EventWriter`/`QueuedEventWriter`. This is what the telemetry query and stream API (`server/routes/data.py`) reads back out. | TimescaleDB hypertable, chunked on `ts`, indexed on `(event_id, signal_id, ts DESC)` and `(event_id, ts DESC)` — exactly the access patterns `server/services/data_service.py` queries. |
 
 **TimescaleDB** 
 
-Sunbeam only has one database, and all the telemetry data goes into one table, `aligned_sample`. This might seem scary at first as we intend to use Sunbeam for **all** of UBC Solar's driving data, stretching from 2024 to now. 
+Sunbeam only has one database, and all the telemetry data goes into one table, `sample`. This might seem scary at first as we intend to use Sunbeam for **all** of UBC Solar's driving data, stretching from 2024 to now. 
 A naive search through every row for a specific data point is obviously `O(n)` with respect to the table size (where n is the number of rows), and so this is obviously unfeasible as the database grows. As such, we have an index on the `(event_id, signal_id, timestamp)` such that querying a specific datapoint (or a range) resolves as `O(log(n))` instead; much more feasible for even an enormous table.
-However, the index must fit in memory for it to be helpful, which, again, becomes infeasible as the database grows over the years. As such, we use `timescaledb`, a PostgreSQL extension, to deliberately break the `aligned_sample` table into chunks in the backend. Notably, queries do not, and need not, know about the chunking, and can treat the table as one; the extension routes queries for a timestamp to the correct chunk using metadata that it stores.
+However, the index must fit in memory for it to be helpful, which, again, becomes infeasible as the database grows over the years. As such, we use `timescaledb`, a PostgreSQL extension, to deliberately break the `sample` table into chunks in the backend. Notably, queries do not, and need not, know about the chunking, and can treat the table as one; the extension routes queries for a timestamp to the correct chunk using metadata that it stores.
 Additionally, `timescaledb` optimizes writing to the table such that appending new rows in the expected fashion (monotonically increasing timestamps) is as fast as possible. 
 
-`raw_sample` and `aligned_sample` are the two tables that
-actually accumulate telemetry, and both are declared as TimescaleDB
-**hypertables** rather than plain Postgres tables. TimescaleDB is a
+`sample` is the table that actually accumulates telemetry, and it is
+declared as a TimescaleDB **hypertable** rather than a plain Postgres table. TimescaleDB is a
 Postgres extension (`CREATE EXTENSION timescaledb`, run once per database
 — both `db/sunbeamdb/init_db.py`'s `create_schema` and the Alembic
 baseline migration do this before anything else) that transparently splits
@@ -215,9 +213,9 @@ contiguous slice of time, while every other part of the codebase —
 SQLAlchemy models, `EventWriter`, every query in `server/services/
 data_service.py` — continues to read and write it as an ordinary table
 through ordinary SQL. Converting a table is one call:
-`SELECT create_hypertable('aligned_sample', 'ts', chunk_time_interval =>
+`SELECT create_hypertable('sample', 'ts', chunk_time_interval =>
 INTERVAL '1 day', if_not_exists => TRUE)` (see the baseline migration and
-`init_db.py` for both calls; `if_not_exists => TRUE` is what makes it safe
+`init_db.py`; `if_not_exists => TRUE` is what makes it safe
 to run against an already-converted table, which is why both `create_schema`
 and a rerun `alembic upgrade` never fail on this step).
 
@@ -252,10 +250,10 @@ running.
   frequency, or number of concurrently-running events grows by an order
   of magnitude, or if query patterns shift toward very long (multi-month)
   windows, which now touch proportionally more chunks.
-- **This is why the sample tables have composite primary keys instead of
+- **This is why the sample table has a composite primary key instead of
   a simple `id` column.** TimescaleDB requires every unique or primary key
   constraint on a hypertable to include its partitioning column — here,
-  `ts`. That's the reason `AlignedSample`/`RawSample` are declared with
+  `ts`. That's the reason `Sample` is declared with
   `PrimaryKeyConstraint("event_id", "signal_id", "ts", ...)` rather than
   an autoincrementing surrogate key like every other table in the schema:
   it isn't a stylistic inconsistency, it's a hard requirement of the

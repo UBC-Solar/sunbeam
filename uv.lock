@@ -1346,6 +1346,9 @@ wheels = [
 name = "sunbeam"
 version = "0.1.0"
 source = { virtual = "." }
+dependencies = [
+    { name = "ubc-solar-data-tools" },
+]
 
 [package.optional-dependencies]
 executor = [
@@ -1361,7 +1364,6 @@ server = [
     { name = "coolname" },
     { name = "docker" },
     { name = "fastapi" },
-    { name = "influxdb-client" },
     { name = "psycopg" },
     { name = "psycopg-binary" },
     { name = "pydantic" },
@@ -1371,11 +1373,9 @@ server = [
     { name = "uvicorn" },
 ]
 v3-0 = [
-    { name = "influxdb-client" },
     { name = "psycopg" },
 ]
 v4-0 = [
-    { name = "influxdb-client" },
     { name = "psycopg" },
     { name = "ubc-solar-data-tools" },
 ]
@@ -1402,9 +1402,6 @@ requires-dist = [
     { name = "coolname", marker = "extra == 'server'", specifier = ">=5.0.0" },
     { name = "docker", marker = "extra == 'server'", specifier = ">=7.1.0" },
     { name = "fastapi", marker = "extra == 'server'", specifier = ">=0.138.0" },
-    { name = "influxdb-client", marker = "extra == 'server'", specifier = ">=1.50.0" },
-    { name = "influxdb-client", marker = "extra == 'v3-0'", specifier = ">=1.50.0" },
-    { name = "influxdb-client", marker = "extra == 'v4-0'", specifier = ">=1.50.0" },
     { name = "networkx", marker = "extra == 'executor'", specifier = ">=3.6.1" },
     { name = "psycopg", marker = "extra == 'executor'", specifier = ">=3.3.4" },
     { name = "psycopg", marker = "extra == 'server'", specifier = ">=3.3.4" },
@@ -1417,9 +1414,10 @@ requires-dist = [
     { name = "rich", marker = "extra == 'executor'", specifier = ">=15.0.0" },
     { name = "sqlalchemy", marker = "extra == 'executor'", specifier = ">=2.0.49" },
     { name = "sqlalchemy", marker = "extra == 'server'", specifier = ">=2.0.49" },
-    { name = "ubc-solar-data-tools", marker = "extra == 'executor'", git = "https://github.com/UBC-Solar/data_tools.git" },
-    { name = "ubc-solar-data-tools", marker = "extra == 'server'", git = "https://github.com/UBC-Solar/data_tools.git" },
-    { name = "ubc-solar-data-tools", marker = "extra == 'v4-0'", git = "https://github.com/UBC-Solar/data_tools.git" },
+    { name = "ubc-solar-data-tools", git = "https://github.com/UBC-Solar/data_tools.git?branch=sunbeam_update" },
+    { name = "ubc-solar-data-tools", marker = "extra == 'executor'", git = "https://github.com/UBC-Solar/data_tools.git?branch=sunbeam_update" },
+    { name = "ubc-solar-data-tools", marker = "extra == 'server'", git = "https://github.com/UBC-Solar/data_tools.git?branch=sunbeam_update" },
+    { name = "ubc-solar-data-tools", marker = "extra == 'v4-0'", git = "https://github.com/UBC-Solar/data_tools.git?branch=sunbeam_update" },
     { name = "uvicorn", marker = "extra == 'server'", specifier = ">=0.49.0" },
 ]
 provides-extras = ["server", "executor", "v3-0", "v3-1", "v4-0"]
@@ -1497,8 +1495,8 @@ wheels = [
 
 [[package]]
 name = "ubc-solar-data-tools"
-version = "2.0.3.dev2+g786a2e1a5"
-source = { git = "https://github.com/UBC-Solar/data_tools.git#786a2e1a5bc1eabc964429458fbf289b5c060c92" }
+version = "2.0.3.dev4+g1bdb37685"
+source = { git = "https://github.com/UBC-Solar/data_tools.git?branch=sunbeam_update#1bdb37685a0dde295648a40be657c16a5a42859d" }
 dependencies = [
     { name = "dill" },
     { name = "influxdb-client" },

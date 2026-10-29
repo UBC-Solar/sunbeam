@@ -113,6 +113,8 @@ class SignalDataResponse(BaseModel):
     signal: str
     unit: str | None
     frequency: float | None
+    source: str  # raw, derived
+    description: str | None
 
     start: datetime
     end: datetime
