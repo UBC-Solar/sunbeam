@@ -67,13 +67,16 @@ def check_influx(
     token: str,
     window: tuple[datetime, datetime] | None = None,
     *,
-    timeout_s: float = 30.0,
+    timeout_s: float = 5.0,
+    data_timeout_s: float = 15.0,
     client_factory=None,
 ) -> CheckResult:
     """
     Ping the server, find the bucket, then (with a window) require at least
     one point in it. Stops at the first failing step.
 
+    :param timeout_s: For the ping and bucket lookup, which answer at once from a healthy server
+    :param data_timeout_s: For the data query, which scans the window and can legitimately take longer
     :param client_factory: Builds the InfluxDBClient; tests pass a fake
     """
     result = CheckResult()
@@ -123,8 +126,14 @@ def check_influx(
         )
         span = f"{_flux_time(start)} to {_flux_time(stop)}"
         try:
-            # Streamed so the first record is enough; nothing else is read
-            has_data = next(iter(client.query_api().query_stream(query, org=organization)), None) is not None
+            # The client's timeout covers every request it makes, so the slower query gets a client of its own
+            data_client = client_factory(url=url, token=token, org=organization, timeout=int(data_timeout_s * 1000))
+            try:
+                # Streamed so the first record is enough; nothing else is read
+                records = data_client.query_api().query_stream(query, org=organization)
+                has_data = next(iter(records), None) is not None
+            finally:
+                data_client.close()
         except Exception as exc:
             result.steps.append(CheckStep("data", False, f"query failed: {exc}"))
             return result

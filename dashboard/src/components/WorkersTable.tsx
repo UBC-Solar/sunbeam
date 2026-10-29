@@ -1,5 +1,5 @@
 import {useMemo, useState} from "react";
-import {ACTIVE_STATUSES, Event, WorkerRun} from "../api";
+import {ACTIVE_STATUSES, Event, WorkerRun, shortRef} from "../api";
 import {formatDuration, formatRelative} from "../time";
 import {ConfirmButton} from "./ConfirmButton";
 import {StatusBadge} from "./StatusBadge";
@@ -82,15 +82,15 @@ export function WorkersTable({workers, events, onSelect, onStop}: WorkersTablePr
                 <StatusBadge status={worker.status} />
               </td>
               <td>{eventNameById.get(String(worker.event_id)) ?? worker.event_id}</td>
-              <td className="text-secondary">
+              <td className="text-secondary wrap">
                 {worker.pipeline_edition}
-                {worker.source_ref ? ` @ ${worker.source_ref}` : ""}
+                {worker.source_ref ? ` @ ${shortRef(worker.source_ref)}` : ""}
                 {worker.influx_connection_name ? ` · ${worker.influx_connection_name}` : ""}
               </td>
               {tab === "active" ? (
                 <>
                   <td className="text-secondary">{worker.current_stage ?? "—"}</td>
-                  <td className="text-secondary">{worker.status_message ?? "—"}</td>
+                  <td className="text-secondary wrap">{worker.status_message ?? "—"}</td>
                   <td className="text-muted">{formatRelative(worker.last_heartbeat_at)}</td>
                 </>
               ) : (
@@ -98,7 +98,7 @@ export function WorkersTable({workers, events, onSelect, onStop}: WorkersTablePr
                   <td className="text-secondary">
                     {formatDuration(worker.started_at, worker.stopped_at)}
                   </td>
-                  <td className="text-secondary" title={worker.failure_reason ?? undefined}>
+                  <td className="text-secondary wrap" title={worker.failure_reason ?? undefined}>
                     {worker.status_message ?? worker.failure_reason ?? "—"}
                   </td>
                 </>

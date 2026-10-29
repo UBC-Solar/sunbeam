@@ -97,27 +97,27 @@ class WorkerService:
         db: Session,
         *,
         event_id: int,
-        pipeline_edition: str,
         influx_connection_id: int | None = None,
         source_ref: str | None = None,
         reprocess: bool = False,
     ) -> WorkerRun:
         """
-        Test the connection against the event, then start a worker container. From a git ref, the run is
-        BUILDING until its image is built in the background (unless that commit was built before).
+        Test the connection against the event, then start a worker container running the event's pipeline
+        edition. From a git ref, the run is BUILDING until its image is built in the background (unless that
+        commit was built before).
 
-        :raises ValueError: Unknown event, edition, connection, or git ref
+        :raises ValueError: Unknown event, connection, or git ref, or an event whose edition this server lacks
         :raises ConnectionTestFailed: The connection can't reach InfluxDB or sees no data for the event
         """
         event = db.get(Event, event_id)
         if event is None:
             raise ValueError(f"No event exists with id={event_id}")
         event_name = event.name
+        pipeline_edition = event.pipeline_edition
         source_ref = (source_ref or "").strip() or None
 
-        # A ref may well have editions this copy of the code doesn't; its own build will say if it lacks one
-        if source_ref is None:
-            self._validate_pipeline_edition(pipeline_edition)
+        # Editions are added rarely enough that any ref being launched is assumed to have the event's edition too
+        self._validate_pipeline_edition(pipeline_edition)
 
         connection = self._connections.resolve(db, influx_connection_id)
 
@@ -148,7 +148,7 @@ class WorkerService:
             reprocess=reprocess or event.is_past(),
         )
         if needs_build:
-            worker.status_message = f"Building {image_tag} from {source_ref} ({source_sha[:12]})."  # type: ignore[index]
+            worker.status_message = "Building worker image."
 
         db.add(worker)
         db.commit()

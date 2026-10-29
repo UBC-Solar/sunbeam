@@ -129,10 +129,11 @@ non-terminal statuses only.
 Server-launches a Docker container. This is what the dashboard calls.
 
 ```json
-{"event_id": 2, "pipeline_edition": "v3_0", "influx_connection_id": 1, "source_ref": null, "reprocess": false}
+{"event_id": 2, "influx_connection_id": 1, "source_ref": null, "reprocess": false}
 ```
 
-`influx_connection_id` (optional) is one of [`GET /connections`](#connections);
+The worker runs the event's own `pipeline_edition`; there is no choosing
+another. `influx_connection_id` (optional) is one of [`GET /connections`](#connections);
 omitted or `null` means the default connection. `source_ref` (optional) is
 a git branch, tag, or full commit SHA to build the worker from (see
 [`USAGE.md`](USAGE.md#building-workers-from-git)); omitted, `null`, or blank
@@ -152,9 +153,9 @@ build finishes (or goes `failed` with the build log's tail in
 `SUNBEAM_EVENT_NAME` / `SUNBEAM_PIPELINE_EDITION` / `SUNBEAM_REPROCESS`,
 the connection as `SUNBEAM_INFLUX_URL` / `_ORG` / `_BUCKET` / `_TOKEN`, and
 `SUNBEAM_DATABASE_URL` / `SUNBEAM_SERVER_URL` as environment. Returns the
-`WorkerRunRead`. `400` if `pipeline_edition` (for a local build),
-`influx_connection_id`, or `source_ref` isn't known, or `event_id` doesn't
-exist. If the Docker launch itself fails
+`WorkerRunRead`. `400` if `influx_connection_id` or `source_ref` isn't
+known, `event_id` doesn't exist, or the event's edition isn't one this
+server knows (`GET /pipeline-editions`). If the Docker launch itself fails
 (daemon unreachable, image missing, ...), the row is still created but
 immediately marked `status: "failed"` with `failure_reason` set — the
 response is `200`, not an error; check `status` in the body.
@@ -373,7 +374,8 @@ unknown connection or event.
 ```
 
 Steps run in order — `connect`, `bucket`, then `data` with a window — and
-stop at the first failure. `window_start`/`window_end` are the span checked
+stop at the first failure. `connect` and `bucket` time out after 5 s, the
+`data` query after 15 s. `window_start`/`window_end` are the span checked
 for data.
 
 ### `POST /connections/test`

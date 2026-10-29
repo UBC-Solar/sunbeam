@@ -6,6 +6,7 @@ import {
   WorkerRun,
   getWorkerLogs,
   getWorkerMetrics,
+  shortRef,
   workerLogStreamUrl,
 } from "../api";
 import {formatClock, formatDuration, formatRelative} from "../time";
@@ -146,7 +147,8 @@ export function WorkerDetail({worker, events, onClose, onStop}: WorkerDetailProp
           <dd>
             {worker.source_ref ? (
               <>
-                {worker.source_ref} <span className="mono text-secondary">{worker.source_sha?.slice(0, 7)}</span>
+                {shortRef(worker.source_ref)}{" "}
+                <span className="mono text-secondary">{worker.source_sha?.slice(0, 7)}</span>
               </>
             ) : (
               "Server's working copy"

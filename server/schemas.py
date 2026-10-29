@@ -5,8 +5,8 @@ from db.sunbeamdb.models import ConnectionKind, WorkerKind, WorkerStatus
 
 
 class LaunchWorkerRequest(BaseModel):
+    # The worker runs the event's own pipeline edition
     event_id: int
-    pipeline_edition: str
     # The InfluxDB connection the worker reads from; None means the default connection
     influx_connection_id: int | None = None
     # A git branch, tag, or full commit SHA to build the worker from; None means the server's own copy of the code

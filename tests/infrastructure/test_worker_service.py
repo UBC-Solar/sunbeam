@@ -137,7 +137,7 @@ def make_worker(db, seeded_event, *, status=WorkerStatus.RUNNING, **overrides) -
 class TestLaunchWorker:
     def test_launch_success(self, service, fake_docker, db, seeded_event):
         worker = service.launch_worker(
-            db, event_id=seeded_event.event_id, pipeline_edition="v3_0"
+            db, event_id=seeded_event.event_id
         )
 
         assert worker.status == WorkerStatus.STARTING
@@ -154,7 +154,7 @@ class TestLaunchWorker:
     def test_launch_defaults_to_the_default_connection_without_reprocessing(
         self, service, fake_docker, db, seeded_event,
     ):
-        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0")
+        worker = service.launch_worker(db, event_id=seeded_event.event_id)
 
         assert (worker.influx_connection_id, worker.influx_connection_name) == (seeded_event.connection_id, "test-influx")
         assert worker.reprocess is False
@@ -162,7 +162,7 @@ class TestLaunchWorker:
         assert environment["SUNBEAM_REPROCESS"] == "false"
 
     def test_launch_hands_the_worker_every_connection(self, service, fake_docker, db, seeded_event):
-        service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0")
+        service.launch_worker(db, event_id=seeded_event.event_id)
 
         environment = fake_docker.containers.run_calls[0]["environment"]
         assert environment["SUNBEAM_INFLUX_URL"] == "http://influx.test:8086"
@@ -179,7 +179,7 @@ class TestLaunchWorker:
         db.commit()
 
         worker = service.launch_worker(
-            db, event_id=seeded_event.event_id, pipeline_edition="v3_0",
+            db, event_id=seeded_event.event_id,
             influx_connection_id=other.id, reprocess=True,
         )
 
@@ -191,7 +191,7 @@ class TestLaunchWorker:
     def test_launch_unknown_connection_rejected(self, service, fake_docker, db, seeded_event):
         with pytest.raises(ValueError, match="No connection exists"):
             service.launch_worker(
-                db, event_id=seeded_event.event_id, pipeline_edition="v3_0", influx_connection_id=999,
+                db, event_id=seeded_event.event_id, influx_connection_id=999,
             )
 
         assert fake_docker.containers.run_calls == []
@@ -200,7 +200,7 @@ class TestLaunchWorker:
         db.get(Event, seeded_event.event_id).ends_at = datetime(2026, 7, 1, 13, 0, 0)
         db.commit()
 
-        service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0")
+        service.launch_worker(db, event_id=seeded_event.event_id)
 
         start, stop = checker.calls[0]["window"]
         assert (start.hour, stop.hour) == (12, 13)
@@ -210,7 +210,7 @@ class TestLaunchWorker:
         checker.fail_with = "no data in 'test-bucket'"
 
         with pytest.raises(ConnectionTestFailed, match="no data in 'test-bucket'"):
-            service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0")
+            service.launch_worker(db, event_id=seeded_event.event_id)
 
         assert fake_docker.containers.run_calls == []
         assert db.query(WorkerRun).count() == 0
@@ -220,7 +220,7 @@ class TestLaunchWorker:
         db.get(Event, seeded_event.event_id).ends_at = datetime(2026, 7, 1, 13, 0, 0)
         db.commit()
 
-        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", reprocess=False)
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, reprocess=False)
 
         assert worker.reprocess is True
         assert fake_docker.containers.run_calls[0]["environment"]["SUNBEAM_REPROCESS"] == "true"
@@ -231,27 +231,36 @@ class TestLaunchWorker:
         fake_docker.containers.fail_run_with = DockerException("daemon down")
 
         worker = service.launch_worker(
-            db, event_id=seeded_event.event_id, pipeline_edition="v3_0"
+            db, event_id=seeded_event.event_id
         )
 
         assert worker.status == WorkerStatus.FAILED
         assert "Failed to launch Docker container" in worker.failure_reason
         assert worker.stopped_at is not None
 
-    def test_launch_unknown_pipeline_edition_rejected(self, service, db, seeded_event):
-        with pytest.raises(ValueError, match="Unknown pipeline edition"):
-            service.launch_worker(
-                db, event_id=seeded_event.event_id, pipeline_edition="nope"
-            )
+    def test_launch_runs_the_events_own_edition(self, service, fake_docker, db, seeded_event):
+        worker = service.launch_worker(db, event_id=seeded_event.event_id)
+
+        assert worker.pipeline_edition == "v3_0"
+        assert fake_docker.containers.run_calls[0]["environment"]["SUNBEAM_PIPELINE_EDITION"] == "v3_0"
+
+    def test_event_with_an_edition_the_server_lacks_is_rejected(self, service, fake_docker, db, seeded_event):
+        db.get(Event, seeded_event.event_id).pipeline_edition = "nope"
+        db.commit()
+
+        with pytest.raises(ValueError, match="Unknown pipeline edition 'nope'"):
+            service.launch_worker(db, event_id=seeded_event.event_id)
+
+        assert fake_docker.containers.run_calls == []
 
     def test_launch_unknown_event_rejected(self, service, db, seeded_event):
         with pytest.raises(ValueError, match="No event exists"):
-            service.launch_worker(db, event_id=999_999, pipeline_edition="v3_0")
+            service.launch_worker(db, event_id=999_999)
 
 
 class TestGitSource:
     def test_branch_is_resolved_and_built_before_launch(self, service, fake_docker, db, seeded_event):
-        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref="v4_0")
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, source_ref="v4_0")
 
         db.refresh(worker)
         assert (worker.source_ref, worker.source_sha) == ("v4_0", SHA)
@@ -266,21 +275,21 @@ class TestGitSource:
         assert fake_docker.containers.run_calls[0]["image"] == worker.image_tag
 
     def test_annotated_tag_resolves_to_its_commit(self, service, db, seeded_event):
-        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref="v1.0")
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, source_ref="v1.0")
 
         assert worker.source_sha == SHA
 
     def test_full_sha_is_used_as_is(self, service, db, seeded_event):
         sha = "b" * 40
 
-        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref=sha)
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, source_ref=sha)
 
         assert worker.source_sha == sha
 
     def test_already_built_commit_skips_the_build(self, service, fake_docker, db, seeded_event):
         fake_docker.images.tags.add(f"sunbeam-worker:v3_0-{SHA[:12]}")
 
-        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref="v4_0")
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, source_ref="v4_0")
 
         assert fake_docker.images.build_calls == []
         assert worker.status == WorkerStatus.STARTING
@@ -291,7 +300,7 @@ class TestGitSource:
             fake_docker, session_factory, ls_remote=fake_ls_remote, run_in_background=builds.append,
         )
 
-        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref="v4_0")
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, source_ref="v4_0")
 
         assert worker.status == WorkerStatus.BUILDING
         assert worker.container_id is None
@@ -302,7 +311,7 @@ class TestGitSource:
         service = make_worker_service(
             fake_docker, session_factory, ls_remote=fake_ls_remote, run_in_background=builds.append,
         )
-        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref="v4_0")
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, source_ref="v4_0")
         service.request_stop(db, worker.id)
 
         builds[0]()
@@ -317,7 +326,7 @@ class TestGitSource:
             [{"stream": "Step 5/7 : RUN test -f ..."}, {"error": "predates server-managed connections"}],
         )
 
-        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref="v4_0")
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, source_ref="v4_0")
 
         db.refresh(worker)
         assert worker.status == WorkerStatus.FAILED
@@ -326,20 +335,14 @@ class TestGitSource:
 
     def test_unknown_ref_rejected(self, service, db, seeded_event):
         with pytest.raises(ValueError, match="No branch or tag named 'nope'"):
-            service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref="nope")
+            service.launch_worker(db, event_id=seeded_event.event_id, source_ref="nope")
 
     def test_short_sha_rejected_with_guidance(self, service, db, seeded_event):
         with pytest.raises(ValueError, match="full 40-character SHA"):
-            service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref="abc1234")
-
-    def test_ref_skips_the_local_edition_check(self, service, db, seeded_event):
-        # A newer commit may define editions this copy of the code doesn't know
-        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v9_9", source_ref="v4_0")
-
-        assert worker.image_tag == f"sunbeam-worker:v9_9-{SHA[:12]}"
+            service.launch_worker(db, event_id=seeded_event.event_id, source_ref="abc1234")
 
     def test_blank_ref_means_local(self, service, fake_docker, db, seeded_event):
-        worker = service.launch_worker(db, event_id=seeded_event.event_id, pipeline_edition="v3_0", source_ref="  ")
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, source_ref="  ")
 
         assert worker.source_ref is None
         assert fake_docker.containers.run_calls[0]["image"] == "sunbeam-worker:v3_0"
@@ -582,7 +585,7 @@ class TestMetrics:
 class TestLogs:
     def test_get_logs_from_live_container(self, service, fake_docker, db, seeded_event):
         worker = service.launch_worker(
-            db, event_id=seeded_event.event_id, pipeline_edition="v3_0"
+            db, event_id=seeded_event.event_id
         )
 
         lines = service.get_logs(db, worker.id)

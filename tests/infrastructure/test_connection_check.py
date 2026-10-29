@@ -19,6 +19,7 @@ class FakeInflux:
 
     def __call__(self, **kwargs):
         self.kwargs = kwargs
+        self.timeouts = [*getattr(self, "timeouts", []), kwargs["timeout"]]
         return self
 
     def ping(self):
@@ -59,6 +60,13 @@ class TestCheckInflux:
         assert [step.name for step in result.steps] == ["connect", "bucket", "data"]
         assert fake.closed
         assert fake.kwargs["token"] == "token"
+
+    def test_checks_time_out_fast_but_the_data_query_gets_longer(self):
+        fake = FakeInflux()
+
+        run(fake, WINDOW)
+
+        assert fake.timeouts == [5_000, 15_000]
 
     def test_without_a_window_data_is_not_checked(self):
         fake = FakeInflux(records=())

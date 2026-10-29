@@ -89,7 +89,7 @@ def make_worker(session_factory, seeded_event):
 def launch_worker(client, seeded_event) -> dict:
     response = client.post(
         "/workers/launch",
-        json={"event_id": seeded_event.event_id, "pipeline_edition": "v3_0"},
+        json={"event_id": seeded_event.event_id},
     )
     assert response.status_code == 200
     return response.json()
@@ -144,20 +144,20 @@ class TestLaunchRoute:
         assert worker["container_id"] is not None
         assert len(fake_docker.containers.run_calls) == 1
 
-    def test_launch_unknown_edition_is_400(self, client, seeded_event):
+    def test_launch_ignores_a_requested_edition(self, client, seeded_event, fake_docker):
+        # The worker always runs the event's own edition
         response = client.post(
             "/workers/launch",
-            json={"event_id": seeded_event.event_id, "pipeline_edition": "nope"},
+            json={"event_id": seeded_event.event_id, "pipeline_edition": "v4_0"},
         )
 
-        assert response.status_code == 400
-        assert "Unknown pipeline edition" in response.json()["detail"]
+        assert response.json()["pipeline_edition"] == "v3_0"
 
     def test_launch_with_connection_and_reprocess(self, client, seeded_event, fake_docker):
         response = client.post(
             "/workers/launch",
             json={
-                "event_id": seeded_event.event_id, "pipeline_edition": "v3_0",
+                "event_id": seeded_event.event_id,
                 "influx_connection_id": seeded_event.connection_id, "reprocess": True,
             },
         )
@@ -174,7 +174,7 @@ class TestLaunchRoute:
     def test_launch_unknown_connection_is_400(self, client, seeded_event):
         response = client.post(
             "/workers/launch",
-            json={"event_id": seeded_event.event_id, "pipeline_edition": "v3_0", "influx_connection_id": 999},
+            json={"event_id": seeded_event.event_id, "influx_connection_id": 999},
         )
 
         assert response.status_code == 400
@@ -187,7 +187,7 @@ class TestLaunchRoute:
 
         response = client.post(
             "/workers/launch",
-            json={"event_id": seeded_event.event_id, "pipeline_edition": "v3_0"},
+            json={"event_id": seeded_event.event_id},
         )
 
         assert response.status_code == 422
@@ -198,7 +198,7 @@ class TestLaunchRoute:
     def test_launch_unknown_event_is_400(self, client):
         response = client.post(
             "/workers/launch",
-            json={"event_id": 999999, "pipeline_edition": "v3_0"},
+            json={"event_id": 999999},
         )
 
         assert response.status_code == 400

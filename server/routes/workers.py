@@ -75,7 +75,6 @@ def launch_worker(
         return service.launch_worker(
             db,
             event_id=payload.event_id,
-            pipeline_edition=payload.pipeline_edition,
             influx_connection_id=payload.influx_connection_id,
             source_ref=payload.source_ref,
             reprocess=payload.reprocess,

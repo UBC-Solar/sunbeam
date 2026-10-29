@@ -115,8 +115,8 @@ Once it's up:
 
 1. Open `http://localhost:5173` — the dashboard lists events (marked
    *Realtime* or *Replay*) and lets you launch a worker for one. **Launch
-   worker…** opens a settings dialog: the pipeline edition (defaulting to
-   the event's own), the InfluxDB connection the worker reads from
+   worker…** opens a settings dialog (the worker always runs the event's own
+   pipeline edition): the InfluxDB connection the worker reads from
    (defaulting to the default connection — see [Connections](#connections)),
    where its code comes from (the server's working copy, or a git ref — see
    [Building workers from git](#building-workers-from-git)), and whether to
@@ -185,9 +185,9 @@ that has moved builds its new commit.
 Notes:
 
 - Short SHAs can't be resolved remotely; give the full 40 characters.
-- The edition must exist in that commit — it isn't checked against the
-  server's own `stage_registry.toml`, so a ref can run an edition the
-  server doesn't know yet. A missing edition fails the build.
+- The worker runs the event's edition, which must be one the server itself
+  knows; editions are added rarely enough that any ref is assumed to have
+  it too. (One that doesn't fails its build.)
 - Commits from before server-managed connections (they read
   `config/context.toml`) can't be launched this way; their build fails with
   a message saying so.

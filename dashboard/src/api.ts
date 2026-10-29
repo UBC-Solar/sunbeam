@@ -86,8 +86,8 @@ export type ConnectionTestResult = {
   window_end: string | null;
 };
 
+// The worker always runs the event's own pipeline edition
 export type LaunchOptions = {
-  pipelineEdition: string;
   influxConnectionId: number | null;
   // A git branch, tag, or full commit SHA; null builds from the server's own copy of the code
   sourceRef: string | null;
@@ -166,10 +166,6 @@ export async function getEvents(): Promise<Event[]> {
   return asJson(await fetch(`${API_BASE_URL}/events`));
 }
 
-export async function getPipelineEditions(): Promise<string[]> {
-  return asJson(await fetch(`${API_BASE_URL}/pipeline-editions`));
-}
-
 export async function getWorkers(): Promise<WorkerRun[]> {
   return asJson(await fetch(`${API_BASE_URL}/workers?active_only=false`));
 }
@@ -220,7 +216,6 @@ export async function launchWorker(eventId: number, options: LaunchOptions): Pro
     `${API_BASE_URL}/workers/launch`,
     jsonRequest("POST", {
       event_id: eventId,
-      pipeline_edition: options.pipelineEdition,
       influx_connection_id: options.influxConnectionId,
       source_ref: options.sourceRef,
       reprocess: options.reprocess,
@@ -263,6 +258,11 @@ export async function getWorkerLogs(
   }
 
   return asJson(response);
+}
+
+// A full commit SHA is too long to show; branch and tag names are shown as they are
+export function shortRef(ref: string): string {
+  return /^[0-9a-f]{40}$/.test(ref) ? ref.slice(0, 7) : ref;
 }
 
 export function workerLogStreamUrl(workerId: string, tail = 200): string {

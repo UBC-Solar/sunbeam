@@ -6,7 +6,6 @@ import {
   WorkerRun,
   getConnections,
   getEvents,
-  getPipelineEditions,
   getWorkers,
   launchWorker,
   stopWorker,
@@ -19,7 +18,6 @@ import {WorkersTable} from "./components/WorkersTable";
 function App() {
   const [events, setEvents] = useState<Event[]>([]);
   const [workers, setWorkers] = useState<WorkerRun[]>([]);
-  const [editions, setEditions] = useState<string[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [launchingEvent, setLaunchingEvent] = useState<Event | null>(null);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
@@ -29,16 +27,14 @@ function App() {
 
   async function refresh() {
     try {
-      const [eventsData, workersData, editionsData, connectionsData] = await Promise.all([
+      const [eventsData, workersData, connectionsData] = await Promise.all([
         getEvents(),
         getWorkers(),
-        getPipelineEditions(),
         getConnections(),
       ]);
 
       setEvents(eventsData);
       setWorkers(workersData);
-      setEditions(editionsData);
       setConnections(connectionsData);
       setError(null);
       setLoaded(true);
@@ -134,7 +130,6 @@ function App() {
       {launchingEvent && (
         <LaunchDialog
           event={launchingEvent}
-          editions={editions}
           connections={connections}
           onCancel={() => setLaunchingEvent(null)}
           onLaunch={(options) => onLaunch(launchingEvent, options)}

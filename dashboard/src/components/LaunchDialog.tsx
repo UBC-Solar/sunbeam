@@ -3,7 +3,6 @@ import {Connection, Event, LaunchOptions} from "../api";
 
 type LaunchDialogProps = {
   event: Event;
-  editions: string[];
   connections: Connection[];
   onCancel: () => void;
   onLaunch: (options: LaunchOptions) => Promise<void>;
@@ -14,10 +13,7 @@ function lastTestLabel(connection: Connection): string {
   return connection.last_test_ok ? " · last test passed" : " · last test failed";
 }
 
-export function LaunchDialog({event, editions, connections, onCancel, onLaunch}: LaunchDialogProps) {
-  const [pipelineEdition, setPipelineEdition] = useState(
-    editions.includes(event.pipeline_edition) ? event.pipeline_edition : (editions[0] ?? ""),
-  );
+export function LaunchDialog({event, connections, onCancel, onLaunch}: LaunchDialogProps) {
   const [connectionId, setConnectionId] = useState<number | null>(
     (connections.find((c) => c.is_default) ?? connections[0])?.id ?? null,
   );
@@ -41,7 +37,6 @@ export function LaunchDialog({event, editions, connections, onCancel, onLaunch}:
     setError(null);
     try {
       await onLaunch({
-        pipelineEdition,
         influxConnectionId: connectionId,
         sourceRef: source === "git" ? gitRef.trim() : null,
         // The server forces reprocess for replays too; sending it keeps the request honest
@@ -66,23 +61,11 @@ export function LaunchDialog({event, editions, connections, onCancel, onLaunch}:
       >
         <h2 id="launch-title">Launch worker</h2>
         <p className="text-secondary modal-subtitle">
-          {event.name} ·{" "}
+          {event.name} · pipeline {event.pipeline_edition} ·{" "}
           {event.is_replay ? "Replay of a past event" : "Realtime: runs until stopped"}
         </p>
 
         {error && <div className="error-banner">Couldn't launch: {error}</div>}
-
-        <label className="field">
-          <span className="field-label">Pipeline edition</span>
-          <select value={pipelineEdition} onChange={(e) => setPipelineEdition(e.target.value)}>
-            {editions.map((edition) => (
-              <option key={edition} value={edition}>
-                {edition}
-                {edition === event.pipeline_edition ? " (event's edition)" : ""}
-              </option>
-            ))}
-          </select>
-        </label>
 
         <label className="field">
           <span className="field-label">InfluxDB connection</span>
@@ -163,7 +146,7 @@ export function LaunchDialog({event, editions, connections, onCancel, onLaunch}:
           <button
             type="submit"
             className="primary"
-            disabled={launching || !pipelineEdition || connectionId === null || missingRef}
+            disabled={launching || connectionId === null || missingRef}
           >
             {launching ? "Testing connection…" : "Launch"}
           </button>

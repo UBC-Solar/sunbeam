@@ -164,6 +164,12 @@ tbody td {
   vertical-align: middle;
 }
 
+/* Long refs, connection names, and messages wrap rather than widening the table */
+tbody td.wrap {
+  overflow-wrap: anywhere;
+  max-width: 22rem;
+}
+
 tbody tr {
   transition: background 0.1s ease;
 }
