@@ -1,5 +1,5 @@
 import enum
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Optional
 from sqlalchemy import (
     BigInteger,
@@ -18,6 +18,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 import uuid
+
+from db.timeutil import is_past
 
 class Base(DeclarativeBase):
     pass
@@ -54,19 +56,14 @@ class Event(Base):
     ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     pipeline_edition: Mapped[str] = mapped_column(String(32), nullable=False)
 
-    status: Mapped[EventStatus] = mapped_column(Enum(EventStatus), nullable=False)  # planned, active, complete
+    status: Mapped[EventStatus] = mapped_column(Enum(EventStatus), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     vehicle: Mapped["Vehicle"] = relationship(back_populates="events")
     signals: Mapped[list["Signal"]] = relationship(back_populates="event")
 
     def is_past(self) -> bool:
         """ True if the event has ended, so a worker replays it rather than running it live. """
-        if self.ends_at is None:
-            return False
-
-        # SQLite (the default test suite) drops tzinfo; stored values are UTC
-        ends_at = self.ends_at if self.ends_at.tzinfo else self.ends_at.replace(tzinfo=UTC)
-        return ends_at < datetime.now(UTC)
+        return is_past(self.ends_at)
 
 
 class Signal(Base):

@@ -9,7 +9,7 @@ pytest.importorskip("docker")
 from docker.errors import DockerException
 from fastapi.testclient import TestClient
 
-from db.sunbeamdb.models import Event, WorkerRun, WorkerStatus
+from db.sunbeamdb.models import Event, EventStatus, Sample, WorkerRun, WorkerStatus
 from server.deps import get_db
 from server.routes.workers import get_worker_service
 from server.services.metrics_cache import MetricsCache
@@ -106,7 +106,6 @@ class TestEventRoutes:
         events = response.json()
         assert len(events) == 1
         assert events[0]["name"] == seeded_event.event_name
-        assert events[0]["status"] == "unprocessed"
         assert events[0]["pipeline_edition"] == "v3_0"
 
     def test_get_event_by_id(self, client, seeded_event):
@@ -125,6 +124,32 @@ class TestEventRoutes:
         end_event(session_factory, seeded_event)
 
         assert client.get(f"/events/{seeded_event.event_id}").json()["is_replay"] is True
+
+    def test_new_event_has_not_run(self, client, seeded_event):
+        event = client.get(f"/events/{seeded_event.event_id}").json()
+
+        assert (event["status"], event["running"], event["sample_count"]) == ("unprocessed", False, 0)
+
+    def test_event_with_an_active_worker_is_running(self, client, seeded_event, make_worker):
+        make_worker(status=WorkerStatus.RUNNING)
+
+        assert client.get("/events").json()[0]["running"] is True
+
+    def test_event_whose_workers_all_finished_is_not_running(self, client, seeded_event, make_worker):
+        make_worker(status=WorkerStatus.COMPLETED)
+
+        assert client.get("/events").json()[0]["running"] is False
+
+    def test_sample_count_counts_the_events_samples(self, client, session_factory, seeded_event):
+        with session_factory() as session:
+            session.get(Event, seeded_event.event_id).status = EventStatus.PROCESSED
+            session.add_all([
+                Sample(event_id=seeded_event.event_id, signal_id=signal_id, ts=datetime(2026, 7, 1, 12), value_f64=1.0)
+                for signal_id in seeded_event.signal_ids.values()
+            ])
+            session.commit()
+
+        assert client.get("/events").json()[0]["sample_count"] == len(seeded_event.signal_ids)
 
 
 class TestPipelineEditionRoutes:
@@ -171,13 +196,13 @@ class TestLaunchRoute:
         assert environment["SUNBEAM_INFLUX_BUCKET"] == "test-bucket"
         assert environment["SUNBEAM_REPROCESS"] == "true"
 
-    def test_launch_unknown_connection_is_400(self, client, seeded_event):
+    def test_launch_unknown_connection_is_404(self, client, seeded_event):
         response = client.post(
             "/workers/launch",
             json={"event_id": seeded_event.event_id, "influx_connection_id": 999},
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 404
         assert "No connection exists" in response.json()["detail"]
 
     def test_launch_with_a_failing_connection_is_422_and_launches_nothing(
@@ -195,13 +220,21 @@ class TestLaunchRoute:
         assert fake_docker.containers.run_calls == []
         assert client.get("/workers").json() == []
 
-    def test_launch_unknown_event_is_400(self, client):
+    def test_launch_while_the_event_has_an_active_worker_is_409(self, client, seeded_event, make_worker):
+        make_worker()
+
+        response = client.post("/workers/launch", json={"event_id": seeded_event.event_id})
+
+        assert response.status_code == 409
+        assert "already has an active worker" in response.json()["detail"]
+
+    def test_launch_unknown_event_is_404(self, client):
         response = client.post(
             "/workers/launch",
             json={"event_id": 999999},
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 404
         assert "No event exists" in response.json()["detail"]
 
 
@@ -228,13 +261,13 @@ class TestRegisterRoute:
         permission = client.get(f"/workers/{worker_id}/permission").json()
         assert permission["allowed"] is True
 
-    def test_register_unknown_event_is_400(self, client):
+    def test_register_unknown_event_is_404(self, client):
         response = client.post(
             "/workers/register",
             json={"event_name": "no-such-event", "pipeline_edition": "v3_0"},
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 404
         assert "No event exists" in response.json()["detail"]
 
     def test_register_unknown_edition_is_400(self, client, seeded_event):
@@ -298,7 +331,6 @@ class TestWorkerLifecycleRoutes:
         assert response.json() == {
             "allowed": True,
             "reason": None,
-            "stop_requested": False,
         }
 
     def test_stop_then_permission_denied(self, client, make_worker):
@@ -310,7 +342,7 @@ class TestWorkerLifecycleRoutes:
 
         permission = client.get(f"/workers/{worker_id}/permission").json()
         assert permission["allowed"] is False
-        assert permission["stop_requested"] is True
+        assert permission["reason"] == "Stop requested."
 
     def test_stop_unknown_worker_is_404(self, client):
         assert client.post(f"/workers/{uuid.uuid4()}/stop").status_code == 404

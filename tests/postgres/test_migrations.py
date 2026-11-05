@@ -15,6 +15,9 @@ pytestmark = pytest.mark.postgres
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.parent
 
+# The first migration
+BASELINE_REVISION = "f3f709edb0e7"
+
 EXPECTED_TABLES = {
     "vehicle",
     "event",
@@ -201,55 +204,10 @@ class TestServerStartupUpgrade:
         assert EXPECTED_TABLES <= tables
         assert "alembic_version" in tables
 
-    def test_pre_alembic_database_is_stamped_then_migrated(self, alembic_config):
-        # Fabricate a genuine legacy database: schema exactly at the baseline
-        # revision, with no alembic_version bookkeeping - what a deployment
-        # created by the old create_schema() looks like.
-        from alembic.script import ScriptDirectory
-        from sqlalchemy import create_engine
-
-        from server.migrations import BASELINE_REVISION, upgrade_database
-
-        config, url = alembic_config
-        command.upgrade(config, BASELINE_REVISION)
-
-        engine = create_engine(url)
-        try:
-            with engine.begin() as conn:
-                conn.execute(text("DROP TABLE alembic_version"))
-                conn.execute(
-                    text(
-                        "INSERT INTO vehicle (name, description) "
-                        "VALUES ('Brightside', 'pre-existing')"
-                    )
-                )
-
-            # Must not raise (a blind `upgrade head` would fail on the
-            # existing tables), must keep existing data, and must carry the
-            # database through every migration after the baseline.
-            upgrade_database(engine)
-
-            with engine.connect() as conn:
-                version = conn.scalar(text("SELECT version_num FROM alembic_version"))
-                vehicles = conn.scalar(text("SELECT count(*) FROM vehicle"))
-                kind_column = conn.scalar(
-                    text(
-                        "SELECT count(*) FROM information_schema.columns "
-                        "WHERE table_name='worker_run' AND column_name='kind'"
-                    )
-                )
-        finally:
-            engine.dispose()
-
-        head = ScriptDirectory.from_config(config).get_current_head()
-        assert version == head
-        assert vehicles == 1
-        assert kind_column == 1
-
     def test_blocked_migration_fails_loudly_instead_of_hanging(self, alembic_config):
         from sqlalchemy import create_engine
 
-        from server.migrations import BASELINE_REVISION, upgrade_database
+        from server.migrations import upgrade_database
 
         config, url = alembic_config
         command.upgrade(config, BASELINE_REVISION)

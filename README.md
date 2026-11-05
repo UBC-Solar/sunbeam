@@ -32,7 +32,7 @@ breakdown and the rules that keep these pieces independently testable.
 
 | Document | Covers |
 |---|---|
-| [`docs/USAGE.md`](docs/USAGE.md) | Running Sunbeam: Docker + dashboard, the CLI's three operating modes, `uv` dependency groups and why they're split per pipeline edition. **Start here to run something.** |
+| [`docs/USAGE.md`](docs/USAGE.md) | Running Sunbeam: Docker + dashboard, the CLI's three operating modes, `uv` dependency groups. **Start here to run something.** |
 | [`docs/STAGES.md`](docs/STAGES.md) | What a stage is, how stages become a scheduled pipeline, `stage_registry.toml`, pipeline editions, and the checklist for writing a new stage. **Start here to add computation.** |
 | [`docs/API.md`](docs/API.md) | The full server HTTP/SSE API: events, workers, pipeline editions, and the telemetry query + streaming endpoints. |
 | [`docs/CONTRACTS.md`](docs/CONTRACTS.md) | The contract each module (`config`, `state`, `stage`, `pipeline`, `orchestration`, `db`, `server`) keeps with the others — what it owns, what it's allowed to assume, what must never import what. |
@@ -70,7 +70,7 @@ stage/          The Stage base class, StageLibrary, and per-edition stage implem
 pipeline/       Graph building, scheduling, the Executor, timing/metrics
 orchestration/  Worker<->server protocol: WorkerControl, OrchestratorClient, bootstrap
 db/             SQLAlchemy models, event/sample writers, InfluxDB readers
-server/         The FastAPI app: routes, services, the debug stream viewer
+server/         The FastAPI app: routes and services
 alembic/        Database migration chain (see docs/ALEMBIC.md)
 dashboard/      The React/Vite operator dashboard
 tests/          v3_0/ (pure stage unit tests), infrastructure/ (everything else, SQLite-backed), postgres/ (marked, needs Docker)
@@ -91,12 +91,11 @@ the extras/groups you need. For full local development (running the
 worker, the test suite, and the lint/type tooling):
 
 ```bash
-uv sync --extra executor --extra v3_0 --group test --group dev
+uv sync --extra server --extra executor --extra v3_0 --all-groups
 ```
 
 See [`docs/USAGE.md`](docs/USAGE.md#dependency-groups-and-why)
-for what each extra/group is for and why `server`/`executor` and
-`v3_0`/`v3_1` are mutually exclusive.
+for what each extra/group is for.
 
 ### Linting and Type Checking
 

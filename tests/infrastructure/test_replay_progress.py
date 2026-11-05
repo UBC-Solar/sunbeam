@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from rich.console import Console
 
-from pipeline.output import LoggingOutputManager, RichReplayOutputManager
+from pipeline.output import MetricsReporter, RichReplayOutputManager, render_metrics_table
 from pipeline.replay_progress import ReplayProgress, format_duration, format_speed
 from pipeline.timing import TimingStats
 from tests.infrastructure.conftest import FakeControl
@@ -77,13 +77,13 @@ class TestFormatting:
         assert format_speed(1234.4) == "×1,234"
 
 
-class TestLoggingOutputManagerReplay:
+class TestMetricsReporter:
     def test_reports_replay_progress_with_the_timing(self, clock):
         control = FakeControl()
         reported = []
         control.report_metrics = reported.append
         progress = ReplayProgress(START, END, monotonic=clock)
-        manager = LoggingOutputManager(TimingStats({}), control, report_interval_s=0.0, replay=progress)
+        manager = MetricsReporter(TimingStats({}), control, report_interval_s=0.0, replay=progress)
 
         clock.now = 1.0
         with manager:
@@ -97,7 +97,7 @@ class TestLoggingOutputManagerReplay:
         reported = []
         control.report_metrics = reported.append
         progress = ReplayProgress(START, END, monotonic=clock)
-        manager = LoggingOutputManager(
+        manager = MetricsReporter(
             TimingStats({}), control, report_interval_s=0.0, log_interval_s=5.0, replay=progress, monotonic=clock,
         )
 
@@ -114,7 +114,7 @@ class TestLoggingOutputManagerReplay:
         control = FakeControl()
         reported = []
         control.report_metrics = reported.append
-        manager = LoggingOutputManager(
+        manager = MetricsReporter(
             TimingStats({}), control, report_interval_s=0.0, log_interval_s=None,
             replay=ReplayProgress(START, END, monotonic=clock), monotonic=clock,
         )
@@ -129,7 +129,7 @@ class TestLoggingOutputManagerReplay:
         control = FakeControl()
         reported = []
         control.report_metrics = reported.append
-        manager = LoggingOutputManager(TimingStats({}), control, report_interval_s=0.0)
+        manager = MetricsReporter(TimingStats({}), control, report_interval_s=0.0)
 
         manager.on_tick(START)
 
@@ -175,21 +175,6 @@ class TestRichReplayOutputManager:
             assert manager._progress.tasks[0].completed == 180.0
 
 
-class TestCombinedOutputManager:
-    def test_enters_ticks_and_exits_every_manager(self):
-        from pipeline.output import CombinedOutputManager
-        from tests.infrastructure.conftest import FakeOutputManager
-
-        first, second = FakeOutputManager(), FakeOutputManager()
-
-        with CombinedOutputManager(first, second) as combined:
-            assert first.entered and second.entered
-            combined.on_tick(START)
-
-        assert first.ticks == second.ticks == 1
-        assert first.exited and second.exited
-
-
 class TestExecutorOutputSelection:
     """ Which display (and whether server reporting) each kind of run gets. """
 
@@ -205,33 +190,46 @@ class TestExecutorOutputSelection:
         return ReplayProgress(START, END)
 
     def test_replay_in_a_terminal_draws_the_bar_and_reports(self):
-        from pipeline.output import CombinedOutputManager
+        bar, reporter = self._executor(orchestrated=True, interactive=True)._output_managers(self._replay())
 
-        manager = self._executor(orchestrated=True, interactive=True)._resolve_output_manager(self._replay())
-
-        assert isinstance(manager, CombinedOutputManager)
-        display, reporter = manager._managers
-        assert isinstance(display, RichReplayOutputManager)
-        assert isinstance(reporter, LoggingOutputManager)
+        assert isinstance(bar, RichReplayOutputManager)
+        assert isinstance(reporter, MetricsReporter)
         assert reporter._log_interval_s is None
         assert reporter._report_interval_s == 0.5
 
     def test_headless_replay_logs_and_reports(self):
-        manager = self._executor(orchestrated=True, interactive=False)._resolve_output_manager(self._replay())
+        [reporter] = self._executor(orchestrated=True, interactive=False)._output_managers(self._replay())
 
-        assert isinstance(manager, LoggingOutputManager)
-        assert manager._report_interval_s == 0.5
-        assert manager._log_interval_s == 5.0
+        assert reporter._report_interval_s == 0.5
+        assert reporter._log_interval_s == 5.0
 
-    def test_orchestrated_realtime_logs_and_reports_every_5_s(self):
-        manager = self._executor(orchestrated=True, interactive=True)._resolve_output_manager()
+    def test_headless_realtime_logs_and_reports_every_5_s(self):
+        [reporter] = self._executor(orchestrated=True, interactive=False)._output_managers()
 
-        assert isinstance(manager, LoggingOutputManager)
-        assert manager._report_interval_s == 5.0
+        assert reporter._report_interval_s == 5.0
+        assert reporter._log_interval_s == 5.0
+        assert reporter._live is None
 
-    def test_serverless_realtime_draws_the_timing_table(self):
-        from pipeline.output import RichOutputManager
+    def test_realtime_in_a_terminal_draws_the_table_and_still_reports(self):
+        [reporter] = self._executor(orchestrated=True, interactive=True)._output_managers()
 
-        manager = self._executor(orchestrated=False, interactive=True)._resolve_output_manager()
+        assert reporter._live is not None
+        assert reporter._log_interval_s is None
 
-        assert isinstance(manager, RichOutputManager)
+
+class TestRenderMetricsTable:
+    def test_renders_pipelines_and_stages_from_a_payload(self):
+        payload = {
+            "idle_pct": 90.0, "busy_pct": 10.0, "writer_ms": 1.5,
+            "pipelines": [{
+                "name": "A -> B", "total_ms": 4.0, "avg_ms": 0.4, "ticks": 10, "late_now_ms": 0.0, "late_max_ms": 1.0,
+                "stages": [{"name": "A", "total_ms": 3.0, "avg_ms": 0.3, "max_ms": 0.5, "calls": 10}],
+            }],
+        }
+        output = io.StringIO()
+
+        Console(file=output, width=160).print(render_metrics_table(payload))
+
+        rendered = output.getvalue()
+        assert "A -> B" in rendered
+        assert "0.300 ms/call" in rendered

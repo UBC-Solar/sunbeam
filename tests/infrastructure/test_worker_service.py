@@ -189,7 +189,7 @@ class TestLaunchWorker:
         assert environment["SUNBEAM_REPROCESS"] == "true"
 
     def test_launch_unknown_connection_rejected(self, service, fake_docker, db, seeded_event):
-        with pytest.raises(ValueError, match="No connection exists"):
+        with pytest.raises(LookupError, match="No connection exists"):
             service.launch_worker(
                 db, event_id=seeded_event.event_id, influx_connection_id=999,
             )
@@ -254,11 +254,16 @@ class TestLaunchWorker:
         assert fake_docker.containers.run_calls == []
 
     def test_launch_unknown_event_rejected(self, service, db, seeded_event):
-        with pytest.raises(ValueError, match="No event exists"):
+        with pytest.raises(LookupError, match="No event exists"):
             service.launch_worker(db, event_id=999_999)
 
 
 class TestGitSource:
+    @pytest.fixture(autouse=True)
+    def local_image(self, fake_docker):
+        # Built by the server at startup; git builds start from them
+        fake_docker.images.tags.add("sunbeam-worker:v3_0")
+
     def test_branch_is_resolved_and_built_before_launch(self, service, fake_docker, db, seeded_event):
         worker = service.launch_worker(db, event_id=seeded_event.event_id, source_ref="v4_0")
 
@@ -271,6 +276,7 @@ class TestGitSource:
         assert build["tag"] == worker.image_tag
         assert build["buildargs"]["GIT_REF"] == SHA
         assert build["buildargs"]["PIPELINE_EDITION"] == "v3_0"
+        assert build["buildargs"]["BASE_IMAGE"] == "sunbeam-worker:v3_0"
         assert "path" not in build  # the Dockerfile clones the code; there is no local build context
         assert fake_docker.containers.run_calls[0]["image"] == worker.image_tag
 
@@ -292,6 +298,17 @@ class TestGitSource:
         worker = service.launch_worker(db, event_id=seeded_event.event_id, source_ref="v4_0")
 
         assert fake_docker.images.build_calls == []
+        assert worker.status == WorkerStatus.STARTING
+
+    def test_missing_local_image_is_built_first(self, service, fake_docker, db, seeded_event):
+        fake_docker.images.tags.clear()
+
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, source_ref="v4_0")
+
+        db.refresh(worker)
+        local, git = fake_docker.images.build_calls
+        assert (local["tag"], local["dockerfile"]) == ("sunbeam-worker:v3_0", "pipeline/Dockerfile")
+        assert git["tag"] == worker.image_tag
         assert worker.status == WorkerStatus.STARTING
 
     def test_new_build_starts_as_building(self, fake_docker, session_factory, db, seeded_event):
@@ -397,7 +414,7 @@ class TestRegisterWorker:
         assert completed.status == WorkerStatus.COMPLETED
 
     def test_register_unknown_event_rejected(self, service, db, seeded_event):
-        with pytest.raises(ValueError, match="No event exists"):
+        with pytest.raises(LookupError, match="No event exists"):
             service.register_worker(
                 db, event_name="no-such-event", pipeline_edition="v3_0", host=None
             )
@@ -462,8 +479,8 @@ class TestHeartbeat:
         assert updated.status == WorkerStatus.FAILED
         assert updated.last_heartbeat_at is None
 
-    def test_heartbeat_unknown_worker_returns_none(self, service, db):
-        assert (
+    def test_heartbeat_unknown_worker_raises(self, service, db):
+        with pytest.raises(LookupError, match="Worker not found"):
             service.heartbeat(
                 db,
                 worker_id=uuid.uuid4(),
@@ -472,35 +489,32 @@ class TestHeartbeat:
                 status_message=None,
                 host=None,
             )
-            is None
-        )
 
 
 class TestPermission:
     def test_active_worker_is_allowed(self, service, db, seeded_event):
         worker = make_worker(db, seeded_event)
 
-        assert service.permission_for(db, worker.id) == (True, None, False)
+        assert service.permission_for(db, worker.id) == (True, None)
 
     def test_unknown_worker_is_denied(self, service, db):
-        allowed, reason, stop_requested = service.permission_for(db, uuid.uuid4())
+        allowed, reason = service.permission_for(db, uuid.uuid4())
 
         assert allowed is False
         assert reason == "Unknown worker."
-        assert stop_requested is True
 
     def test_stop_requested_worker_is_denied(self, service, db, seeded_event):
         worker = make_worker(db, seeded_event, stop_requested=True)
 
-        allowed, reason, stop_requested = service.permission_for(db, worker.id)
+        allowed, reason = service.permission_for(db, worker.id)
 
         assert allowed is False
-        assert stop_requested is True
+        assert reason == "Stop requested."
 
     def test_terminal_worker_is_denied(self, service, db, seeded_event):
         worker = make_worker(db, seeded_event, status=WorkerStatus.COMPLETED)
 
-        allowed, reason, _ = service.permission_for(db, worker.id)
+        allowed, reason = service.permission_for(db, worker.id)
 
         assert allowed is False
         assert "terminal" in reason
@@ -555,18 +569,16 @@ class TestComplete:
 
         service.complete(db, worker_id=worker.id, success=True, message=None)
 
-        assert service.get_metrics(worker.id) is None
+        with pytest.raises(LookupError):
+            service.get_metrics(worker.id)
 
 
 class TestMetrics:
     def test_metrics_recorded_for_active_worker(self, service, db, seeded_event):
         worker = make_worker(db, seeded_event)
 
-        accepted = service.record_metrics(
-            db, worker_id=worker.id, payload={"idle_pct": 42.0}
-        )
+        service.record_metrics(db, worker_id=worker.id, payload={"idle_pct": 42.0})
 
-        assert accepted is True
         metrics = service.get_metrics(worker.id)
         assert metrics["idle_pct"] == 42.0
         assert "reported_at" in metrics
@@ -574,12 +586,11 @@ class TestMetrics:
     def test_metrics_rejected_for_terminal_worker(self, service, db, seeded_event):
         worker = make_worker(db, seeded_event, status=WorkerStatus.FAILED)
 
-        accepted = service.record_metrics(
-            db, worker_id=worker.id, payload={"idle_pct": 42.0}
-        )
+        with pytest.raises(LookupError, match="no longer active"):
+            service.record_metrics(db, worker_id=worker.id, payload={"idle_pct": 42.0})
 
-        assert accepted is False
-        assert service.get_metrics(worker.id) is None
+        with pytest.raises(LookupError):
+            service.get_metrics(worker.id)
 
 
 class TestLogs:
@@ -592,14 +603,53 @@ class TestLogs:
 
         assert lines == ["line-1", "line-2"]
 
-    def test_get_logs_without_container_returns_none(self, service, db, seeded_event):
+    def test_get_logs_without_container_raises(self, service, db, seeded_event):
         worker = make_worker(db, seeded_event)
 
-        assert service.get_logs(db, worker.id) is None
+        with pytest.raises(LookupError, match="container could not be found"):
+            service.get_logs(db, worker.id)
 
-    def test_get_logs_when_container_vanished_returns_none(
+    def test_get_logs_when_container_vanished_raises(
         self, service, db, seeded_event
     ):
         worker = make_worker(db, seeded_event, container_id="gone")
 
-        assert service.get_logs(db, worker.id) is None
+        with pytest.raises(LookupError, match="container could not be found"):
+            service.get_logs(db, worker.id)
+
+class TestOneActiveRunPerEvent:
+    """ Two runs of one event would both write (and a replay wipe) the same samples. """
+
+    def test_launch_refused_while_another_run_is_active(self, service, fake_docker, db, seeded_event):
+        from server.errors import Conflict
+
+        make_worker(db, seeded_event, status=WorkerStatus.RUNNING)
+
+        with pytest.raises(Conflict, match="already has an active worker"):
+            service.launch_worker(db, event_id=seeded_event.event_id)
+
+        assert fake_docker.containers.run_calls == []
+
+    def test_register_refused_while_another_run_is_active(self, service, db, seeded_event):
+        from server.errors import Conflict
+
+        make_worker(db, seeded_event, status=WorkerStatus.BUILDING)
+
+        with pytest.raises(Conflict):
+            service.register_worker(db, event_name=seeded_event.event_name, pipeline_edition="v3_0", host=None)
+
+    def test_finished_runs_do_not_block_a_new_one(self, service, db, seeded_event):
+        for status in (WorkerStatus.COMPLETED, WorkerStatus.FAILED, WorkerStatus.LOST, WorkerStatus.CANCELLED):
+            make_worker(db, seeded_event, status=status)
+
+        assert service.launch_worker(db, event_id=seeded_event.event_id).status == WorkerStatus.STARTING
+
+
+class TestCompleteAfterResolution:
+    def test_late_completion_does_not_overwrite_a_terminal_status(self, service, db, seeded_event):
+        worker = make_worker(db, seeded_event, status=WorkerStatus.LOST, failure_reason="Worker stopped heartbeating.")
+
+        updated = service.complete(db, worker_id=worker.id, success=True, message="Pipeline completed.")
+
+        assert updated.status == WorkerStatus.LOST
+        assert updated.failure_reason == "Worker stopped heartbeating."

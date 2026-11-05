@@ -85,24 +85,32 @@ class TestState:
         frame = state.as_frame(["a"], timestamp)
         assert frame.read("a") == 5.0
 
-    def test_from_frame_stores_outputs(self, timestamp):
+    def test_update_stores_outputs(self, timestamp):
         state = State()
         frame = Frame(timestamp)
-        frame.write("b", 7.0)
+        frame.write("a", 7.0)
 
-        state.from_frame(frame.as_view(), ["b"])
+        state.update(frame.as_view(), SourceStage())
 
-        assert state.as_frame(["b"], timestamp).read("b") == 7.0
+        assert state.as_frame(["a"], timestamp).read("a") == 7.0
 
-    def test_from_frame_tolerates_missing_outputs(self, timestamp):
+    def test_update_rejects_missing_outputs(self, timestamp):
+        # Otherwise downstream stages would keep reading the previous tick's value
+        with pytest.raises(RuntimeError, match="did not write its declared output 'a'"):
+            State().update(Frame(timestamp).as_view(), SourceStage())
+
+    def test_update_allows_missing_outputs_when_the_stage_says_so(self, timestamp):
+        class PartialSource(SourceStage):
+            stage_name = "PartialSource"
+            inputs = []
+            outputs = ["a"]
+            frequency = 10.0
+            may_omit_outputs = True
+
         state = State()
-        frame = Frame(timestamp)
+        state.update(Frame(timestamp).as_view(), PartialSource())
 
-        # Declared output was never written; must not raise.
-        state.from_frame(frame.as_view(), ["b"])
-
-        with pytest.raises(KeyError):
-            state.as_frame(["b"], timestamp)
+        assert "a" not in state
 
 
 class TestPipelineRun:
@@ -148,53 +156,26 @@ class TestPipelineRun:
         pipeline = Pipeline(graph, frequency=10.0)
 
         list(pipeline.run(State(), timestamp))
-        snapshot = pipeline.timing.snapshot()
+        stages = pipeline.timing.metrics_and_reset()
 
-        assert snapshot["calls"] == {"Source": 1, "Doubler": 1}
+        assert {stage["name"]: stage["calls"] for stage in stages} == {"Source": 1, "Doubler": 1}
 
 
-class TestNotReadyGrace:
-    def test_transient_not_ready_is_tolerated(self, timestamp):
-        pipeline = Pipeline(
-            build_node_graph([OrphanStage()]), frequency=10.0, not_ready_grace_s=10.0
-        )
+class TestNotReady:
+    def test_missing_input_skips_the_tick(self, timestamp):
+        pipeline = Pipeline(build_node_graph([OrphanStage()]), frequency=10.0)
 
-        # Repeated not-ready runs inside the grace period stay silent.
         assert list(pipeline.run(State(), timestamp)) == []
         assert list(pipeline.run(State(), timestamp)) == []
 
-    def test_persistent_not_ready_raises_after_grace(self, timestamp):
-        import time
-
-        pipeline = Pipeline(
-            build_node_graph([OrphanStage()]), frequency=10.0, not_ready_grace_s=0.05
-        )
-
-        list(pipeline.run(State(), timestamp))
-        time.sleep(0.06)
-
-        with pytest.raises(RuntimeError, match="missing input 'never_produced'"):
-            list(pipeline.run(State(), timestamp))
-
-    def test_successful_run_resets_the_grace_clock(self, timestamp):
-        import time
-
-        pipeline = Pipeline(
-            build_node_graph([DoublerStage()]), frequency=10.0, not_ready_grace_s=0.05
-        )
+    def test_runs_once_the_input_arrives(self, timestamp):
+        pipeline = Pipeline(build_node_graph([DoublerStage()]), frequency=10.0)
         state = State()
 
-        list(pipeline.run(state, timestamp))
+        assert list(pipeline.run(state, timestamp)) == []
 
-        # The input arrives before the grace expires; the pipeline recovers.
-        source = Pipeline(build_node_graph([SourceStage()]), frequency=10.0)
-        list(source.run(state, timestamp))
+        list(Pipeline(build_node_graph([SourceStage()]), frequency=10.0).run(state, timestamp))
         assert len(list(pipeline.run(state, timestamp))) == 1
-
-        # A prior stall must not poison later runs.
-        time.sleep(0.06)
-        assert len(list(pipeline.run(state, timestamp))) == 1
-
 
 class TestStageContract:
     def test_subclass_must_declare_classvars(self):

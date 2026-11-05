@@ -57,6 +57,12 @@ export type Event = {
   pipeline_edition: string;
   // A past event: its worker replays it, always wiping earlier samples first
   is_replay: boolean;
+  // "ongoing" from a worker opening the event until its writes finish, then "processed"
+  status: "unprocessed" | "ongoing" | "processed";
+  // A worker run for the event hasn't finished
+  running: boolean;
+  // Samples stored for the event; the server refreshes it at most every 5 s
+  sample_count: number;
 };
 
 export type ConnectionFields = {
@@ -166,8 +172,11 @@ export async function getEvents(): Promise<Event[]> {
   return asJson(await fetch(`${API_BASE_URL}/events`));
 }
 
+// Polled every few seconds, so only the most recent runs rather than every run ever
+const WORKER_LIST_LIMIT = 50;
+
 export async function getWorkers(): Promise<WorkerRun[]> {
-  return asJson(await fetch(`${API_BASE_URL}/workers?active_only=false`));
+  return asJson(await fetch(`${API_BASE_URL}/workers?limit=${WORKER_LIST_LIMIT}`));
 }
 
 export async function getConnections(): Promise<Connection[]> {

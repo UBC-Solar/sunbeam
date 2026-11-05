@@ -1,17 +1,24 @@
-from dataclasses import dataclass
-from typing import Optional
-from config.context import Context
-
-import requests
+import os
 import socket
 import uuid
-import os
+from dataclasses import dataclass
+from typing import Optional
+
+import requests
+
+from config.context import Context
 
 
 @dataclass
 class WorkerPermission:
     allowed: bool
     reason: Optional[str]
+
+
+def _post(url: str, payload: dict, timeout: float = 3) -> requests.Response:
+    response = requests.post(url, json=payload, timeout=timeout)
+    response.raise_for_status()
+    return response
 
 
 class OrchestratorClient:
@@ -23,14 +30,14 @@ class OrchestratorClient:
         self._base_url = base_url or Context().sunbeam_server.build_url()
 
         raw_worker_id = worker_run_id or os.environ.get("SUNBEAM_WORKER_RUN_ID")
-
-        if not self._base_url:
-            raise ValueError("Missing Sunbeam server URL (set SUNBEAM_SERVER_URL)")
-
         if raw_worker_id is None:
             raise ValueError("Missing SUNBEAM_WORKER_RUN_ID")
 
-        self._worker_run_id = str(raw_worker_id)
+        self.worker_run_id = str(raw_worker_id)
+
+    @property
+    def _worker_url(self) -> str:
+        return f"{self._base_url}/workers/{self.worker_run_id}"
 
     @classmethod
     def register(
@@ -48,9 +55,9 @@ class OrchestratorClient:
         """
         resolved_base_url = base_url or Context().sunbeam_server.build_url()
 
-        response = requests.post(
+        response = _post(
             f"{resolved_base_url}/workers/register",
-            json={
+            {
                 "event_name": event_name,
                 "pipeline_edition": pipeline_edition,
                 "host": socket.gethostname(),
@@ -59,11 +66,8 @@ class OrchestratorClient:
             },
             timeout=5,
         )
-        response.raise_for_status()
 
-        worker_run_id = response.json()["id"]
-
-        return cls(base_url=resolved_base_url, worker_run_id=worker_run_id)
+        return cls(base_url=resolved_base_url, worker_run_id=response.json()["id"])
 
     def heartbeat(
         self,
@@ -72,48 +76,21 @@ class OrchestratorClient:
         current_stage: Optional[str] = None,
         status_message: Optional[str] = None,
     ) -> None:
-        response = requests.post(
-            f"{self._base_url}/workers/{self._worker_run_id}/heartbeat",
-            json={
-                "status": status,
-                "current_stage": current_stage,
-                "status_message": status_message,
-                "host": socket.gethostname(),
-            },
-            timeout=3,
-        )
-        response.raise_for_status()
+        _post(f"{self._worker_url}/heartbeat", {
+            "status": status,
+            "current_stage": current_stage,
+            "status_message": status_message,
+            "host": socket.gethostname(),
+        })
 
     def permission(self) -> WorkerPermission:
-        response = requests.get(
-            f"{self._base_url}/workers/{self._worker_run_id}/permission",
-            timeout=3,
-        )
+        response = requests.get(f"{self._worker_url}/permission", timeout=3)
         response.raise_for_status()
-
         data = response.json()
-
-        return WorkerPermission(
-            allowed=data["allowed"],
-            # stop_requested=data["stop_requested"],
-            reason=data.get("reason"),
-        )
+        return WorkerPermission(allowed=data["allowed"], reason=data.get("reason"))
 
     def report_metrics(self, payload: dict) -> None:
-        response = requests.post(
-            f"{self._base_url}/workers/{self._worker_run_id}/metrics",
-            json=payload,
-            timeout=3,
-        )
-        response.raise_for_status()
+        _post(f"{self._worker_url}/metrics", payload)
 
     def complete(self, *, success: bool, message: Optional[str] = None) -> None:
-        response = requests.post(
-            f"{self._base_url}/workers/{self._worker_run_id}/complete",
-            json={
-                "success": success,
-                "message": message,
-            },
-            timeout=3,
-        )
-        response.raise_for_status()
+        _post(f"{self._worker_url}/complete", {"success": success, "message": message})

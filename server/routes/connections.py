@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+import functools
+
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from db.telemetrydb.connection_check import CheckResult
@@ -16,14 +18,10 @@ from server.services.connection_service import ConnectionService
 
 router = APIRouter(prefix="/connections", tags=["connections"])
 
-_connection_service: ConnectionService | None = None
 
-
+@functools.cache
 def get_connection_service() -> ConnectionService:
-    global _connection_service
-    if _connection_service is None:
-        _connection_service = ConnectionService()
-    return _connection_service
+    return ConnectionService()
 
 
 def _test_result(result: CheckResult, window) -> ConnectionTestResult:
@@ -35,13 +33,6 @@ def _test_result(result: CheckResult, window) -> ConnectionTestResult:
         window_start=start,
         window_end=end,
     )
-
-
-def _window(service: ConnectionService, db: Session, event_id: int | None):
-    try:
-        return service.window_for(db, event_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("", response_model=list[ConnectionRead])
@@ -58,10 +49,7 @@ def create_connection(
     db: Session = Depends(get_db),
     service: ConnectionService = Depends(get_connection_service),
 ):
-    try:
-        return service.create(db, **payload.model_dump())
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return service.create(db, **payload.model_dump())
 
 
 # Declared before /{connection_id} routes so "test" is never parsed as an id
@@ -72,7 +60,7 @@ def test_unsaved_connection(
     service: ConnectionService = Depends(get_connection_service),
 ):
     """ Test connection settings before saving them. """
-    window = _window(service, db, payload.event_id)
+    window = service.window_for(db, payload.event_id)
     result = service.check(**payload.model_dump(exclude={"event_id"}), window=window)
     return _test_result(result, window)
 
@@ -84,14 +72,7 @@ def update_connection(
     db: Session = Depends(get_db),
     service: ConnectionService = Depends(get_connection_service),
 ):
-    try:
-        connection = service.update(db, connection_id, **payload.model_dump())
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-    if connection is None:
-        raise HTTPException(status_code=404, detail="Connection not found")
-    return connection
+    return service.update(db, connection_id, **payload.model_dump())
 
 
 @router.delete("/{connection_id}", status_code=204)
@@ -100,8 +81,7 @@ def delete_connection(
     db: Session = Depends(get_db),
     service: ConnectionService = Depends(get_connection_service),
 ):
-    if not service.delete(db, connection_id):
-        raise HTTPException(status_code=404, detail="Connection not found")
+    service.delete(db, connection_id)
 
 
 @router.post("/{connection_id}/default", response_model=ConnectionRead)
@@ -110,10 +90,7 @@ def make_default_connection(
     db: Session = Depends(get_db),
     service: ConnectionService = Depends(get_connection_service),
 ):
-    connection = service.set_default(db, connection_id)
-    if connection is None:
-        raise HTTPException(status_code=404, detail="Connection not found")
-    return connection
+    return service.set_default(db, connection_id)
 
 
 @router.post("/{connection_id}/test", response_model=ConnectionTestResult)
@@ -125,8 +102,5 @@ def test_connection(
 ):
     """ Test a saved connection, optionally for data over an event, and record the result on it. """
     connection = service.get(db, connection_id)
-    if connection is None:
-        raise HTTPException(status_code=404, detail="Connection not found")
-
-    window = _window(service, db, event_id)
+    window = service.window_for(db, event_id)
     return _test_result(service.check_saved(db, connection, window), window)

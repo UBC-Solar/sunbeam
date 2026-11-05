@@ -42,95 +42,28 @@ def build_node_graph(nodes: list[Stage]) -> nx.DiGraph:
     return g
 
 
-def cross_rate_edges(g: nx.DiGraph) -> list[tuple[str, str, str, float, float]]:
-    out = []
-    for u, v, attrs in g.edges(data=True):
-        ru = g.nodes[u]["node"].frequency
-        rv = g.nodes[v]["node"].frequency
-        if ru != rv:
-            out.append((u, v, attrs["signal"], ru, rv))
-    return out
-
-
-def remove_cross_rate_edges(g: nx.DiGraph) -> nx.DiGraph:
-    """
-    Return a copy of g with all cross-rate edges removed.
-    """
-    h = g.copy()
-    for u, v, _, ru, rv in cross_rate_edges(g):
-        h.remove_edge(u, v)
-    return h
-
-
 def same_rate_components(g: nx.DiGraph) -> list[tuple[nx.DiGraph, float]]:
-    """
-    Partition the graph into same-rate subgraphs with no cross-rate edges.
+    """ Partition the graph into same-rate subgraphs: the weakly connected components once every edge between
+    stages of different rates is dropped. """
+    same_rate = nx.DiGraph()
+    same_rate.add_nodes_from(g.nodes(data=True))
+    same_rate.add_edges_from(
+        (u, v, attrs) for u, v, attrs in g.edges(data=True)
+        if g.nodes[u]["node"].frequency == g.nodes[v]["node"].frequency
+    )
 
-    Steps:
-      1. Remove all cross-rate edges.
-      2. Find weakly connected components in the remaining graph.
-      3. Return each component as its own DiGraph.
-    """
-    h = remove_cross_rate_edges(g)
-
-    components: list[tuple[nx.DiGraph, float]] = []
-    for component_nodes in nx.weakly_connected_components(h):
-        sg = h.subgraph(component_nodes).copy()
-
-        # Sanity check: every node in this component should have the same rate
-        rates = {sg.nodes[n]["node"].frequency for n in sg.nodes}
-        if len(rates) != 1:
-            raise RuntimeError(f"Expected one rate per component, got {rates}")
-        else:
-            rate = next(iter(rates))
-
-        components.append((sg, rate))
-
+    components = []
+    for nodes in nx.weakly_connected_components(same_rate):
+        subgraph = same_rate.subgraph(nodes).copy()
+        components.append((subgraph, g.nodes[next(iter(nodes))]["node"].frequency))
     return components
 
 
-def topo_order_for_subgraph(sg: nx.DiGraph) -> list[str]:
-    return list(nx.topological_sort(sg))
-
-
-def describe_subgraphs(g: nx.DiGraph) -> list[dict]:
-    """
-    Return a structured description of each same-rate subgraph.
-    """
-    result = []
-
-    for i, (sg, _) in enumerate(same_rate_components(g)):
-        rates = {sg.nodes[n]["node"].frequency for n in sg.nodes}
-        rate = next(iter(rates))
-
-        result.append(
-            {
-                "subgraph_index": i,
-                "rate_hz": rate,
-                "nodes": list(sg.nodes),
-                "topo_order": topo_order_for_subgraph(sg),
-                "edges": list(sg.edges(data=True)),
-            }
-        )
-
-    return result
-
-
 def collect_signals_for_ingress(nodes: list[Stage]) -> list[CanonicalName]:
-    unprovided_inputs: set[CanonicalName] = set()
-
-    # Get every node input
-    for node in nodes:
-        unprovided_inputs.update(node.inputs)
-
-    # Get every node output
-    for node in nodes:
-        for output_signal in node.outputs:
-            unprovided_inputs.discard(output_signal)
-
-    # Anything left must not be produced by any node: we assume it must be
-    # required to be found by the ingress stage.
-    return list(unprovided_inputs)
+    """ Every input no node produces, which the ingress must fetch. """
+    inputs = {signal for node in nodes for signal in node.inputs}
+    outputs = {signal for node in nodes for signal in node.outputs}
+    return list(inputs - outputs)
 
 
 def bin_signals_by_frequency(signals: list[CanonicalName], event_date: date) -> dict[float, list[CanonicalName]]:

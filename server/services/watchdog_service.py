@@ -1,11 +1,12 @@
 import logging
 import threading
-from datetime import datetime, timezone
+from datetime import datetime
 
 import docker
 from docker.errors import DockerException
 
 from db.sunbeamdb.models import TERMINAL_WORKER_STATUSES, WorkerKind, WorkerRun, WorkerStatus
+from db.timeutil import utcnow
 from server.db import get_session_factory
 from server.services.metrics_cache import MetricsCache
 
@@ -20,10 +21,6 @@ HEARTBEATING_STATUSES = {
     WorkerStatus.STOP_REQUESTED,
     WorkerStatus.STOPPING,
 }
-
-
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class WatchdogService:
@@ -124,101 +121,69 @@ class WatchdogService:
     def _check_worker(self, db, worker: WorkerRun) -> None:
         now = utcnow()
 
-        if worker.kind == WorkerKind.EXTERNAL:
-            self._check_external_worker(db, worker, now)
-            return
+        def older_than(since: datetime | None, limit_s: float) -> bool:
+            return (now - (since or worker.created_at)).total_seconds() > limit_s
 
-        if worker.container_id is None:
-            if worker.stop_requested:
-                # The image build checks for this before launching anything
-                self._resolve(db, worker, WorkerStatus.CANCELLED, "Stopped before its container launched.")
+        # A container worker's container is the best evidence of how it's doing. A self-registered (external)
+        # worker has none: there is nothing to inspect and nothing to kill, so it's supervised by the timing rules
+        # below alone.
+        container = None
+        if worker.kind == WorkerKind.CONTAINER:
+            if worker.container_id is None:
+                self._check_unlaunched(db, worker, older_than)
                 return
 
-            if worker.status == WorkerStatus.BUILDING:
-                if (now - worker.created_at).total_seconds() > self._build_timeout_s:
-                    self._resolve(db, worker, WorkerStatus.FAILED, "Worker image build timed out.")
+            try:
+                container = self._docker.containers.get(worker.container_id)
+            except docker.errors.NotFound:
+                self._resolve(db, worker, WorkerStatus.LOST, "Container no longer exists.")
                 return
 
-            # started_at is stamped when the launch begins, which for a git build is long after created_at
-            if (now - (worker.started_at or worker.created_at)).total_seconds() > self._startup_grace_s:
-                self._resolve(
-                    db, worker, WorkerStatus.LOST,
-                    "Worker never launched a container.",
-                )
-            return
-
-        try:
-            container = self._docker.containers.get(worker.container_id)
-        except docker.errors.NotFound:
-            self._resolve(db, worker, WorkerStatus.LOST, "Container no longer exists.")
-            return
-
-        if container.status in ("exited", "dead"):
-            exit_code = container.attrs.get("State", {}).get("ExitCode")
-
-            if exit_code == 0:
-                self._resolve(
-                    db, worker, WorkerStatus.FAILED,
-                    "Container exited without reporting completion.",
-                )
-            else:
-                self._resolve(
-                    db, worker, WorkerStatus.LOST,
-                    f"Container exited unexpectedly (exit code {exit_code}).",
-                )
-            return
+            if container.status in ("exited", "dead"):
+                exit_code = container.attrs.get("State", {}).get("ExitCode")
+                if exit_code == 0:
+                    reason = "Container exited without reporting completion."
+                else:
+                    reason = f"Container exited unexpectedly (exit code {exit_code})."
+                self._resolve(db, worker, WorkerStatus.FAILED, reason)
+                return
 
         if worker.status in (WorkerStatus.STOP_REQUESTED, WorkerStatus.STOPPING):
-            requested_at = worker.stop_requested_at or worker.created_at
-            if (now - requested_at).total_seconds() > self._stop_grace_s:
-                logger.warning(
-                    "Worker %s exceeded stop grace period, killing container",
-                    worker.id,
-                )
+            if older_than(worker.stop_requested_at, self._stop_grace_s):
+                if container is None:
+                    self._resolve(
+                        db, worker, WorkerStatus.LOST,
+                        "External worker did not stop within the grace period (no container to kill).",
+                    )
+                    return
+
+                logger.warning("Worker %s exceeded stop grace period, killing container", worker.id)
                 try:
                     container.kill()
                 except DockerException:
-                    logger.exception(
-                        "Failed to kill container for worker %s", worker.id
-                    )
-
+                    logger.exception("Failed to kill container for worker %s", worker.id)
                 self._resolve(
-                    db, worker, WorkerStatus.CANCELLED,
-                    "Forcibly stopped after exceeding stop grace period.",
+                    db, worker, WorkerStatus.CANCELLED, "Forcibly stopped after exceeding stop grace period.",
                 )
                 return
 
         if worker.status in HEARTBEATING_STATUSES:
-            last_seen = worker.last_heartbeat_at or worker.created_at
-            if (now - last_seen).total_seconds() > self._heartbeat_timeout_s:
-                self._resolve(db, worker, WorkerStatus.LOST, "Worker stopped heartbeating.")
-                return
-
-        if worker.status in (WorkerStatus.REQUESTED, WorkerStatus.STARTING):
-            if (now - (worker.started_at or worker.created_at)).total_seconds() > self._startup_grace_s:
-                self._resolve(db, worker, WorkerStatus.LOST, "Worker never became healthy.")
-
-    def _check_external_worker(self, db, worker: WorkerRun, now: datetime) -> None:
-        """
-        A self-registered worker has no container: there is nothing to inspect
-        and nothing to kill, so supervision is heartbeats and grace periods only.
-        """
-        if worker.status in (WorkerStatus.STOP_REQUESTED, WorkerStatus.STOPPING):
-            requested_at = worker.stop_requested_at or worker.created_at
-            if (now - requested_at).total_seconds() > self._stop_grace_s:
-                self._resolve(
-                    db, worker, WorkerStatus.LOST,
-                    "External worker did not stop within the grace period "
-                    "(no container to kill).",
-                )
-                return
-
-        if worker.status in HEARTBEATING_STATUSES:
-            last_seen = worker.last_heartbeat_at or worker.created_at
-            if (now - last_seen).total_seconds() > self._heartbeat_timeout_s:
+            if older_than(worker.last_heartbeat_at, self._heartbeat_timeout_s):
                 self._resolve(db, worker, WorkerStatus.LOST, "Worker stopped heartbeating.")
             return
 
         if worker.status in (WorkerStatus.REQUESTED, WorkerStatus.STARTING):
-            if (now - worker.created_at).total_seconds() > self._startup_grace_s:
+            # started_at is stamped when the launch begins, which for a git build is long after created_at
+            if older_than(worker.started_at, self._startup_grace_s):
                 self._resolve(db, worker, WorkerStatus.LOST, "Worker never became healthy.")
+
+    def _check_unlaunched(self, db, worker: WorkerRun, older_than) -> None:
+        """ A container worker that has no container yet: building its image, or about to launch. """
+        if worker.stop_requested:
+            # The image build checks for this before launching anything
+            self._resolve(db, worker, WorkerStatus.CANCELLED, "Stopped before its container launched.")
+        elif worker.status == WorkerStatus.BUILDING:
+            if older_than(worker.created_at, self._build_timeout_s):
+                self._resolve(db, worker, WorkerStatus.FAILED, "Worker image build timed out.")
+        elif older_than(worker.started_at, self._startup_grace_s):
+            self._resolve(db, worker, WorkerStatus.LOST, "Worker never launched a container.")

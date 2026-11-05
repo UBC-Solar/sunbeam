@@ -21,4 +21,4 @@ class TestCreateApp:
     def test_importing_server_modules_creates_no_engine(self):
         import server.db
 
-        assert server.db._engine is None
+        assert server.db.get_engine.cache_info().currsize == 0

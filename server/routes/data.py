@@ -5,8 +5,7 @@ Telemetry data read endpoints, keyed by event NAME and signal name.
   GET /events/{event_name}/signals/{signal_name}/data    - windowed query
   GET /events/{event_name}/data/stream                   - multiplexed SSE
 
-The stream protocol (see server/static/stream_viewer.html for a worked
-client example):
+The stream protocol:
 
   event: meta          first message; per-signal {signal_id, unit, frequency}
   event: data          columnar batches {signal: {timestamps[], values[]}}
@@ -37,10 +36,7 @@ router = APIRouter(prefix="/events", tags=["data"])
 @router.get("/{event_name}/signals", response_model=list[SignalInfo])
 def list_signals(event_name: str, with_data: bool = False, db: Session = Depends(get_db)):
     """ with_data=true lists only signals with at least one sample to query. """
-    try:
-        return data_service.list_signals(db, event_name, with_data=with_data)
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return data_service.list_signals(db, event_name, with_data=with_data)
 
 
 @router.get("/{event_name}/signals/{signal_name}/data", response_model=SignalDataResponse)
@@ -60,10 +56,7 @@ def query_signal_data(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    try:
-        signal = data_service.get_signal(db, event_name, signal_name)
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    signal = data_service.get_signal(db, event_name, signal_name)
 
     timestamps, values, truncated = data_service.query_samples(
         db, signal, window_start, window_end, limit=limit
@@ -120,12 +113,8 @@ def stream_signal_data(
         poll_interval_s=poll_interval_s,
     )
 
-    # Resolve signals eagerly so an unknown event/signal is a clean 404
-    # instead of an error mid-stream.
-    try:
-        first = next(batches)
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    # Resolve signals eagerly so an unknown event/signal is a clean 404 (a LookupError) instead of an error mid-stream
+    first = next(batches)
 
     def event_source():
         try:

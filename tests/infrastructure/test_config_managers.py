@@ -20,6 +20,18 @@ def raw_events():
         return tomllib.load(f)["event"]
 
 
+def _to_toml(events: list[dict]) -> str:
+    def value(v):
+        if isinstance(v, list):
+            return "[" + ", ".join(value(item) for item in v) + "]"
+        return f'"{v}"'
+
+    return "\n".join(
+        "[[event]]\n" + "\n".join(f"{key} = {value(v)}" for key, v in event.items()) + "\n"
+        for event in events
+    )
+
+
 def count(engine, model) -> int:
     with Session(engine) as session:
         return session.scalar(select(func.count()).select_from(model))
@@ -64,6 +76,21 @@ class TestEventManager:
         EventManager().sync_events(engine)
 
         assert count(engine, Event) == len(raw_events)
+
+    def test_sync_updates_events_edited_in_the_config(self, engine, raw_events, tmp_path):
+        VehicleManager().sync_vehicles(engine)
+        EventManager().sync_events(engine)
+
+        edited = dict(raw_events[0], ends_at="2030-01-01T00:00:00Z", description="edited")
+        events_path = tmp_path / "events.toml"
+        events_path.write_text(_to_toml([edited]))
+        EventManager(events_path).sync_events(engine)
+
+        with Session(engine) as session:
+            event = session.scalar(select(Event).where(Event.name == edited["name"]))
+
+        assert event.description == "edited"
+        assert event.ends_at.year == 2030
 
     def test_lookup_helpers_agree_with_toml(self, raw_events):
         manager = EventManager()

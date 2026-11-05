@@ -136,7 +136,6 @@ class WorkerHeartbeatRequest(BaseModel):
 class WorkerPermissionResponse(BaseModel):
     allowed: bool
     reason: str | None = None
-    stop_requested: bool
 
 
 class WorkerRegisterRequest(BaseModel):

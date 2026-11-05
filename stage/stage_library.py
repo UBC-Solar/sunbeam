@@ -1,46 +1,59 @@
-from importlib import import_module
-from stage.stage import Stage
-from stage import STAGE_REGISTRY_PATH
 import tomllib
-from typing import Optional
+from importlib import import_module
+
+from stage import STAGE_REGISTRY_PATH
+from stage.stage import Stage
+
+
+def _load_registry() -> dict:
+    with open(STAGE_REGISTRY_PATH, "rb") as f:
+        return tomllib.load(f)
 
 
 class StageLibrary:
-    def __init__(self, pipeline_edition: Optional[str] = None):
-        with open(STAGE_REGISTRY_PATH, "rb") as f:
-            try:
-                self._raw_data = tomllib.load(f)
-                self._pipeline_editions = self._raw_data.keys()
+    def __init__(self, pipeline_edition: str | None = None):
+        self._raw_data = _load_registry()
+        self._edition: dict = {}
 
-                self._stage_registry: dict[str, dict[str, str]] = {}
-                if pipeline_edition:
-                    self.set_pipeline_edition(pipeline_edition)
+        if pipeline_edition is not None:
+            if pipeline_edition not in self._raw_data:
+                raise ValueError(
+                    f"Pipeline edition {pipeline_edition!r} not found. "
+                    f"Must be one of {', '.join(self._raw_data)}"
+                )
+            self._edition = self._raw_data[pipeline_edition]
 
-            except KeyError:
-                raise KeyError(f"{pipeline_edition!r} not found in {STAGE_REGISTRY_PATH}!")
+    @property
+    def pipeline_editions(self) -> list[str]:
+        return list(self._raw_data)
 
-    def set_pipeline_edition(self, pipeline_edition: str):
-        if pipeline_edition not in self._pipeline_editions:
+    def validate_pipeline_edition(self, pipeline_edition: str) -> None:
+        if pipeline_edition not in self._raw_data:
             raise ValueError(
-                f"Pipeline edition {pipeline_edition!r} not found. Must be one of {', '.join(self._pipeline_editions)}")
-
-        self._stage_registry = self._raw_data[pipeline_edition]
+                f"Unknown pipeline edition {pipeline_edition!r}. Known editions: {self.pipeline_editions}"
+            )
 
     def get_stage_by_name(self, stage_name: str) -> type[Stage]:
         """ Finds and returns the Stage subclass from its name
 
-        :param str stage_name: Stage name
-        :raises ValueError: Stage name not found in stage registry
+        :raises ValueError: Stage name not found in the edition's registry
         :raises TypeError: Found class from registry is not a stage subclass
-        :return type[Stage]: Stage subclass
-        """        
-        if stage_name not in self._stage_registry:
+        """
+        meta = self._edition.get(stage_name)
+        if not isinstance(meta, dict):
             raise ValueError(f"Stage {stage_name!r} not found.")
 
-        meta = self._stage_registry[stage_name]
+        # An entry like `[v4_0.Efficiency] from = "v3_0"` reuses that edition's stage of the same name, unchanged
+        seen = []
+        while "from" in meta:
+            seen.append(meta["from"])
+            meta = self._raw_data.get(meta["from"], {}).get(stage_name)
+            if not isinstance(meta, dict):
+                raise ValueError(f"Stage {stage_name!r} is taken from edition {seen[-1]!r}, which has no such stage.")
+            if len(seen) > len(self._raw_data):
+                raise ValueError(f"Stage {stage_name!r} is taken from editions in a loop: {seen}")
 
-        module = import_module(meta["module"])
-        cls = getattr(module, meta["class"])
+        cls = getattr(import_module(meta["module"]), meta["class"])
 
         if not issubclass(cls, Stage):
             raise TypeError(f"{cls} is not a Stage subclass.")
@@ -49,7 +62,3 @@ class StageLibrary:
 
     def get_stages_by_names(self, stage_names: list[str]) -> list[type[Stage]]:
         return [self.get_stage_by_name(name) for name in stage_names]
-
-    @property
-    def pipeline_editions(self) -> list[str]:
-        return list(self._pipeline_editions)

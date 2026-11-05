@@ -116,19 +116,28 @@ class WorkerImageBuilder:
         return tag
 
     def build_git(self, pipeline_edition: str, sha: str) -> str:
-        """ Build (or reuse) the image for a resolved commit. The build context is only the Dockerfile. """
+        """
+        Build (or reuse) the image for a resolved commit. The build context is only the Dockerfile, and it starts
+        from the edition's local image so the commit reuses its installed dependencies.
+        """
         tag = self.git_tag(pipeline_edition, sha)
         if self.has_image(tag):
             logger.info("Reusing worker image %s", tag)
             return tag
 
-        logger.info("Building worker image %s from %s@%s", tag, self._remote, sha)
+        base_image = self.local_tag(pipeline_edition)
         try:
+            # The server builds these at startup, so this only covers one removed since
+            if not self.has_image(base_image):
+                self.build_local(pipeline_edition)
+
+            logger.info("Building worker image %s from %s@%s", tag, self._remote, sha)
             self._docker.images.build(
                 fileobj=io.BytesIO(GIT_DOCKERFILE.read_bytes()),
                 tag=tag,
                 rm=True,
                 buildargs={
+                    "BASE_IMAGE": base_image,
                     "PIPELINE_EDITION": pipeline_edition,
                     "GIT_REMOTE": self._remote,
                     "GIT_REF": sha,

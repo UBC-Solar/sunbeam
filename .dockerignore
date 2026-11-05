@@ -1,8 +1,23 @@
+# Everything here is sent to the Docker daemon as build context, and the
+# server's `COPY . .` carries it on into every worker image it builds.
 tests
 Makefile
 *.png
 fs_data
 .venv
+venv
 .github
 docs
 *.egg-info
+# The Postgres volume (compose bind-mounts it) and the dashboard, which has its own image
+data
+dashboard
+.git
+**/__pycache__
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.coverage
+.idea
+.vscode
+.claude

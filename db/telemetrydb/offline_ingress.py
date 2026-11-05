@@ -1,6 +1,6 @@
 import time
 from collections.abc import Iterable
-from datetime import UTC, datetime
+from datetime import datetime
 
 from data_tools.collections import TimeSeries
 from data_tools.query import InfluxDBClient
@@ -14,15 +14,8 @@ class IngressError(RuntimeError):
 
 
 class OfflineIngressQuerier:
-    """
-    Fast path for:
-      'get the last value of these three fields before timestamp T'
-
-    Notes:
-    - Reuses one InfluxDBClient and one QueryApi.
-    - Uses one Flux query for all fields.
-    - Uses query_stream() to avoid heavier table/dataframe materialization.
-    """
+    """ Fetches each field's whole TimeSeries over a window, one query per field, reporting progress to an
+    optional IngressObserver. """
 
     def __init__(
             self,
@@ -77,32 +70,3 @@ class OfflineIngressQuerier:
     def close(self):
         self._client.close()
 
-
-if __name__ == "__main__":
-
-    from config.context import Context
-
-    telemetry_db = Context().telemetry_db
-    reader = OfflineIngressQuerier(
-        bucket=telemetry_db.bucket,
-        organization=telemetry_db.organization,
-        url=telemetry_db.database_url,
-        token=telemetry_db.token,
-        fields=(
-            "TotalPackVoltage",
-            "PackCurrent",
-            "VehicleVelocity",
-            "AcceleratorPosition",
-            "MechBrakePressed",
-            "BatteryCurrent",
-            "BatteryVoltage",
-        )
-    )
-
-    values = reader.get_values_between(datetime(2024, 7, 16, 14, 00, tzinfo=UTC), datetime(2024, 7, 16, 15, 00, tzinfo=UTC))
-
-    print(values)
-
-    values["TotalPackVoltage"].plot()
-
-    reader.close()

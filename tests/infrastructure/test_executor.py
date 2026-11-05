@@ -109,20 +109,23 @@ class TestExecutorComputeCrash:
         assert elapsed < 4.0
 
 
-class TestExecutorCompletion:
-    def test_signal_completion_reports_success(self, fake_clock):
-        holder = {}
-        writer = RecordingWriter(
-            on_write=lambda n: holder["executor"].signal_completion() if n >= 5 else None
-        )
-        executor, writer, control = make_executor(fake_clock, writer=writer)
-        holder["executor"] = executor
+class TestExecutorWriterFailure:
+    def test_writer_failure_on_close_is_reported_after_the_flush(self, fake_clock):
+        control = FakeControl()
 
-        executor.run()
+        class FailingCloseWriter(RecordingWriter):
+            def close(self):
+                super().close()
+                raise RuntimeError("flush failed")
 
-        assert control.completions == [(True, "Pipeline completed.")]
-        assert writer.closed
-        assert control.stopped
+        writer = FailingCloseWriter(on_write=lambda n: control.request_stop() if n >= 3 else None)
+        executor, writer, control = make_executor(fake_clock, writer=writer, control=control)
+
+        with pytest.raises(RuntimeError, match="flush failed"):
+            executor.run()
+
+        # Never reported as stopped (or completed) before the writes it was waiting on failed
+        assert control.completions == [(False, "Worker failed: flush failed")]
 
 
 class TestExecutorIngressThreads:
@@ -177,8 +180,10 @@ class TimeSeriesIngress:
     """ Replay ingress stand-in: writes one TimeSeries covering [start, start + length_s] into the state. """
 
     def __init__(self, signal, length_s: float, period_s: float = 0.1):
-        self.name = "offline-ingress"
+        self.name = self.stage_name = "offline-ingress"
         self.frequency = 1.0
+        self.outputs = [signal]
+        self.may_omit_outputs = False
         self._signal = signal
         self._length_s = length_s
         self._period_s = period_s
@@ -196,7 +201,7 @@ class TimeSeriesIngress:
         )
         frame = Frame(timestamp)
         frame.write(self._signal, series)
-        state.from_frame(frame, [self._signal])
+        state.update(frame, self)
         yield frame
 
 
@@ -278,7 +283,7 @@ class TestReplayWindow:
         from config.events import EventConfig
 
         return EventConfig(
-            name="e", stages=[], pipeline_edition="v3_0",
+            name="e", vehicle="v", description=None, stages=[], pipeline_edition="v3_0",
             starts_at=REPLAY_START, ends_at=ends_at,
         )
 
@@ -301,7 +306,7 @@ class TestFromEventWipe:
     def writer_wipes(self, monkeypatch):
         """ Builds an executor for an event ending at `ends_at`, and returns whether its EventWriter was told to wipe. """
         import pipeline.executor as executor_module
-        from config.events import EventConfig, EventManager
+        from config.events import EventConfig
 
         def build(ends_at, reprocess=False):
             calls = []
@@ -314,12 +319,14 @@ class TestFromEventWipe:
                 def write_frames(self, frames):
                     self.frames.extend(frames)
 
-            event = EventConfig(name="e", stages=[], pipeline_edition="v3_0", starts_at=REPLAY_START, ends_at=ends_at)
-            monkeypatch.setattr(EventManager, "get_event", lambda self, name: event)
+            event = EventConfig(
+                name="e", vehicle="v", description=None, stages=[], pipeline_edition="v3_0",
+                starts_at=REPLAY_START, ends_at=ends_at,
+            )
             monkeypatch.setattr(executor_module, "EventWriter", FakeEventWriter)
             monkeypatch.setattr(executor_module, "build_event_pipelines", lambda *args, **kwargs: ([], []))
 
-            executor_module.Executor.from_event("e", engine=None, reprocess=reprocess)._writer.close()
+            executor_module.Executor.from_event(event, engine=None, reprocess=reprocess)._writer.close()
             return calls == [True]
 
         return build

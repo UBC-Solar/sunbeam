@@ -3,21 +3,30 @@ import uuid
 import pytest
 import requests
 
+from datetime import datetime, timezone
+
+from config.events import EventConfig
 from orchestration.bootstrap import build_control
 from orchestration.client import OrchestratorClient
 from orchestration.control import OrchestratedWorkerControl, ServerlessWorkerControl
 
 
+EVENT = EventConfig(
+    name="realtime", vehicle="Brightside", description=None, stages=[], pipeline_edition="v3_0",
+    starts_at=datetime(2026, 1, 1, tzinfo=timezone.utc), ends_at=None,
+)
+
+
 class TestBuildControl:
     def test_serverless_flag_wins(self):
-        control = build_control(True, "realtime")
+        control = build_control(True, EVENT)
 
         assert isinstance(control, ServerlessWorkerControl)
 
     def test_server_launched_worker_uses_env_run_id(self, monkeypatch, test_context):
         monkeypatch.setenv("SUNBEAM_WORKER_RUN_ID", str(uuid.uuid4()))
 
-        control = build_control(False, "realtime")
+        control = build_control(False, EVENT)
 
         assert isinstance(control, OrchestratedWorkerControl)
 
@@ -35,10 +44,10 @@ class TestBuildControl:
 
         monkeypatch.setattr(OrchestratorClient, "register", fake_register)
 
-        control = build_control(False, "realtime")
+        control = build_control(False, EVENT)
 
         assert isinstance(control, OrchestratedWorkerControl)
-        # The pipeline edition comes from events.toml for the event; the connection is the one this process was given
+        # The pipeline edition comes from the event's config; the connection is the one this process was given
         assert registrations == [("realtime", "v3_0", "external: http://localhost:8086 / test-bucket", False)]
 
     def test_unreachable_server_exits_with_guidance(self, monkeypatch, test_context):
@@ -50,4 +59,4 @@ class TestBuildControl:
         monkeypatch.setattr(OrchestratorClient, "register", fake_register)
 
         with pytest.raises(SystemExit, match="--serverless"):
-            build_control(False, "realtime")
+            build_control(False, EVENT)

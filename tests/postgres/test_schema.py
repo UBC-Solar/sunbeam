@@ -5,15 +5,14 @@ import pytest
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from db import create_schema
-from db.sunbeamdb.models import Sample, EventStatus, Event, WorkerRun, WorkerStatus
+from db.sunbeamdb.models import Event, EventStatus, Sample, WorkerRun, WorkerStatus
 from db.sunbeamdb.writer import EventWriter
 from state.frame import FrameView
 
 pytestmark = pytest.mark.postgres
 
 
-class TestCreateSchema:
+class TestSchema:
     def test_hypertables_created(self, pg_engine):
         with pg_engine.connect() as conn:
             hypertables = set(
@@ -25,11 +24,6 @@ class TestCreateSchema:
             )
 
         assert hypertables == {"sample"}
-
-    def test_create_schema_is_idempotent(self, pg_engine):
-        # The fixture already ran create_schema once; a second run must not
-        # raise (IF NOT EXISTS everywhere).
-        create_schema(pg_engine)
 
     def test_worker_run_uuid_primary_key_round_trips(self, pg_engine, pg_seeded_event):
         with Session(pg_engine) as session:

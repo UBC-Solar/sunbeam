@@ -1,14 +1,15 @@
+import functools
 import logging
 import uuid
 
 import anyio
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from db.sunbeamdb.models import WorkerRun, WorkerStatus
+from db.sunbeamdb.models import TERMINAL_WORKER_STATUSES, WorkerRun
 from server.deps import get_db
 from server.schemas import (
     LaunchWorkerRequest,
@@ -20,7 +21,6 @@ from server.schemas import (
     WorkerRegisterRequest,
     WorkerRunRead,
 )
-from server.services.connection_service import ConnectionTestFailed
 from server.services.worker_service import WorkerService
 
 logger = logging.getLogger("sunbeam.server")
@@ -28,39 +28,25 @@ logger = logging.getLogger("sunbeam.server")
 router = APIRouter(prefix="/workers", tags=["workers"])
 
 
-_worker_service: WorkerService | None = None
-
-
+@functools.cache
 def get_worker_service() -> WorkerService:
-    # A fresh WorkerService() opens its own docker.from_env() client that is
-    # never closed, so it must not be re-created per request. Reuse one for
-    # the lifetime of the process instead.
-    global _worker_service
-    if _worker_service is None:
-        _worker_service = WorkerService()
-    return _worker_service
+    # One for the lifetime of the process: a fresh WorkerService() opens its own docker.from_env() client that is
+    # never closed, so it must not be created per request.
+    return WorkerService()
 
 
 @router.get("", response_model=list[WorkerRunRead])
 def list_workers(
     active_only: bool = False,
+    limit: int | None = Query(default=None, ge=1, description="Only the most recent runs."),
     db: Session = Depends(get_db),
 ):
     stmt = select(WorkerRun).order_by(WorkerRun.created_at.desc())
 
     if active_only:
-        stmt = stmt.where(
-            WorkerRun.status.in_(
-                [
-                    WorkerStatus.REQUESTED,
-                    WorkerStatus.BUILDING,
-                    WorkerStatus.STARTING,
-                    WorkerStatus.RUNNING,
-                    WorkerStatus.STOP_REQUESTED,
-                    WorkerStatus.STOPPING,
-                ]
-            )
-        )
+        stmt = stmt.where(WorkerRun.status.not_in(TERMINAL_WORKER_STATUSES))
+    if limit is not None:
+        stmt = stmt.limit(limit)
 
     return db.scalars(stmt).all()
 
@@ -71,18 +57,13 @@ def launch_worker(
     db: Session = Depends(get_db),
     service: WorkerService = Depends(get_worker_service),
 ):
-    try:
-        return service.launch_worker(
-            db,
-            event_id=payload.event_id,
-            influx_connection_id=payload.influx_connection_id,
-            source_ref=payload.source_ref,
-            reprocess=payload.reprocess,
-        )
-    except ConnectionTestFailed as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return service.launch_worker(
+        db,
+        event_id=payload.event_id,
+        influx_connection_id=payload.influx_connection_id,
+        source_ref=payload.source_ref,
+        reprocess=payload.reprocess,
+    )
 
 
 @router.post("/register", response_model=WorkerRunRead)
@@ -91,17 +72,14 @@ def register_worker(
     db: Session = Depends(get_db),
     service: WorkerService = Depends(get_worker_service),
 ):
-    try:
-        return service.register_worker(
-            db,
-            event_name=payload.event_name,
-            pipeline_edition=payload.pipeline_edition,
-            host=payload.host,
-            influx_connection_name=payload.influx_connection_name,
-            reprocess=payload.reprocess,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return service.register_worker(
+        db,
+        event_name=payload.event_name,
+        pipeline_edition=payload.pipeline_edition,
+        host=payload.host,
+        influx_connection_name=payload.influx_connection_name,
+        reprocess=payload.reprocess,
+    )
 
 
 @router.post("/{worker_id}/heartbeat", response_model=WorkerRunRead)
@@ -111,7 +89,7 @@ def heartbeat(
     db: Session = Depends(get_db),
     service: WorkerService = Depends(get_worker_service),
 ):
-    worker = service.heartbeat(
+    return service.heartbeat(
         db,
         worker_id=worker_id,
         status=payload.status,
@@ -120,11 +98,6 @@ def heartbeat(
         host=payload.host,
     )
 
-    if worker is None:
-        raise HTTPException(status_code=404, detail="Worker not found")
-
-    return worker
-
 
 @router.get("/{worker_id}/permission", response_model=WorkerPermissionResponse)
 def get_permission(
@@ -132,13 +105,8 @@ def get_permission(
     db: Session = Depends(get_db),
     service: WorkerService = Depends(get_worker_service),
 ):
-    allowed, reason, stop_requested = service.permission_for(db, worker_id)
-
-    return WorkerPermissionResponse(
-        allowed=allowed,
-        reason=reason,
-        stop_requested=stop_requested,
-    )
+    allowed, reason = service.permission_for(db, worker_id)
+    return WorkerPermissionResponse(allowed=allowed, reason=reason)
 
 
 @router.post("/{worker_id}/stop", response_model=WorkerRunRead)
@@ -147,12 +115,7 @@ def request_stop(
     db: Session = Depends(get_db),
     service: WorkerService = Depends(get_worker_service),
 ):
-    worker = service.request_stop(db, worker_id)
-
-    if worker is None:
-        raise HTTPException(status_code=404, detail="Worker not found")
-
-    return worker
+    return service.request_stop(db, worker_id)
 
 
 @router.post("/{worker_id}/complete", response_model=WorkerRunRead)
@@ -162,17 +125,7 @@ def complete_worker(
     db: Session = Depends(get_db),
     service: WorkerService = Depends(get_worker_service),
 ):
-    worker = service.complete(
-        db,
-        worker_id=worker_id,
-        success=payload.success,
-        message=payload.message,
-    )
-
-    if worker is None:
-        raise HTTPException(status_code=404, detail="Worker not found")
-
-    return worker
+    return service.complete(db, worker_id=worker_id, success=payload.success, message=payload.message)
 
 
 @router.post("/{worker_id}/metrics", status_code=204)
@@ -182,17 +135,7 @@ def report_metrics(
     db: Session = Depends(get_db),
     service: WorkerService = Depends(get_worker_service),
 ):
-    accepted = service.record_metrics(
-        db,
-        worker_id=worker_id,
-        payload=payload.model_dump(),
-    )
-
-    if not accepted:
-        raise HTTPException(
-            status_code=404,
-            detail="Worker not found or no longer active",
-        )
+    service.record_metrics(db, worker_id=worker_id, payload=payload.model_dump())
 
 
 @router.get("/{worker_id}/metrics", response_model=WorkerMetricsRead)
@@ -200,12 +143,7 @@ def get_metrics(
     worker_id: uuid.UUID,
     service: WorkerService = Depends(get_worker_service),
 ):
-    metrics = service.get_metrics(worker_id)
-
-    if metrics is None:
-        raise HTTPException(status_code=404, detail="No metrics available")
-
-    return metrics
+    return service.get_metrics(worker_id)
 
 
 @router.get("/{worker_id}/logs")
@@ -215,15 +153,7 @@ def get_logs(
     db: Session = Depends(get_db),
     service: WorkerService = Depends(get_worker_service),
 ):
-    lines = service.get_logs(db, worker_id, tail=tail)
-
-    if lines is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Worker or its container could not be found",
-        )
-
-    return {"lines": lines}
+    return {"lines": service.get_logs(db, worker_id, tail=tail)}
 
 
 @router.get("/{worker_id}/logs/stream")
@@ -234,12 +164,6 @@ def stream_logs(
     service: WorkerService = Depends(get_worker_service),
 ):
     log_stream = service.stream_logs(db, worker_id, tail=tail)
-
-    if log_stream is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Worker or its container could not be found",
-        )
 
     # The stream can stay open for as long as the worker runs, so give the session's pooled connection back now
     # rather than when the response finishes; otherwise a handful of open log viewers exhausts the pool and every

@@ -22,8 +22,8 @@ The first links in the chain:
 1. `f3f709edb0e7` — baseline: all six tables
    (`vehicle`, `event`, `signal`, `worker_run`, `raw_sample`,
    `aligned_sample`), the TimescaleDB extension, both hypertables, and the
-   query indexes — a frozen snapshot of what the old `create_schema()`
-   function used to build by hand.
+   query indexes — a frozen snapshot of the schema from before this repo
+   used Alembic.
 2. `6044f7bdb7d9` — adds `worker_run.kind` (`WorkerKind`, for
    self-registered workers — see [`USAGE.md`](USAGE.md)) and makes
    `worker_run.image_tag` nullable.
@@ -60,29 +60,6 @@ uv run alembic upgrade head
 `head` before serving requests. You do not need to manually run
 `alembic upgrade head` against a database the server manages; it happens
 every time the server (re)starts, and is a no-op when already at `head`.
-
-### Alembic Transition
-
-If you have a database from before this repo used Alembic (i.e. one built
-by the old `create_schema()`), it has the full baseline schema but no
-`alembic_version` table — Alembic doesn't know it's already there.
-`upgrade_database` detects this (schema present, `alembic_version` absent)
-and **stamps** the database at the baseline revision — recording "you're
-already here" **without re-running any DDL** — before running `upgrade
-head` normally. You'll see this once per such database, in the server log:
-
-```
-Pre-Alembic schema detected; stamping baseline revision f3f709edb0e7.
-```
-
-After that, the database has its `alembic_version` row like any other, and
-the shim never fires again for it. If you ever need to do this by hand
-against a database the server doesn't manage:
-
-```bash
-uv run alembic stamp f3f709edb0e7
-uv run alembic upgrade head
-```
 
 ### Migration Failures
 
@@ -192,8 +169,8 @@ linear (well, DAG-with-one-sink) chain.
 [README](../README.md#running-tests)) keeps the chain honest on every
 CI run: a fresh database upgraded to `head` must produce the full schema
 including hypertables, `downgrade base` must remove it cleanly, and
-`upgrade_database`'s pre-Alembic stamping shim and lock-timeout behavior
-each have a dedicated test (the latter by having a second connection hold
+`upgrade_database`'s lock-timeout behavior has a dedicated test (a second
+connection holds
 an `ACCESS EXCLUSIVE` lock and asserting the migration fails within the
 timeout rather than hanging). If you add a migration with any of the sharp
 edges above, add a matching assertion here.

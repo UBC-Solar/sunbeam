@@ -2,7 +2,7 @@
 Fixtures for tests that need a real Postgres (marked `postgres`, excluded from
 the default run). A single TimescaleDB container serves the whole session;
 every test gets its own freshly created database with the real production
-schema (create_schema, including hypertables).
+schema (every Alembic migration, including hypertables).
 """
 import itertools
 
@@ -13,7 +13,6 @@ testcontainers_postgres = pytest.importorskip("testcontainers.postgres")
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from db import create_schema
 from tests.infrastructure.conftest import SeededEvent, seed_basic_event
 
 POSTGRES_IMAGE = "timescale/timescaledb:2.14.2-pg16"
@@ -61,7 +60,9 @@ def pg_blank_engine(pg_container, pg_admin_engine):
 @pytest.fixture
 def pg_engine(pg_blank_engine):
     """A brand-new database with the full production schema."""
-    create_schema(pg_blank_engine)
+    from server.migrations import upgrade_database
+
+    upgrade_database(pg_blank_engine)
     return pg_blank_engine
 
 

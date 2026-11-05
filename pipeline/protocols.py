@@ -33,8 +33,7 @@ class FrameWriter(Protocol):
 
 
 class BatchFrameWriter(Protocol):
-    """A FrameWriter that can also persist many frames in one operation."""
+    """Persists many frames in one operation."""
 
-    def write_frame(self, frame: Any) -> None: ...
     def write_frames(self, frames: list[Any]) -> None: ...
     def close(self) -> None: ...

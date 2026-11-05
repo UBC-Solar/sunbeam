@@ -12,70 +12,50 @@ For what a "worker" is actually doing once it's running, see
 
 ## Dependency Groups, and Why
 
-`pyproject.toml` defines several `uv` **extras**
-(`[project.optional-dependencies]`) and **groups** (`[dependency-groups]`).
-Understanding which ones exist and why is the difference between `uv sync`
-working and mysteriously failing:
+`pyproject.toml` has a handful of shared dependencies (`sqlalchemy`,
+`psycopg`, `requests`, `ubc-solar-data-tools`) plus **extras**
+(`[project.optional-dependencies]`) and two **groups**
+(`[dependency-groups]`):
 
 | Name | Kind | What it's for |
 |---|---|---|
-| `server` | extra | Everything the FastAPI server needs: `fastapi`, `docker` (SDK), `sqlalchemy`, `psycopg`, `ubc-solar-data-tools` (testing InfluxDB connections), etc. |
-| `executor` | extra | Everything a worker process needs to *run a pipeline*: `networkx` (graph building), `sqlalchemy`, `psycopg`, `rich` (terminal output), and `ubc-solar-data-tools`, through which everything talks to InfluxDB. |
-| `v3_0` | extra | Dependencies **specific to the `v3_0` pipeline edition's stages**, beyond `executor`'s. |
+| `server` | extra | The FastAPI server: `fastapi`, `uvicorn`, `docker` (SDK), `alembic`, `pydantic`. |
+| `executor` | extra | A worker process: `networkx` (graph building), `rich` (terminal output), `scipy` (stages). |
+| `v3_0`, `v4_0`, ... | extra | Dependencies **specific to one pipeline edition's stages**, beyond `executor`'s. |
 | `v3_1` | extra | Same idea, for a future edition. Currently empty — a placeholder showing the pattern. |
-| `test` | group | Everything the *full* test suite needs beyond an edition + `executor`: `fastapi`, `docker`, `httpx2`, `testcontainers`. |
-| `dev` | group | `ruff`, `mypy`, `alembic` — tooling, not runtime dependencies. |
+| `test` | group | `pytest` and friends, `httpx2`, `testcontainers`. |
+| `dev` | group | `ruff`, `mypy`. |
 
-Two conflict rules in `[tool.uv].conflicts` are load-bearing:
+### Per-Edition Extras
 
-- **`server` and `executor` are mutually exclusive.** The server never runs
-  pipeline code, and a worker never imports FastAPI/Docker — so a single
-  environment installs exactly one of the two, and `uv` will refuse to
-  resolve a lockfile that asks for both at once.
-- **`v3_0` and `v3_1` are mutually exclusive.** See below.
+A pipeline edition's stage code can depend on arbitrary third-party
+packages, and different editions may need different (even conflicting)
+versions. Each edition is its own extra, so:
 
-### Per-Edition Dependency Groups
+- Each edition gets its own worker image (`sunbeam-worker:<edition>`, built
+  with `--extra executor --extra <edition>` by `pipeline/Dockerfile`'s
+  `PIPELINE_EDITION` build arg), which never installs another edition's
+  packages.
+- Editions that can't share an environment are listed together in
+  `[tool.uv].conflicts` (today `v3_0`/`v3_1`), so `uv` resolves them
+  separately and rejects `uv sync --extra v3_0 --extra v3_1` outright. That
+  also means `--all-extras` doesn't work: name the extras you want.
 
-This is the one worth internalizing: **a pipeline edition's stage code can
-depend on arbitrary third-party packages, and different editions may need
-different (even conflicting) versions or entirely different packages.**
-A hypothetical `v3_1` targeting a different telemetry backend might need
-something `v3_0` doesn't,
-or a newer major version of a shared dependency that isn't compatible with
-what `v3_0` pins. Making each edition its own `uv` extra — rather than
-lumping every edition's dependencies into `executor` — means:
-
-- A worker container built for one edition never installs packages another
-  edition needs (see `dockerfiles/worker.Dockerfile`'s
-  `--extra "${PIPELINE_EDITION}"` build arg — this is *why* the image is
-  built per edition, not just per Sunbeam version).
-- Adding a new edition's stage dependency can never break another edition's
-  install, because `uv sync --extra executor --extra v3_1` never resolves
-  `v3_0`'s dependency set at all.
-- The `[tool.uv].conflicts` entry marking `v3_0`/`v3_1` mutually exclusive
-  is what makes `uv` treat this correctly: it's a hard signal that these
-  extras represent alternatives, not additions, so `uv sync --extra v3_0
-  --extra v3_1` is rejected outright instead of silently producing an
-  environment neither edition was tested against.
-
-When you add a new stage that needs a new package, the dependency goes in
-*that stage's edition extra* — see
-[`STAGES.md`](STAGES.md#adding-a-new-stage) step 4. It never goes in
-`executor` or `server` unless every edition, forever, needs it (rare —
-`networkx` is a rare example, since pipeline graph-building is
-edition-independent).
+A new stage's package goes in *its edition's* extra (see
+[`STAGES.md`](STAGES.md#adding-a-new-stage)), not `executor`, unless every
+edition needs it.
 
 ### Common `uv sync` Invocations
 
 ```bash
+# Everything for v3_0: server + worker + tests + lint/type tooling (what CI runs)
+uv sync --extra server --extra executor --extra v3_0 --all-groups
+
 # Running the server locally (no worker code)
 uv sync --extra server
 
 # Running a worker for the v3_0 edition
 uv sync --extra executor --extra v3_0
-
-# Everything: worker + tests + lint/type tooling (what CI runs)
-uv sync --extra executor --extra v3_0 --group test --group dev
 ```
 
 As a reminder, `--extra` is for controlling what parts of the repository you are going to be running and is intended for users. `--group` is for controlling development tools and is intended for developers. In a package, `--extra` are installable by end users while `--group` is not. The difference between them is more theoretical than practical. 
@@ -125,7 +105,9 @@ Once it's up:
 2. The server **tests the connection against the event first** — it must
    reach InfluxDB, find the bucket, and see at least one point in the
    event's window — and refuses the launch (HTTP 422, shown in the dialog)
-   if it can't. Then it launches a `sunbeam-worker:<edition>` container for
+   if it can't. It also refuses (HTTP 409) while the event already has an
+   active worker, since two runs would write the same samples. Then it
+   launches a `sunbeam-worker:<edition>` container for
    that event on the same `sunbeam-net` Docker network as the server and
    database, handing it every connection it needs as environment variables
    (`SUNBEAM_INFLUX_*`, plus the server's own `SUNBEAM_DATABASE_URL` and
@@ -145,17 +127,6 @@ Once it's up:
    a crashed or unresponsive container gets marked `lost`/`failed`
    automatically even if it never calls back.
 
-### Debug Data Viewer
-
-`http://localhost:8000/debug/viewer` is a minimal, throwaway page for
-watching the SSE telemetry stream (`GET /events/{event}/data/stream`) work
-live — pick an event and signal, hit Connect, and watch samples arrive as a
-worker writes them. It exists as a **worked example of the streaming
-client protocol** (see the comment block at the top of
-`server/static/stream_viewer.html`) for whoever builds the real dashboard
-widget consuming that stream; delete `server/routes/debug.py` and
-`server/static/` once that's built.
-
 ### Rebuilding
 
 `docker compose up --build` rebuilds all three images. If you've only
@@ -168,7 +139,9 @@ rebuilt the server with, launch from a git ref instead (see
 
 Local builds work offline as long as Docker's layer cache already has their
 steps: the `apt-get` and `uv sync` layers only rerun (and need the network)
-when `pipeline/Dockerfile`, `pyproject.toml`, or `uv.lock` change.
+when `pipeline/Dockerfile`, `pyproject.toml`, or `uv.lock` change. `.dockerignore` keeps
+`data/` (the Postgres volume) and `dashboard/` out of the build context, and
+so out of the server and worker images.
 
 ### Building workers from git
 
@@ -177,7 +150,9 @@ Choosing **Git ref** in the launch dialog (or `source_ref` in
 SHA of `https://github.com/UBC-Solar/sunbeam` instead of the server's copy of
 the code. The server resolves the ref to a commit (`git ls-remote`), then
 builds `pipeline/Dockerfile.git`, which clones that commit itself, into
-`sunbeam-worker:<edition>-<sha12>`. The run shows as **Building image**
+`sunbeam-worker:<edition>-<sha12>`. The build starts from the edition's local
+image, `sunbeam-worker:<edition>`, so `uv sync` only installs what the
+commit's lock changes, usually nothing. The run shows as **Building image**
 until the build finishes (the watchdog allows 20 minutes); a later launch
 of the same commit reuses the image and starts at once, while a branch
 that has moved builds its new commit.
@@ -248,8 +223,8 @@ What you see depends on the mode and on whether output is a terminal:
 
 | Run | Terminal shows | Reported to the server |
 |---|---|---|
-| Realtime, `--serverless` | A live timing table: per-pipeline/per-stage latency, idle/busy split | Nothing |
-| Realtime, with a server | `timing idle=...` log lines every 5 s | Timing metrics every 5 s |
+| Realtime in a terminal | A live timing table: per-pipeline/per-stage latency, idle/busy split | Timing metrics every 1 s (if there's a server) |
+| Realtime without a terminal (e.g. a container) | `timing idle=...` log lines every 5 s | Timing metrics every 5 s |
 | Replay in a terminal | A progress bar: simulated clock vs. the end of the window, speed (× realtime), elapsed, ETA, writer queue | Timing + replay progress every 0.5 s (if there's a server) |
 | Replay without a terminal (e.g. a container) | `replay 42.1% ...` and `timing ...` log lines every 5 s | Timing + replay progress every 0.5 s |
 
@@ -265,9 +240,9 @@ it's in (fetching telemetry, replaying, waiting for database writes).
 **1. Serverless** — `--serverless`, or launched with
 `SUNBEAM_SERVERLESS=true`. No server contact at all: no registration, no
 heartbeats, no permission polling, no completion reporting. This is
-`ServerlessWorkerControl` — `should_stop()` always returns `False` (it can
-still be told to stop locally via `request_stop()`, e.g. by
-`Executor.signal_completion()`), every other method is a no-op. Good for
+`ServerlessWorkerControl` — `should_stop()` returns `False` unless it was
+told to stop locally via `request_stop()`, and every other method is a
+no-op. Good for
 quick local runs where you don't care about dashboard visibility.
 
 ```bash

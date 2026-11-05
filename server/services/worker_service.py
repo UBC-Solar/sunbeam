@@ -3,8 +3,7 @@ import socket
 import threading
 import uuid
 from collections.abc import Callable, Iterator
-from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 import docker
 from docker.errors import DockerException
@@ -14,16 +13,14 @@ from sqlalchemy.orm import Session, sessionmaker
 from config.context import Context, TelemetryDB
 from db.sunbeamdb.models import TERMINAL_WORKER_STATUSES, Event, WorkerKind, WorkerRun, WorkerStatus
 from db.telemetrydb.connection_check import event_window
+from db.timeutil import utcnow
+from server.errors import Conflict
 from server.services.connection_service import ConnectionService, ConnectionTestFailed
 from server.services.image_builder import ImageBuildFailed, WorkerImageBuilder
 from server.services.metrics_cache import MetricsCache
 from stage.stage_library import StageLibrary
 
 logger = logging.getLogger("sunbeam.server")
-
-
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 _UNSET: Any = object()
@@ -70,12 +67,26 @@ class WorkerService:
             self._session_factory = get_session_factory()
         return self._session_factory()
 
-    def _validate_pipeline_edition(self, pipeline_edition: str) -> None:
-        editions = list(self._library.pipeline_editions)
-        if pipeline_edition not in editions:
-            raise ValueError(
-                f"Unknown pipeline edition {pipeline_edition!r}. "
-                f"Known editions: {editions}"
+    @staticmethod
+    def _get_worker(db: Session, worker_id: uuid.UUID, *, lock: bool = False) -> WorkerRun:
+        worker = db.get(WorkerRun, worker_id, with_for_update=lock)
+        if worker is None:
+            raise LookupError("Worker not found")
+        return worker
+
+    @staticmethod
+    def _check_no_active_run(db: Session, event: Event) -> None:
+        """ Two runs of one event would both write (and a replay wipe) the same samples. """
+        active = db.scalar(
+            select(WorkerRun).where(
+                WorkerRun.event_id == event.id,
+                WorkerRun.status.not_in(TERMINAL_WORKER_STATUSES),
+            )
+        )
+        if active is not None:
+            raise Conflict(
+                f"Event {event.name!r} already has an active worker ({active.id}, {active.status.value}); "
+                f"stop it first."
             )
 
     def _worker_environment(self, *, worker: WorkerRun, event_name: str, telemetry_db: TelemetryDB) -> dict:
@@ -106,18 +117,21 @@ class WorkerService:
         edition. From a git ref, the run is BUILDING until its image is built in the background (unless that
         commit was built before).
 
-        :raises ValueError: Unknown event, connection, or git ref, or an event whose edition this server lacks
+        :raises LookupError: Unknown event or connection
+        :raises Conflict: The event already has an active worker
+        :raises ValueError: Unknown git ref, or an event whose edition this server lacks
         :raises ConnectionTestFailed: The connection can't reach InfluxDB or sees no data for the event
         """
         event = db.get(Event, event_id)
         if event is None:
-            raise ValueError(f"No event exists with id={event_id}")
+            raise LookupError(f"No event exists with id={event_id}")
         event_name = event.name
         pipeline_edition = event.pipeline_edition
         source_ref = (source_ref or "").strip() or None
 
         # Editions are added rarely enough that any ref being launched is assumed to have the event's edition too
-        self._validate_pipeline_edition(pipeline_edition)
+        self._library.validate_pipeline_edition(pipeline_edition)
+        self._check_no_active_run(db, event)
 
         connection = self._connections.resolve(db, influx_connection_id)
 
@@ -219,7 +233,6 @@ class WorkerService:
         # The watchdog's startup grace counts from here, not from created_at (which is before any git build)
         worker.started_at = utcnow()
         db.commit()
-        db.refresh(worker)
 
         try:
             container = self._docker.containers.run(
@@ -240,7 +253,6 @@ class WorkerService:
             worker.failure_reason = f"Failed to launch Docker container: {exc}"
             worker.stopped_at = utcnow()
             db.commit()
-            db.refresh(worker)
 
             logger.error(
                 "Failed to launch worker %s for event %s (%s): %s",
@@ -251,10 +263,7 @@ class WorkerService:
 
         worker.container_id = container.id
         worker.host = socket.gethostname()
-        worker.started_at = utcnow()
-
         db.commit()
-        db.refresh(worker)
 
         logger.info(
             "Launched worker %s for event %s (%s, %s) as container %s",
@@ -280,9 +289,10 @@ class WorkerService:
         """
         event = db.scalar(select(Event).where(Event.name == event_name))
         if event is None:
-            raise ValueError(f"No event exists with name {event_name!r}")
+            raise LookupError(f"No event exists with name {event_name!r}")
 
-        self._validate_pipeline_edition(pipeline_edition)
+        self._library.validate_pipeline_edition(pipeline_edition)
+        self._check_no_active_run(db, event)
 
         worker = WorkerRun(
             event_id=event.id,
@@ -308,10 +318,8 @@ class WorkerService:
 
         return worker
 
-    def request_stop(self, db: Session, worker_id: uuid.UUID) -> WorkerRun | None:
-        worker = db.get(WorkerRun, worker_id)
-        if worker is None:
-            return None
+    def request_stop(self, db: Session, worker_id: uuid.UUID) -> WorkerRun:
+        worker = self._get_worker(db, worker_id)
 
         if worker.status in TERMINAL_WORKER_STATUSES:
             return worker
@@ -337,14 +345,12 @@ class WorkerService:
         current_stage: str | None,
         status_message: str | None,
         host: str | None,
-    ) -> WorkerRun | None:
+    ) -> WorkerRun:
         # Locked so this can't race the watchdog's own read-modify-write on
         # the same row (see WatchdogService._resolve): whichever of the two
         # commits first wins, and the other sees the committed terminal
         # status on its own (post-lock) re-check and backs off.
-        worker = db.get(WorkerRun, worker_id, with_for_update=True)
-        if worker is None:
-            return None
+        worker = self._get_worker(db, worker_id, lock=True)
 
         if worker.status in TERMINAL_WORKER_STATUSES:
             return worker
@@ -366,22 +372,19 @@ class WorkerService:
 
         return worker
 
-    def permission_for(
-        self,
-        db: Session,
-        worker_id: uuid.UUID,
-    ) -> tuple[bool, str | None, bool]:
+    def permission_for(self, db: Session, worker_id: uuid.UUID) -> tuple[bool, str | None]:
+        """ Whether the worker may keep running, and if not, why. """
         worker = db.get(WorkerRun, worker_id)
         if worker is None:
-            return False, "Unknown worker.", True
+            return False, "Unknown worker."
 
         if worker.stop_requested:
-            return False, "Stop requested.", True
+            return False, "Stop requested."
 
         if worker.status in TERMINAL_WORKER_STATUSES:
-            return False, f"Worker is terminal: {worker.status.value}.", True
+            return False, f"Worker is terminal: {worker.status.value}."
 
-        return True, None, False
+        return True, None
 
     def complete(
         self,
@@ -390,10 +393,17 @@ class WorkerService:
         worker_id: uuid.UUID,
         success: bool,
         message: str | None,
-    ) -> WorkerRun | None:
-        worker = db.get(WorkerRun, worker_id)
-        if worker is None:
-            return None
+    ) -> WorkerRun:
+        # Locked and re-checked like heartbeat: a run the watchdog already resolved (lost, cancelled) stays resolved
+        worker = self._get_worker(db, worker_id, lock=True)
+
+        if worker.status in TERMINAL_WORKER_STATUSES:
+            logger.info(
+                "Worker %s reported %s after it was already %s; keeping %s",
+                worker_id, "success" if success else "failure", worker.status.value, worker.status.value,
+            )
+            db.commit()
+            return worker
 
         worker.status = WorkerStatus.COMPLETED if success else WorkerStatus.FAILED
         worker.status_message = message
@@ -418,26 +428,31 @@ class WorkerService:
         *,
         worker_id: uuid.UUID,
         payload: dict,
-    ) -> bool:
+    ) -> None:
         worker = db.get(WorkerRun, worker_id)
         if worker is None or worker.status in TERMINAL_WORKER_STATUSES:
-            return False
+            raise LookupError("Worker not found or no longer active")
 
         MetricsCache.set(worker_id, {**payload, "reported_at": utcnow().isoformat()})
-        return True
 
-    def get_metrics(self, worker_id: uuid.UUID) -> Optional[dict]:
-        return MetricsCache.get(worker_id)
+    def get_metrics(self, worker_id: uuid.UUID) -> dict:
+        metrics = MetricsCache.get(worker_id)
+        if metrics is None:
+            raise LookupError("No metrics available")
+        return metrics
 
     def _get_container(self, db: Session, worker_id: uuid.UUID):
         worker = db.get(WorkerRun, worker_id)
-        if worker is None or worker.container_id is None:
-            return None
+        container = None
+        if worker is not None and worker.container_id is not None:
+            try:
+                container = self._docker.containers.get(worker.container_id)
+            except DockerException:
+                pass
 
-        try:
-            return self._docker.containers.get(worker.container_id)
-        except DockerException:
-            return None
+        if container is None:
+            raise LookupError("Worker or its container could not be found")
+        return container
 
     def get_logs(
         self,
@@ -445,11 +460,8 @@ class WorkerService:
         worker_id: uuid.UUID,
         *,
         tail: int = 500,
-    ) -> Optional[list[str]]:
+    ) -> list[str]:
         container = self._get_container(db, worker_id)
-        if container is None:
-            return None
-
         raw = container.logs(tail=tail, timestamps=True)
         return raw.decode("utf-8", errors="replace").splitlines()
 
@@ -459,9 +471,6 @@ class WorkerService:
         worker_id: uuid.UUID,
         *,
         tail: int = 200,
-    ) -> Optional[Iterator[bytes]]:
+    ) -> Iterator[bytes]:
         container = self._get_container(db, worker_id)
-        if container is None:
-            return None
-
         return container.logs(stream=True, follow=True, tail=tail, timestamps=True)

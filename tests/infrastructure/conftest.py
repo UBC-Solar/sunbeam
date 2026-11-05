@@ -161,19 +161,14 @@ class FakeControl(WorkerControl):
     def should_stop(self) -> bool:
         return self._stop.is_set()
 
-    def request_stop(self, reason=None):
+    def request_stop(self):
         self._stop.set()
-        if reason is not None:
-            self.messages.append(reason)
 
     def set_stage(self, stage):
         self.stages.append(stage)
 
     def set_message(self, message):
         self.messages.append(message)
-
-    def heartbeat_now(self, *, status: str = "running"):
-        pass
 
     def report_metrics(self, payload):
         pass

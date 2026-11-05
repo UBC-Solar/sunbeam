@@ -1,20 +1,18 @@
 import logging
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from db.sunbeamdb.models import Connection, ConnectionKind, Event
 from db.telemetrydb.connection_check import CheckResult, check_influx, event_window
+from db.timeutil import utcnow
+from server.errors import Conflict
 
 logger = logging.getLogger("sunbeam.server")
 
 EDITABLE_FIELDS = ("name", "url", "organization", "bucket", "token")
-
-
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class ConnectionTestFailed(Exception):
@@ -37,29 +35,29 @@ class ConnectionService:
     def list(self, db: Session) -> list[Connection]:
         return list(db.scalars(select(Connection).order_by(Connection.name)))
 
-    def get(self, db: Session, connection_id: int) -> Connection | None:
-        return db.get(Connection, connection_id)
+    def get(self, db: Session, connection_id: int) -> Connection:
+        connection = db.get(Connection, connection_id)
+        if connection is None:
+            raise LookupError(f"No connection exists with id={connection_id}")
+        return connection
 
     def default(self, db: Session, kind: ConnectionKind = ConnectionKind.INFLUXDB) -> Connection | None:
         return db.scalar(select(Connection).where(Connection.kind == kind, Connection.is_default.is_(True)))
 
     def resolve(self, db: Session, connection_id: int | None) -> Connection:
         """ The given connection, or the default when None. """
-        if connection_id is None:
-            connection = self.default(db)
-            if connection is None:
-                raise ValueError("No default InfluxDB connection; create one on the dashboard, or pick one.")
-            return connection
+        if connection_id is not None:
+            return self.get(db, connection_id)
 
-        connection = self.get(db, connection_id)
+        connection = self.default(db)
         if connection is None:
-            raise ValueError(f"No connection exists with id={connection_id}")
+            raise ValueError("No default InfluxDB connection; create one on the dashboard, or pick one.")
         return connection
 
     def _check_name_free(self, db: Session, name: str, exclude_id: int | None = None) -> None:
         existing = db.scalar(select(Connection).where(Connection.name == name))
         if existing is not None and existing.id != exclude_id:
-            raise ValueError(f"A connection named {name!r} already exists")
+            raise Conflict(f"A connection named {name!r} already exists")
 
     def _make_default(self, db: Session, connection: Connection) -> None:
         for other in db.scalars(select(Connection).where(Connection.kind == connection.kind)):
@@ -81,10 +79,8 @@ class ConnectionService:
         logger.info("Created connection %r (%s)", connection.name, connection.url)
         return connection
 
-    def update(self, db: Session, connection_id: int, **fields: str | None) -> Connection | None:
+    def update(self, db: Session, connection_id: int, **fields: str | None) -> Connection:
         connection = self.get(db, connection_id)
-        if connection is None:
-            return None
 
         changes = {key: value for key, value in fields.items() if key in EDITABLE_FIELDS and value is not None}
         if "name" in changes:
@@ -103,20 +99,16 @@ class ConnectionService:
         db.refresh(connection)
         return connection
 
-    def set_default(self, db: Session, connection_id: int) -> Connection | None:
+    def set_default(self, db: Session, connection_id: int) -> Connection:
         connection = self.get(db, connection_id)
-        if connection is None:
-            return None
 
         self._make_default(db, connection)
         db.commit()
         db.refresh(connection)
         return connection
 
-    def delete(self, db: Session, connection_id: int) -> bool:
+    def delete(self, db: Session, connection_id: int) -> None:
         connection = self.get(db, connection_id)
-        if connection is None:
-            return False
 
         was_default, kind = connection.is_default, connection.kind
         db.delete(connection)
@@ -128,7 +120,6 @@ class ConnectionService:
                 successor.is_default = True
 
         db.commit()
-        return True
 
     def window_for(self, db: Session, event_id: int | None) -> tuple[datetime, datetime] | None:
         if event_id is None:
@@ -136,7 +127,7 @@ class ConnectionService:
 
         event = db.get(Event, event_id)
         if event is None:
-            raise ValueError(f"No event exists with id={event_id}")
+            raise LookupError(f"No event exists with id={event_id}")
         return event_window(event.starts_at, event.ends_at)
 
     def check(

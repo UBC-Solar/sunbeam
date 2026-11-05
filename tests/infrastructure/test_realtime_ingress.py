@@ -48,3 +48,28 @@ def test_failed_query_is_no_data():
     values = make_querier(FakeInflux(error=TimeoutError("slow"))).get_last_values()
 
     assert values == {"PackCurrent": None, "VehicleVelocity": None}
+
+
+class RejectedRequest(Exception):
+    """ Shaped like influxdb_client's ApiException, which carries the HTTP status. """
+
+    def __init__(self, status):
+        super().__init__(f"HTTP {status}")
+        self.status = status
+
+
+def test_rejected_query_raises():
+    import pytest
+
+    with pytest.raises(RejectedRequest):
+        make_querier(FakeInflux(error=RejectedRequest(401))).get_last_values()
+
+
+def test_failed_queries_are_logged_but_not_on_every_poll(caplog):
+    querier = make_querier(FakeInflux(error=TimeoutError("slow")))
+
+    with caplog.at_level("WARNING", logger="sunbeam.worker"):
+        querier.get_last_values()
+        querier.get_last_values()
+
+    assert len([r for r in caplog.records if "failed" in r.message]) == 1

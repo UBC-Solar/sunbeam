@@ -1,65 +1,22 @@
-from orchestration.bootstrap import build_control
-from orchestration.control import ServerlessWorkerControl, OrchestratedWorkerControl
-from config import EventManager
-from config.context import INFLUX_ENV, Context
-from db.telemetrydb.connection_check import event_window
-from pipeline.preflight import run_preflight_checks
-from sqlalchemy import create_engine
-from pipeline import Executor
 import argparse
 import logging
 import os
 
+from sqlalchemy import create_engine
+
+from config import EventManager
+from config.context import INFLUX_ENV, Context
+from config.events import EventConfig
+from db.telemetrydb.connection_check import event_window
+from orchestration.bootstrap import build_control
+from orchestration.control import WorkerControl
+from pipeline import Executor
+from pipeline.preflight import run_preflight_checks
+
 logger = logging.getLogger("sunbeam.worker")
 
-
-class Sunbeam:
-    def __init__(self):
-        database_url = Context().sunbeam_db.build_url()
-        self._engine = create_engine(database_url, echo=False)
-
-    def __del__(self):
-        self._engine.dispose()
-
-    def run(
-        self,
-        event_name,
-        reprocess: bool = False,
-        control = None,
-    ):
-        resolved_control = control or ServerlessWorkerControl()
-        is_orchestrated = isinstance(resolved_control, OrchestratedWorkerControl)
-
-        event = EventManager().get_event(event_name)
-        results = run_preflight_checks(
-            self._engine,
-            check_server=is_orchestrated,
-            window=event_window(event.starts_at, event.ends_at),
-        )
-        failures = [r for r in results if not r.ok]
-
-        if failures:
-            message = "Preflight failed: " + "; ".join(f"{r.name}: {r.detail}" for r in failures)
-            logger.error(message)
-
-            try:
-                resolved_control.complete(success=False, message=message)
-            except Exception:
-                logger.warning(
-                    "Failed to report preflight failure to server", exc_info=True,
-                )
-
-            raise SystemExit(1)
-
-        executor = Executor.from_event(
-            event_name,
-            self._engine,
-            reprocess=reprocess,
-            control=resolved_control,
-        )
-        executor.run()
-
-
+# Where to find everything; each flag overrides its environment variable (see config/context.py). A worker the server
+# launches gets these set for it, from the connection chosen on the dashboard.
 _CONNECTION_FLAGS = {
     "influx-url": INFLUX_ENV["database_url"],
     "influx-org": INFLUX_ENV["organization"],
@@ -70,6 +27,36 @@ _CONNECTION_FLAGS = {
 }
 
 
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "false").lower() == "true"
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run Sunbeam pipeline executor.")
+    parser.add_argument(
+        "--event_name",
+        default=os.environ.get("SUNBEAM_EVENT_NAME", "realtime"),
+        help="Event name to run. Defaults to SUNBEAM_EVENT_NAME or 'realtime'.",
+    )
+    parser.add_argument(
+        "--serverless",
+        action="store_true",
+        # A hand-run worker registers itself with the server unless this (or SUNBEAM_SERVERLESS=true) opts out
+        default=_env_flag("SUNBEAM_SERVERLESS"),
+        help="Run without the Sunbeam server (no registration, no heartbeats).",
+    )
+    parser.add_argument(
+        "--reprocess",
+        action="store_true",
+        default=_env_flag("SUNBEAM_REPROCESS"),
+        help="Reprocess an existing event.",
+    )
+    for flag, env in _CONNECTION_FLAGS.items():
+        parser.add_argument(f"--{flag}", default=None, help=f"Overrides ${env}.")
+
+    return parser.parse_args()
+
+
 def apply_connection_flags(args: argparse.Namespace) -> None:
     """ Context reads only the environment, so flags given on the command line become variables. """
     for flag, env in _CONNECTION_FLAGS.items():
@@ -78,84 +65,52 @@ def apply_connection_flags(args: argparse.Namespace) -> None:
             os.environ[env] = value
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Run Sunbeam pipeline executor.")
+def run(event: EventConfig, control: WorkerControl, *, reprocess: bool) -> None:
+    engine = create_engine(Context().sunbeam_db.build_url(), echo=False)
+    try:
+        results = run_preflight_checks(
+            engine,
+            check_server=control.is_orchestrated,
+            window=event_window(event.starts_at, event.ends_at),
+        )
+        failures = [r for r in results if not r.ok]
+        if failures:
+            message = "Preflight failed: " + "; ".join(f"{r.name}: {r.detail}" for r in failures)
+            logger.error(message)
+            control.complete(success=False, message=message)
+            raise SystemExit(1)
 
-    parser.add_argument(
-        "--event_name",
-        nargs="?",
-        default=os.environ.get("SUNBEAM_EVENT_NAME", "realtime"),
-        help="Event name to run. Defaults to SUNBEAM_EVENT_NAME or 'realtime'.",
-    )
-
-    parser.add_argument(
-        "--serverless",
-        action="store_true",
-        # Note: orchestrated is the default. A hand-run worker registers
-        # itself with the server; --serverless (or SUNBEAM_SERVERLESS=true)
-        # opts out entirely.
-        default=os.environ.get("SUNBEAM_SERVERLESS", "false").lower() == "true",
-        help="Run without the Sunbeam server (no registration, no heartbeats).",
-    )
-
-    parser.add_argument(
-        "--reprocess",
-        action="store_true",
-        default=os.environ.get("SUNBEAM_REPROCESS", "false").lower() == "true",
-        help="Reprocess an existing event.",
-    )
-
-    # Where to find everything; each defaults to its environment variable (see config/context.py). A worker the
-    # server launches gets these set for it, from the connection chosen on the dashboard.
-    for flag, env in _CONNECTION_FLAGS.items():
-        parser.add_argument(f"--{flag}", default=None, help=f"Overrides ${env}.")
-
-    return parser.parse_args()
+        Executor.from_event(event, engine, reprocess=reprocess, control=control).run()
+    finally:
+        engine.dispose()
 
 
-if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
     args = parse_args()
-
     apply_connection_flags(args)
 
-    is_worker = "SUNBEAM_WORKER_RUN_ID" in os.environ
-
-    if is_worker:
-        is_serverless = False
-    else:
-        is_serverless = args.serverless
+    # A worker the server launched is always orchestrated
+    launched_by_server = "SUNBEAM_WORKER_RUN_ID" in os.environ
+    serverless = args.serverless and not launched_by_server
 
     logger.info(
         "Resolved worker configuration: %s",
         {
-            "launched_by_server": is_worker,
-            "is_serverless": is_serverless,
+            "launched_by_server": launched_by_server,
+            "is_serverless": serverless,
             "worker_run_id": os.environ.get("SUNBEAM_WORKER_RUN_ID"),
-            "pipeline_edition": os.environ.get("SUNBEAM_PIPELINE_EDITION"),
             "event_name": args.event_name,
             "reprocess": args.reprocess,
             **Context().describe(),
         },
     )
 
-    if "event_name" in args:
-        event_name = args.event_name
-    else:
-        event_name = os.environ.get("SUNBEAM_EVENT_NAME", None)
+    event = EventManager().get_event(args.event_name)
+    control = build_control(serverless, event, reprocess=args.reprocess)
+    run(event, control, reprocess=args.reprocess)
 
-    if event_name is None:
-        raise RuntimeError("Event name not set.")
 
-    control = build_control(is_serverless, args.event_name, reprocess=args.reprocess)
-
-    sunbeam = Sunbeam()
-    sunbeam.run(
-        args.event_name,
-        reprocess=args.reprocess,
-        control=control,
-    )
+if __name__ == "__main__":
+    main()

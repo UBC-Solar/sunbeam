@@ -53,7 +53,7 @@ class TestServerlessControl:
 
     def test_request_stop_flips_should_stop(self):
         control = ServerlessWorkerControl()
-        control.request_stop("local failure")
+        control.request_stop()
         assert control.should_stop() is True
 
 
@@ -102,7 +102,23 @@ class TestOrchestratedControlLoop:
 
         assert control._snapshot()[1] == "Stop requested by server."
 
-    def test_unreachable_server_is_treated_as_stop(self):
+    def test_briefly_unreachable_server_is_tolerated(self):
+        client = FakeOrchestratorClient()
+        client.permission_error = requests.exceptions.ConnectionError("down")
+        control = OrchestratedWorkerControl(
+            client, heartbeat_interval_s=0.01, permission_interval_s=0.01, poll_interval_s=0.005,
+            max_unreachable_polls=1000,
+        )
+
+        control.start()
+        try:
+            assert wait_until(lambda: len(client.heartbeats) >= 3)
+        finally:
+            control.stop()
+
+        assert not control.should_stop()
+
+    def test_server_unreachable_for_too_long_stops_the_worker(self):
         client = FakeOrchestratorClient()
         client.permission_error = requests.exceptions.ConnectionError("down")
         control = make_control(client)
@@ -113,16 +129,27 @@ class TestOrchestratedControlLoop:
         finally:
             control.stop()
 
-        assert control._snapshot()[1] == "Failed to connect to server."
+        assert control._snapshot()[1] == "Lost contact with the server."
 
     def test_request_stop_works_without_server(self):
+        control = make_control(FakeOrchestratorClient())
+
+        control.request_stop()
+
+        assert control.should_stop() is True
+
+    def test_heartbeats_continue_as_stopping_after_a_stop(self):
         client = FakeOrchestratorClient()
         control = make_control(client)
 
-        control.request_stop("compute scheduler crashed")
+        control.request_stop()
+        control.start()
+        try:
+            assert wait_until(lambda: len(client.heartbeats) >= 2)
+        finally:
+            control.stop()
 
-        assert control.should_stop() is True
-        assert control._snapshot()[1] == "compute scheduler crashed"
+        assert {status for status, _, _ in client.heartbeats} == {"stopping"}
 
     def test_stop_joins_thread(self):
         client = FakeOrchestratorClient()
@@ -135,15 +162,6 @@ class TestOrchestratedControlLoop:
 
 
 class TestOrchestratedControlReporting:
-    def test_heartbeat_now_sends_snapshot(self):
-        client = FakeOrchestratorClient()
-        control = make_control(client)
-
-        control.set_stage("compute")
-        control.heartbeat_now(status="stopping")
-
-        assert client.heartbeats == [("stopping", "compute", None)]
-
     def test_complete_swallows_request_errors(self):
         client = FakeOrchestratorClient()
         client.complete_error = requests.exceptions.ConnectionError("down")

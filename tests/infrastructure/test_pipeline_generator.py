@@ -5,7 +5,6 @@ from pipeline.pipeline_generator import (
     build_node_graph,
     build_pipeline_from_nodes,
     collect_signals_for_ingress,
-    cross_rate_edges,
     same_rate_components,
 )
 from stage.stage import Stage
@@ -61,16 +60,6 @@ class TestBuildNodeGraph:
 
 
 class TestRatePartitioning:
-    def test_cross_rate_edges_detected(self):
-        a = make_stage("A", [], ["x"], 10.0)
-        b = make_stage("B", ["x"], ["y"], 1.0)
-
-        graph = build_node_graph([a, b])
-        edges = cross_rate_edges(graph)
-
-        assert len(edges) == 1
-        assert edges[0][:3] == ("A", "B", "x")
-
     def test_same_rate_components_split_by_rate(self):
         a = make_stage("A", [], ["x"], 10.0)
         b = make_stage("B", ["x"], ["y"], 10.0)

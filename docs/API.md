@@ -36,11 +36,14 @@ these endpoints read from, see `db/sunbeamdb/models.py`.
   Everything else (worker records, window echo) is ISO 8601 via Pydantic's
   default `datetime` serialization.
 - **Errors** are FastAPI's standard `{"detail": "..."}` shape, with status
-  codes used consistently: `404` for "the named/IDed thing doesn't exist",
-  `400` for "the request referenced a real thing but with an invalid
-  combination" (e.g. an unknown pipeline edition), `422` for "the request
+  codes used consistently (mapped once, in `server/main.py`, from the
+  exceptions services raise — see `server/errors.py`): `404` for "the
+  named/IDed thing doesn't exist", `409` for "that clashes with existing
+  state" (a taken name, an event that already has an active worker), `400`
+  for "the request referenced a real thing but with an invalid combination"
+  (e.g. an unknown pipeline edition or git ref), `422` for "the request
   itself is malformed" (validation errors, including the data API's window
-  parameter rules).
+  parameter rules) and for a connection that fails its test on launch.
 
 ---
 
@@ -56,7 +59,8 @@ List all events, newest-starting first.
     "id": 2, "name": "realtime", "vehicle_id": 1,
     "starts_at": "2026-05-30T01:00:00Z", "ends_at": null,
     "pipeline_edition": "v3_0", "status": "ongoing",
-    "description": "Ongoing", "is_replay": false
+    "description": "Ongoing", "is_replay": false,
+    "running": true, "sample_count": 184320
   }
 ]
 ```
@@ -67,8 +71,14 @@ reprocesses it (see [`USAGE.md`](USAGE.md#realtime-vs-replay-worker-runs)).
 
 `status` is one of `unprocessed`, `ongoing`, `processed` (`EventStatus`) —
 set to `ongoing` when a worker opens an `EventWriter` for the event, and
-`processed` when that writer closes (executor shutdown, for any reason,
-including failure — see the note in `USAGE.md` about `--reprocess`).
+`processed` once that worker's writes have finished (at shutdown, whether the
+run succeeded or not). Whether the last run succeeded is the status of its
+worker run (`GET /workers`).
+
+`running` is true while any worker run for the event hasn't reached a
+terminal status. `sample_count` is how many `sample` rows the event has. The
+server caches it: an `ongoing` event is recounted at most every 5 seconds,
+and any other event only when its `status` changes.
 
 ### `GET /events/{event_id}`
 
@@ -119,10 +129,11 @@ built from a git ref and there is no container yet.
 branch/tag/SHA the image was built from and `source_sha` its commit; both
 `null` for the server's own copy of the code.
 
-### `GET /workers?active_only=<bool>`
+### `GET /workers?active_only=<bool>&limit=<int>`
 
 List workers, newest-created first. `active_only=true` filters to
-non-terminal statuses only.
+non-terminal statuses only; `limit` (optional) returns only the most recent
+runs, which the dashboard uses since it polls this every few seconds.
 
 ### `POST /workers/launch`
 
@@ -144,8 +155,9 @@ a replay (`is_replay` events), which always rewrites the event.
 First **tests the connection** over the event's window (recording the
 result on the connection): `422` with the failing step in `detail`, and
 nothing created, if it can't reach InfluxDB, find the bucket, or see any
-data. Then creates a `WorkerRun` (`kind: "container"`) and runs
-`sunbeam-worker:{pipeline_edition}` — or, from a git ref,
+data. `409` if the event already has a non-terminal worker (two runs would
+write the same samples; stop it first). Then creates a `WorkerRun`
+(`kind: "container"`) and runs `sunbeam-worker:{pipeline_edition}` — or, from a git ref,
 `sunbeam-worker:{pipeline_edition}-{sha12}`. If that image hasn't been built,
 the run is returned as `status: "building"` and starts once the background
 build finishes (or goes `failed` with the build log's tail in
@@ -153,9 +165,9 @@ build finishes (or goes `failed` with the build log's tail in
 `SUNBEAM_EVENT_NAME` / `SUNBEAM_PIPELINE_EDITION` / `SUNBEAM_REPROCESS`,
 the connection as `SUNBEAM_INFLUX_URL` / `_ORG` / `_BUCKET` / `_TOKEN`, and
 `SUNBEAM_DATABASE_URL` / `SUNBEAM_SERVER_URL` as environment. Returns the
-`WorkerRunRead`. `400` if `influx_connection_id` or `source_ref` isn't
-known, `event_id` doesn't exist, or the event's edition isn't one this
-server knows (`GET /pipeline-editions`). If the Docker launch itself fails
+`WorkerRunRead`. `404` if `event_id` or `influx_connection_id` doesn't
+exist; `400` if `source_ref` isn't known or the event's edition isn't one
+this server knows (`GET /pipeline-editions`). If the Docker launch itself fails
 (daemon unreachable, image missing, ...), the row is still created but
 immediately marked `status: "failed"` with `failure_reason` set — the
 response is `200`, not an error; check `status` in the body.
@@ -179,7 +191,8 @@ is running with, recorded for display; the CLI sends its InfluxDB URL and
 bucket and its `--reprocess` flag.
 
 Returns a `WorkerRunRead` with `status: "starting"`, `kind: "external"`,
-`image_tag: null`. `400` for an unknown event name or pipeline edition.
+`image_tag: null`. `404` for an unknown event name, `400` for an unknown
+pipeline edition, `409` if the event already has a non-terminal worker.
 
 ### `POST /workers/{worker_id}/heartbeat`
 
@@ -204,12 +217,13 @@ Polled periodically by `OrchestratedWorkerControl` to learn whether it
 should keep running.
 
 ```json
-{"allowed": true, "reason": null, "stop_requested": false}
+{"allowed": true, "reason": null}
 ```
 
-`allowed: false` (with `stop_requested: true`) once a stop has been
-requested or the worker has reached a terminal status; the worker's control
-loop treats `allowed: false` as "stop now."
+`allowed: false` (with the `reason`) once a stop has been requested or the
+worker has reached a terminal status; the worker's control loop treats
+`allowed: false` as "stop now." If the worker can't reach the server at all
+for about ten polls in a row, it stops itself too.
 
 ### `POST /workers/{worker_id}/stop`
 
@@ -232,13 +246,17 @@ clients.
 
 Sets `status` to `completed` or `failed`, `stopped_at` to now,
 `failure_reason` to `message` iff `success: false`, and clears any cached
-metrics for the worker. `404` for unknown `worker_id`.
+metrics for the worker. A worker already resolved as terminal (e.g. the
+watchdog marked it `lost`) keeps that status; the late report is logged and
+ignored. `404` for unknown `worker_id`. The worker only calls this once its
+database writes have finished, so `completed` means the data is there.
 
 ### `POST /workers/{worker_id}/metrics` → `204`
 
 Periodic timing/writer-queue snapshot from a running worker (see
-`WorkerMetricsReport` below) — every ~5 s for a realtime worker, every
-0.5 s for a replay worker. `404` if the worker doesn't exist or is
+`WorkerMetricsReport` below) — every ~5 s for a realtime worker in a
+container (every 1 s when run in a terminal), every 0.5 s for a replay
+worker. `404` if the worker doesn't exist or is
 already terminal — a worker's final metrics push right before exit may
 race its own `/complete` call and lose; this is expected and harmless.
 
@@ -392,9 +410,7 @@ where the other fits**: the query endpoint is for post-mortem analysis over
 an arbitrary window (opens a connection, returns a bounded response,
 closes); the stream endpoint is for a live dashboard tailing recent data
 across many signals (opens one long-lived connection, gets pushed batches
-as they land). See the worked client in
-`server/static/stream_viewer.html` and the discussion in
-[`USAGE.md`](USAGE.md#debug-data-viewer).
+as they land).
 
 ### `GET /events/{event_name}/signals`
 
@@ -461,8 +477,7 @@ GET /events/realtime/signals/VehicleSpeed/data?last_seconds=600
 ### `GET /events/{event_name}/data/stream`
 
 Multiplexed **Server-Sent Events** stream — **for a live dashboard**, one
-connection carrying any number of signals. This is the endpoint the
-`/debug/viewer` page demonstrates.
+connection carrying any number of signals.
 
 **Query parameters:**
 
@@ -505,9 +520,7 @@ handling is automatic if you use the browser's native `EventSource`: on any
 disconnect it retries on its own and sends the last received `id:` back as
 an HTTP `Last-Event-ID` header, which the server honors over the `since`
 query parameter. You do not need to track the cursor yourself or write any
-reconnection logic — this is the entire point of using SSE here (see
-`server/static/stream_viewer.html`'s `source.onerror` handler, which does
-nothing but update a status label).
+reconnection logic — this is the entire point of using SSE here.
 
 **Backfill + live handoff pattern**, for a dashboard widget coming online:
 query `GET .../data?last_seconds=600` first, note the largest timestamp

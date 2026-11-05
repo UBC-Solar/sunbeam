@@ -89,30 +89,17 @@ class TestSchedulerRun:
 
         assert len(ticks) == 4
 
-    def test_error_propagates_when_stop_on_error(self, fake_clock):
+    def test_error_propagates(self, fake_clock):
         pipeline = FakePipeline("p", 10.0, fail_after=2)
         scheduler = make_scheduler([pipeline], fake_clock)
 
         with pytest.raises(RuntimeError, match="p failed"):
             scheduler.run(
                 state=None,
-                stop_on_error=True,
                 should_stop=lambda: pipeline.run_count >= 100,
             )
 
         assert pipeline.run_count == 3
-
-    def test_error_swallowed_when_not_stop_on_error(self, fake_clock):
-        pipeline = FakePipeline("p", 10.0, fail_after=2)
-        scheduler = make_scheduler([pipeline], fake_clock)
-
-        scheduler.run(
-            state=None,
-            stop_on_error=False,
-            should_stop=lambda: pipeline.run_count >= 6,
-        )
-
-        assert pipeline.run_count == 6
 
 
 class RecordingObserver:

@@ -13,6 +13,10 @@ class State:
         self._lock = threading.RLock()
 
     def as_frame(self, signals: list[CanonicalName], timestamp: datetime) -> FrameView:
+        """ The values of ``signals`` at ``timestamp``.
+
+        :raises KeyError: A signal has no value yet
+        """
         with self._lock:
             frame = Frame(timestamp)
 
@@ -43,12 +47,19 @@ class State:
 
             return max(ts.start for ts in series), min(ts.stop for ts in series)
 
-    def from_frame(self, frame: FrameView, signals: list[CanonicalName]) -> "State":
+    def update(self, frame: FrameView, stage) -> None:
+        """ Store a stage's output frame.
+
+        :raises RuntimeError: The frame is missing one of the stage's declared outputs. Without this, downstream
+            stages would silently keep reading the value from the previous tick.
+        """
         with self._lock:
-            for signal in signals:
+            for signal in stage.outputs:
                 try:
                     self._values[signal] = frame.read(signal)
-
-                except KeyError:  # Failed to get output, likely should raise some concern in the future
-                    continue
-            return self
+                except KeyError:
+                    if stage.may_omit_outputs:
+                        continue
+                    raise RuntimeError(
+                        f"Stage {stage.stage_name!r} did not write its declared output {signal!r}."
+                    ) from None

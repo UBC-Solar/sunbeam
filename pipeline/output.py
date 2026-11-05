@@ -2,12 +2,12 @@ import logging
 import math
 import time
 from collections.abc import Callable
-from contextlib import ExitStack
 from datetime import datetime
 from typing import Protocol, Self
 
-from rich.console import Console
+from rich.console import Console, Group
 from rich.live import Live
+from rich.panel import Panel
 from rich.progress import (
     BarColumn,
     Progress,
@@ -17,8 +17,10 @@ from rich.progress import (
     TextColumn,
     TimeElapsedColumn,
 )
+from rich.table import Table
 
 from pipeline.replay_progress import ReplayProgress, format_duration, format_speed
+from pipeline.timing import TimingStats
 
 logger = logging.getLogger("sunbeam.worker")
 
@@ -30,45 +32,157 @@ class OutputManager(Protocol):
     def on_tick(self, timestamp: datetime) -> None: ...
 
 
-class RichOutputManager:
+class MetricsReporter:
     """
-    Interactive display for a human watching a terminal. Relies on rich.Live,
-    which needs a real TTY to redraw in place - do not use this for a
-    headless/orchestrated worker, since Live silently produces little to no
-    output when it isn't attached to a terminal.
+    Every ``report_interval_s``, takes one metrics snapshot (timing, writer queue, and replay progress if any) and
+    hands it to each sink:
+
+    - the server, via ``control.report_metrics`` (a no-op for a serverless worker)
+    - a log line every ``log_interval_s`` (None for no logging), which Docker captures regardless of TTY
+    - with ``table=True``, a live timing table, which needs a real terminal to redraw in place
+
+    It is the only thing that reads (and so resets) the TimingStats.
     """
 
-    def __init__(self, timing, *, interval_s: float = 1.0):
+    def __init__(
+            self,
+            timing: TimingStats,
+            control,
+            *,
+            report_interval_s: float = 5.0,
+            log_interval_s: float | None = 5.0,
+            table: bool = False,
+            writer_stats: Callable[[], dict] | None = None,
+            replay: ReplayProgress | None = None,
+            monotonic: Callable[[], float] = time.monotonic,
+    ):
         self._timing = timing
-        self._interval_s = interval_s
-        self._console = Console()
-        self._live: Live | None = None
+        self._control = control
+        self._report_interval_s = report_interval_s
+        self._log_interval_s = log_interval_s
+        self._writer_stats = writer_stats
+        self._replay = replay
+        self._monotonic = monotonic
+        self._last_report = monotonic()
+        self._last_log = -math.inf
+        self._live = Live(console=Console(), refresh_per_second=4) if table else None
 
     def __enter__(self):
-        self._live = Live(console=self._console, refresh_per_second=4)
-        self._live.__enter__()
+        if self._live is not None:
+            self._live.__enter__()
         return self
 
     def __exit__(self, exc_type, exc, tb):
         if self._live is not None:
             if exc_type is None:
-                # Show whatever accumulated since the last refresh so the final table isn't lost
-                self._live.update(self._timing.snapshot_and_reset())
+                # Show whatever accumulated since the last report, so the final table isn't lost
+                self._live.update(render_metrics_table(self._snapshot()))
             self._live.__exit__(exc_type, exc, tb)
+        return False
 
     def on_tick(self, timestamp: datetime):
-        if self._live is None:
-            return
+        if self._replay is not None:
+            self._replay.update(timestamp)
 
-        if self._timing.should_print(interval_s=self._interval_s):
-            self._live.update(self._timing.snapshot_and_reset())
+        now = self._monotonic()
+        if now - self._last_report < self._report_interval_s:
+            return
+        self._last_report = now
+
+        payload = self._snapshot()
+        self._control.report_metrics(payload)
+
+        if self._live is not None:
+            self._live.update(render_metrics_table(payload))
+
+        if self._log_interval_s is not None and now - self._last_log >= self._log_interval_s:
+            self._last_log = now
+            self._log(payload)
+
+    def _snapshot(self) -> dict:
+        payload = self._timing.metrics_payload_and_reset()
+        if self._writer_stats is not None:
+            payload["writer_queue"] = self._writer_stats()
+        if self._replay is not None:
+            payload["replay"] = self._replay.snapshot()
+        return payload
+
+    def _log(self, payload: dict) -> None:
+        if self._replay is not None:
+            logger.info(
+                "replay %.1f%% %s / %s UTC %s realtime, eta %s",
+                100 * self._replay.fraction,
+                f"{self._replay.current:%H:%M:%S}",
+                f"{self._replay.end:%H:%M:%S}",
+                format_speed(self._replay.speed),
+                format_duration(self._replay.eta_s),
+            )
+
+        pipeline_summary = ", ".join(f"{p['name']}={p['avg_ms']:.2f}ms/tick" for p in payload["pipelines"])
+
+        queue_summary = ""
+        if "writer_queue" in payload:
+            wq = payload["writer_queue"]
+            queue_summary = (
+                f" queue={wq['queue_depth']}/{wq['queue_capacity']}"
+                f" (hwm {wq['queue_high_water']})"
+                f" flush_avg={wq['avg_flush_ms']:.2f}ms"
+            )
+
+        logger.info(
+            "timing idle=%.1f%% busy=%.1f%% writer=%.2fms%s %s",
+            payload["idle_pct"],
+            payload["busy_pct"],
+            payload["writer_ms"],
+            queue_summary,
+            pipeline_summary,
+        )
+
+
+def render_metrics_table(payload: dict) -> Group:
+    """ A metrics payload (see TimingStats.metrics_payload_and_reset) as a Rich table. """
+    summary = Panel(
+        f"[green]Idle[/green]: {payload['idle_pct']:6.2f}%    "
+        f"[yellow]Busy[/yellow]: {payload['busy_pct']:6.2f}%    "
+        f"[cyan]Writer[/cyan]: {payload['writer_ms']:.2f} ms",
+        title="Scheduler usage",
+    )
+
+    table = Table(title="Pipeline / Stage timing")
+    for column in ("Type", "Name"):
+        table.add_column(column)
+    for column in ("Total", "Avg", "Max", "Late Now", "Late Max"):
+        table.add_column(column, justify="right")
+
+    for pipeline in payload["pipelines"]:
+        table.add_row(
+            "[bold cyan]pipeline[/bold cyan]",
+            f"[bold]{pipeline['name']}[/bold]",
+            f"{pipeline['total_ms']:.2f} ms",
+            f"{pipeline['avg_ms']:.3f} ms/tick",
+            "",
+            f"{pipeline['late_now_ms']:.3f} ms",
+            f"{pipeline['late_max_ms']:.3f} ms",
+        )
+        for stage in pipeline["stages"]:
+            table.add_row(
+                "[dim]stage[/dim]",
+                f"[dim]  ↳ {stage['name']}[/dim]",
+                f"[dim]{stage['total_ms']:.2f} ms[/dim]",
+                f"[dim]{stage['avg_ms']:.3f} ms/call[/dim]",
+                f"[dim]{stage['max_ms']:.3f} ms[/dim]",
+                "",
+                "",
+            )
+
+    return Group(summary, table)
 
 
 class RichReplayOutputManager:
     """
     Interactive display of a replay: a live progress bar through the replay
     window, with the simulated clock, speed relative to realtime, ETA and the
-    writer queue. Like RichOutputManager, it needs a real TTY to redraw.
+    writer queue. Needs a real TTY to redraw.
 
     The timing table matters for realtime runs, which must keep up with
     incoming data; a replay only needs to finish, so its progress is shown
@@ -141,122 +255,6 @@ class RichReplayOutputManager:
             eta=format_duration(replay.eta_s),
             queue=queue,
         )
-
-
-class LoggingOutputManager:
-    """
-    Headless equivalent of RichOutputManager: pushes a metrics snapshot to the
-    server via the worker's control channel every ``report_interval_s``, and
-    emits it as a plain log line (which Docker captures correctly regardless
-    of TTY) every ``log_interval_s``. During a replay, the snapshot also
-    carries the replay's progress.
-
-    With ``log_interval_s=None`` it only reports, for when something else
-    (like RichReplayOutputManager) is already drawing in the terminal.
-    """
-
-    def __init__(
-            self,
-            timing,
-            control,
-            *,
-            report_interval_s: float = 5.0,
-            log_interval_s: float | None = 5.0,
-            writer_stats=None,
-            replay: ReplayProgress | None = None,
-            monotonic: Callable[[], float] = time.monotonic,
-    ):
-        self._timing = timing
-        self._control = control
-        self._report_interval_s = report_interval_s
-        self._log_interval_s = log_interval_s
-        # Optional zero-arg callable returning the frame writer's queue/flush
-        # statistics (see QueuedEventWriter.stats).
-        self._writer_stats = writer_stats
-        self._replay = replay
-        self._monotonic = monotonic
-        self._last_log = -math.inf
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
-
-    def on_tick(self, timestamp: datetime):
-        if self._replay is not None:
-            self._replay.update(timestamp)
-
-        if not self._timing.should_print(interval_s=self._report_interval_s):
-            return
-
-        payload = self._timing.metrics_payload_and_reset()
-
-        if self._writer_stats is not None:
-            payload["writer_queue"] = self._writer_stats()
-
-        if self._replay is not None:
-            payload["replay"] = self._replay.snapshot()
-
-        self._control.report_metrics(payload)
-
-        now = self._monotonic()
-        if self._log_interval_s is not None and now - self._last_log >= self._log_interval_s:
-            self._last_log = now
-            self._log(payload)
-
-    def _log(self, payload: dict) -> None:
-        if self._replay is not None:
-            logger.info(
-                "replay %.1f%% %s / %s UTC %s realtime, eta %s",
-                100 * self._replay.fraction,
-                f"{self._replay.current:%H:%M:%S}",
-                f"{self._replay.end:%H:%M:%S}",
-                format_speed(self._replay.speed),
-                format_duration(self._replay.eta_s),
-            )
-
-        pipeline_summary = ", ".join(
-            f"{p['name']}={p['avg_ms']:.2f}ms/tick" for p in payload["pipelines"]
-        )
-
-        queue_summary = ""
-        if "writer_queue" in payload:
-            wq = payload["writer_queue"]
-            queue_summary = (
-                f" queue={wq['queue_depth']}/{wq['queue_capacity']}"
-                f" (hwm {wq['queue_high_water']})"
-                f" flush_avg={wq['avg_flush_ms']:.2f}ms"
-            )
-
-        logger.info(
-            "timing idle=%.1f%% busy=%.1f%% writer=%.2fms%s %s",
-            payload["idle_pct"],
-            payload["busy_pct"],
-            payload["writer_ms"],
-            queue_summary,
-            pipeline_summary,
-        )
-
-
-class CombinedOutputManager:
-    """ Runs several output managers side by side, e.g. a terminal display alongside reporting to the server. """
-
-    def __init__(self, *managers: OutputManager):
-        self._managers = managers
-        self._stack = ExitStack()
-
-    def __enter__(self):
-        for manager in self._managers:
-            self._stack.enter_context(manager)
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return self._stack.__exit__(exc_type, exc, tb)
-
-    def on_tick(self, timestamp: datetime):
-        for manager in self._managers:
-            manager.on_tick(timestamp)
 
 
 class IngressProgressReporter:

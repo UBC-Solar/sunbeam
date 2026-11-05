@@ -11,6 +11,7 @@ import {
   stopWorker,
 } from "./api";
 import {ConnectionsPanel} from "./components/ConnectionsPanel";
+import {EventStatus} from "./components/EventStatus";
 import {LaunchDialog} from "./components/LaunchDialog";
 import {WorkerDetail} from "./components/WorkerDetail";
 import {WorkersTable} from "./components/WorkersTable";
@@ -85,6 +86,7 @@ function App() {
                 <tr>
                   <th>Event</th>
                   <th>Mode</th>
+                  <th>Status</th>
                   <th>Description</th>
                   <th />
                 </tr>
@@ -92,13 +94,16 @@ function App() {
               <tbody>
                 {events.length === 0 && (
                   <tr className="empty-row">
-                    <td colSpan={4}>No events found.</td>
+                    <td colSpan={5}>No events found.</td>
                   </tr>
                 )}
                 {events.map((event) => (
                   <tr key={event.id}>
                     <td>{event.name}</td>
                     <td className="text-secondary">{event.is_replay ? "Replay" : "Realtime"}</td>
+                    <td>
+                      <EventStatus event={event} />
+                    </td>
                     <td className="text-secondary">{event.description ?? "—"}</td>
                     <td>
                       <button

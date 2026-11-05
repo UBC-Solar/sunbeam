@@ -77,7 +77,7 @@ network I/O — with one deliberate exception:
 
 ### The ingress stages
 
-`Ingress` (`stage/v3_0/ingress.py`) is not a normal computation stage — it's
+`Ingress` (`stage/v3_0/ingress.py`; each edition registers its own) is not a normal computation stage — it's
 how *external* data (from InfluxDB, via `RealtimeIngressQuerier`) enters the
 pipeline as signals during a realtime run. It's special in three ways worth
 knowing if you ever touch it:
@@ -88,12 +88,17 @@ knowing if you ever touch it:
    frequency among the signals no other stage produces.
 2. Its `run()` does real I/O (an InfluxDB query per tick) — the one place
    in the stage layer where that's intentional.
-3. It enforces a **data grace period**: a signal with no data for more than
-   `data_grace_s` (default 1.0s) causes `run()` to raise, which the
-   executor treats as an ingress crash and fails the worker. Brief gaps
-   (e.g. a 10 Hz stage ticking before a 2 Hz signal's first sample lands)
-   are tolerated via `MissingDataTracker`; a signal that's *actually* gone
-   dark is not silently ignored.
+3. It enforces a **data grace period**: a signal with no data for longer
+   than the class's `data_grace_s` (1.0s in `v3_0`; `v4_0`'s subclass
+   raises it to 1000s) causes `run()` to raise, which the executor treats as an
+   ingress crash and fails the worker. Brief gaps (queries racing the data
+   landing in InfluxDB) are tolerated via `MissingDataTracker`; a signal
+   that's *actually* gone dark is not silently ignored. A poll InfluxDB
+   rejects outright (bad token, unknown bucket) raises at once.
+4. It may leave out a signal that had no data this poll
+   (`may_omit_outputs = True`). Every other stage must write all of its
+   declared outputs on every run, or the pipeline raises — otherwise
+   downstream stages would silently keep reading the previous value.
 
 `Offline_Ingress` (`stage/v3_0/offline_ingress.py`) is its replay
 counterpart (see [`USAGE.md`](USAGE.md#realtime-vs-replay-worker-runs)): a single
@@ -140,10 +145,9 @@ though you rarely call it directly:
 5. Each `Pipeline` executes its nodes in **topological order** every tick
    (computed once at construction, not per-tick). A stage whose inputs
    aren't in `State` yet (e.g. a fast pipeline's first tick, before a
-   slower cross-rate producer has run once) yields quietly — up to
-   `not_ready_grace_s` (default 1.0s); past that, the pipeline raises,
-   since a permanently-missing producer is a real bug, not a startup
-   race. There is no deterministic order in which different pipelines run (_note: perhaps there should be!_).
+   slower cross-rate producer has run once) skips that tick quietly.
+   Telemetry that stops arriving is caught where it goes missing, by the
+   ingress stage's grace period (above). There is no deterministic order in which different pipelines run (_note: perhaps there should be!_).
 
 The upshot: **you never manually wire a pipeline together**. You write
 stages with correct `inputs`/`outputs`/`frequency`, list the stages an
@@ -164,7 +168,7 @@ the slow stage's frequency or read a timestamp signal explicitly.
 
 ## Pipeline Editions and `stage_registry.toml`
 
-A **pipeline edition** (`v3_0`, `v3_1`, ...) is a named, versioned set of
+A **pipeline edition** (`v3_0`, `v4_0`, ...) is a named, versioned set of
 stage implementations — it exists because the vehicle's telemetry format,
 signal set, and computation logic might change between hardware generations, and
 old recorded events still need to replay against the stage code that
@@ -194,7 +198,7 @@ class = "OfflineIngress"
 and resolves `get_stage_by_name("Array")` to the `Array` class via
 `importlib.import_module`. An event's `pipeline_edition` field in
 `events.toml` (see below) selects which top-level table
-(`[v3_0]`/`[v3_1]`/...) is used.
+(`[v3_0]`/`[v4_0]`/...) is used.
 
 ### Directory Convention
 
@@ -202,6 +206,32 @@ Each edition's stage implementations live in `stage/<edition>/`, e.g.
 `stage/v3_0/array.py`, `stage/v3_0/motor_power.py`. There's no code-level
 requirement that the directory name match the registry key — it's a
 convention, not enforced — but there is no reason to break it.
+
+### Reusing a stage from another edition
+
+Most stages carry over unchanged from one edition to the next. Don't copy
+the file; either:
+
+- **Reuse it as is**, with `from` in place of `module`/`class`. The edition
+  then runs exactly that edition's class:
+  ```toml
+  [v4_0.Offline_Ingress]
+  from = "v3_0"
+  ```
+- **Subclass it** when only a little changes, and override just that. A
+  stage inherits `stage_name`, `inputs`, `outputs`, and `frequency` from
+  its parent. `stage/v4_0/ingress.py` is the example:
+  ```python
+  from stage.v3_0 import ingress
+
+  class Ingress(ingress.Ingress):
+      data_grace_s: ClassVar[float] = 1000.0
+  ```
+
+Either way the stage's code, and its imports, come from the other edition,
+so whatever it needs must also be installed in this edition's worker image
+(its extra). Once the original would have to change in a way that doesn't
+suit both editions, give the new edition its own copy.
 
 ## Adding A New Stage
 
@@ -226,7 +256,7 @@ convention, not enforced — but there is no reason to break it.
    pipeline edition's `[project.optional-dependencies]` extra in
    `pyproject.toml` (e.g. `v3_0 = [...]`), *not* to `executor` or `server`.
    This is the reason editions are separate `uv` extras at all — see
-   [`USAGE.md`](USAGE.md#per-edition-dependency-groups) for the full
+   [`USAGE.md`](USAGE.md#per-edition-extras) for the full
    rationale. If your stage needs nothing new, skip this step.
 5. **Write tests** under `tests/<edition>/test_your_stage.py`, following
    the existing pattern: a `conftest.py` fixture constructing the stage,
@@ -239,16 +269,16 @@ convention, not enforced — but there is no reason to break it.
 7. **If you're changing an existing stage's inputs/outputs**, remember
    that changes to `outputs` also change what ingress needs to supply if
    nothing else produces the old output's downstream consumers — the
-   generator handles this automatically, but double-check `describe_subgraphs`
-   output (or just run the worker locally with `--serverless` and watch the
-   startup log line: `Generated N compute pipeline(s) and M ingress
-   pipeline(s): [...]`) if a pipeline's shape looks unexpected.
+   generator handles this automatically, but run the worker locally with
+   `--serverless` and check the startup log line (`Executor got N compute
+   pipeline(s) and M ingress pipeline(s): [...]`) if a pipeline's shape
+   looks unexpected.
 
 ## Adding A Pipeline Edition
 
 Pipeline editions need a few things to become valid. If the new version is `v6_7`. `6` is the major version number, indicating the car version, and `7` is the minor, indicating a revision of the telemetry system. Patch numbers are not used. For example, Brightside is our 3rd edition vehicle and so it's first usage in 2024 maps to `v3_0`. In 2025 some new sensors had been added allowing for new stages, hence a new revision to `v3_1`.
 1. A directory in `stage/` holding all of its stages, named according to the new version, in this case `stage/v6_7`.
-2. An entry in the `stage/stage_registry.toml` registering all of the edition's stages, using the `v6_7` identifier.
+2. An entry in the `stage/stage_registry.toml` registering all of the edition's stages (including `Ingress` and `Offline_Ingress`), using the `v6_7` identifier. Stages that don't change can be reused from an earlier edition rather than copied (see [Reusing a stage from another edition](#reusing-a-stage-from-another-edition)).
 3. A new dependency group `v6_7` declared in the `pyproject.toml`'s `[project.optional-dependencies]` table listing the dependencies that the stages require. The new entry should also be added to the group of `conflicts` in `[tool.uv]` to conflict with the existing pipeline editions to ensure only one is activated at a time.
 
 ### A note on `CanonicalName`
@@ -260,25 +290,22 @@ yet, that's a `data-tools` change, not a Sunbeam one — this repo only
 consumes the enum and the localization tables that map a `CanonicalName` +
 date to a physical field name, source, unit, and frequency in InfluxDB.
 
-## Versioning stages: what "v3_0" vs "v3_1" means
+## Versioning stages: what "v3_0" vs "v4_0" means
 
 A pipeline edition is a **complete, independently-versioned snapshot** of
 stage behavior — not a feature flag or a diff. When the vehicle's telemetry
 changes enough that old stage logic would misinterpret new data (or new
 stage logic would misinterpret old data), you cut a new edition
-(`stage/v3_1/`, a new `[v3_1]` table in `stage_registry.toml`, a new
-`v3_1` extra in `pyproject.toml`) rather than branching inside existing
+(`stage/v4_0/` and a new `[v4_0]` table in `stage_registry.toml`)
+rather than branching inside existing
 stage code. Recorded events keep their original `pipeline_edition` in the
 database (`Event.pipeline_edition`) forever, so replaying `FSGP_2024_Day_1`
-always runs `v3_0`'s `Array`, even after `v3_1` exists and is the default
+always runs `v3_0`'s `Array`, even after `v4_0` exists and is the default
 for new events.
 
-`[tool.uv].conflicts` in `pyproject.toml` marks `v3_0` and `v3_1` as
-mutually exclusive `uv` extras — a single environment runs exactly one
-edition's stage code at a time (see `USAGE.md` for what this means for
-`uv sync`). The **worker Docker image is built per edition**
-(`dockerfiles/worker.Dockerfile` takes `PIPELINE_EDITION` as a build arg;
-`server/main.py`'s `build_workers()` builds one `sunbeam-worker:<edition>`
-tag per edition found in `stage_registry.toml`), so the server can launch
-the right container for whichever edition an event needs without any
-edition's dependencies leaking into another's image.
+Each edition has its own `uv` extra for its stages' dependencies (see
+[`USAGE.md`](USAGE.md#per-edition-extras)), so the **worker Docker image is
+built per edition**: `pipeline/Dockerfile` takes `PIPELINE_EDITION` as a
+build arg, and the server builds one `sunbeam-worker:<edition>` image per
+edition in `stage_registry.toml` at startup. No edition's dependencies leak
+into another's image.

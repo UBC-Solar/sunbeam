@@ -37,6 +37,9 @@ class MissingDataTracker:
 
 class Ingress(Stage):
     inputs: ClassVar[list[str]] = []
+    may_omit_outputs: ClassVar[bool] = True
+    # How long a signal may go without data before the worker fails; an edition's subclass can change it
+    data_grace_s: ClassVar[float] = 1.0
 
     def __init__(
         self,
@@ -48,12 +51,12 @@ class Ingress(Stage):
         token: Optional[str] = None,
         url: Optional[str] = None,
         ingress_client: Optional[RealtimeIngressQuerier] = None,
-        data_grace_s: float = 1.0,
+        data_grace_s: Optional[float] = None,
     ) -> None:
         super().__init__()
         self._output_signals = output_signals
         self._frequency = frequency
-        self._tracker = MissingDataTracker(grace_s=data_grace_s)
+        self._tracker = MissingDataTracker(grace_s=self.data_grace_s if data_grace_s is None else data_grace_s)
 
         self._localized_output_signals = []
         self._localized_signal_to_signal = {}

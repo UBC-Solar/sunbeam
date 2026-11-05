@@ -183,7 +183,7 @@ class TestContainerGone:
         assert worker.status == WorkerStatus.FAILED
         assert "exited without reporting completion" in worker.status_message
 
-    def test_nonzero_exit_is_lost_with_exit_code(
+    def test_nonzero_exit_is_failed_with_exit_code(
         self, watchdog, fake_docker, make_worker, get_worker
     ):
         container = add_container(fake_docker, status="exited", exit_code=137)
@@ -192,7 +192,7 @@ class TestContainerGone:
         watchdog._sweep()
 
         worker = get_worker(worker_id)
-        assert worker.status == WorkerStatus.LOST
+        assert worker.status == WorkerStatus.FAILED
         assert "exit code 137" in worker.status_message
 
 

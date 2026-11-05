@@ -9,6 +9,7 @@ import os
 import requests
 
 from config.context import Context
+from config.events import EventConfig
 from orchestration.client import OrchestratorClient
 from orchestration.control import (
     OrchestratedWorkerControl,
@@ -27,7 +28,7 @@ def _describe_influx_connection() -> str | None:
     return f"external: {telemetry_db.database_url} / {telemetry_db.bucket}"
 
 
-def build_control(serverless: bool, event_name: str, *, reprocess: bool = False) -> WorkerControl:
+def build_control(serverless: bool, event: EventConfig, *, reprocess: bool = False) -> WorkerControl:
     if serverless:
         return ServerlessWorkerControl()
 
@@ -36,14 +37,10 @@ def build_control(serverless: bool, event_name: str, *, reprocess: bool = False)
         return OrchestratedWorkerControl(OrchestratorClient())
 
     # Launched by hand: register with the server to obtain a run ID.
-    from config import EventManager
-
-    pipeline_edition = EventManager().get_event(event_name).pipeline_edition
-
     try:
         client = OrchestratorClient.register(
-            event_name=event_name,
-            pipeline_edition=pipeline_edition,
+            event_name=event.name,
+            pipeline_edition=event.pipeline_edition,
             # Shown on the dashboard for this worker
             influx_connection_name=_describe_influx_connection(),
             reprocess=reprocess,
@@ -55,6 +52,6 @@ def build_control(serverless: bool, event_name: str, *, reprocess: bool = False)
             f"Is the server running? To run without a server, pass --serverless."
         ) from exc
 
-    logger.info("Registered with server as worker %s", client._worker_run_id)
+    logger.info("Registered with server as worker %s", client.worker_run_id)
 
     return OrchestratedWorkerControl(client)

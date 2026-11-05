@@ -225,11 +225,3 @@ class TestStreamEndpoint:
 
         assert response.status_code == 422
 
-
-class TestViewerPage:
-    def test_viewer_serves_reference_client(self, api_client):
-        response = api_client.get("/debug/viewer")
-
-        assert response.status_code == 200
-        assert "EventSource" in response.text
-        assert "/data/stream" in response.text

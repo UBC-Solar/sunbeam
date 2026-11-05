@@ -48,9 +48,9 @@ class = "LatitudeLongitude"
 [v4_0]
 name = "Cascadia 2026"
 
+# Unchanged from v3_0, so reused rather than copied
 [v4_0.Offline_Ingress]
-module = "stage.v4_0.offline_ingress"
-class = "OfflineIngress"
+from = "v3_0"
 
 [v4_0.Ingress]
 module = "stage.v4_0.ingress"

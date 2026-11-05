@@ -32,12 +32,12 @@ def client(worker_id):
 class TestClientConstruction:
     def test_explicit_base_url_and_worker_id(self, client, worker_id):
         assert client._base_url == "http://server:9000"
-        assert client._worker_run_id == str(worker_id)
+        assert client.worker_run_id == str(worker_id)
 
     def test_worker_id_from_environment(self, monkeypatch):
         monkeypatch.setenv("SUNBEAM_WORKER_RUN_ID", "env-worker-id")
         client = OrchestratorClient(base_url="http://server:9000")
-        assert client._worker_run_id == "env-worker-id"
+        assert client.worker_run_id == "env-worker-id"
 
     def test_missing_worker_id_raises(self, monkeypatch):
         monkeypatch.delenv("SUNBEAM_WORKER_RUN_ID", raising=False)
@@ -128,7 +128,7 @@ class TestClientRequests:
         assert payload["pipeline_edition"] == "v3_0"
         assert "host" in payload
 
-        assert client._worker_run_id == issued_id
+        assert client.worker_run_id == issued_id
         assert client._base_url == "http://server:9000"
 
     def test_register_http_error_propagates(self, monkeypatch):
