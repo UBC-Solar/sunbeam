@@ -8,6 +8,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    JSON,
     PrimaryKeyConstraint,
     String,
     Text,
@@ -55,6 +56,8 @@ class Event(Base):
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     pipeline_edition: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Names of the edition's stages to run, as registered in stage_registry.toml
+    stages: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
 
     status: Mapped[EventStatus] = mapped_column(Enum(EventStatus), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

@@ -562,6 +562,17 @@ class TestComplete:
         assert updated.status == WorkerStatus.FAILED
         assert updated.failure_reason == "crashed"
 
+    def test_stopping_as_asked_marks_cancelled(self, service, db, seeded_event):
+        worker = make_worker(db, seeded_event)
+        worker.stop_requested = True
+        db.commit()
+
+        updated = service.complete(db, worker_id=worker.id, success=False, message="Worker stopped by server.")
+
+        assert updated.status == WorkerStatus.CANCELLED
+        assert updated.status_message == "Worker stopped by server."
+        assert updated.failure_reason is None
+
     def test_complete_clears_metrics(self, service, db, seeded_event):
         worker = make_worker(db, seeded_event)
         service.record_metrics(db, worker_id=worker.id, payload={"idle_pct": 5.0})
@@ -625,7 +636,7 @@ class TestOneActiveRunPerEvent:
 
         make_worker(db, seeded_event, status=WorkerStatus.RUNNING)
 
-        with pytest.raises(Conflict, match="already has an active worker"):
+        with pytest.raises(Conflict, match="has an active worker"):
             service.launch_worker(db, event_id=seeded_event.event_id)
 
         assert fake_docker.containers.run_calls == []

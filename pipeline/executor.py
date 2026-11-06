@@ -54,7 +54,7 @@ def build_event_pipelines(
 ) -> tuple[list[Pipeline], list[Pipeline]]:
     """
     Build the compute and ingress pipelines for an event from its
-    configuration (events.toml + stage registry). With a replay window the
+    configuration (its database row + stage registry). With a replay window the
     ingress fetches that whole window up front; otherwise it polls live.
     """
     stage_library = stage_library or StageLibrary(event.pipeline_edition)

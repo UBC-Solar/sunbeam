@@ -51,10 +51,13 @@ export type WorkerRun = {
 export type Event = {
   id: number;
   name: string;
+  vehicle_id: number;
   description: string | null;
   starts_at: string;
   ends_at: string | null;
   pipeline_edition: string;
+  // The edition's stages this event runs
+  stages: string[];
   // A past event: its worker replays it, always wiping earlier samples first
   is_replay: boolean;
   // "ongoing" from a worker opening the event until its writes finish, then "processed"
@@ -63,6 +66,30 @@ export type Event = {
   running: boolean;
   // Samples stored for the event; the server refreshes it at most every 5 s
   sample_count: number;
+};
+
+// What creating or editing an event sends; ends_at null means an ongoing event, run live
+export type EventFields = {
+  name: string;
+  vehicle_id: number;
+  description: string | null;
+  starts_at: string;
+  ends_at: string | null;
+  pipeline_edition: string;
+  stages: string[];
+};
+
+export type Vehicle = {
+  id: number;
+  name: string;
+  description: string | null;
+};
+
+export type PipelineEdition = {
+  id: string;
+  name: string;
+  // The stages an event of this edition can run
+  stages: string[];
 };
 
 export type ConnectionFields = {
@@ -170,6 +197,27 @@ function jsonRequest(method: string, body?: unknown): RequestInit {
 
 export async function getEvents(): Promise<Event[]> {
   return asJson(await fetch(`${API_BASE_URL}/events`));
+}
+
+export async function createEvent(fields: EventFields): Promise<Event> {
+  return asJson(await fetch(`${API_BASE_URL}/events`, jsonRequest("POST", fields)));
+}
+
+export async function updateEvent(id: number, fields: Partial<EventFields>): Promise<Event> {
+  return asJson(await fetch(`${API_BASE_URL}/events/${id}`, jsonRequest("PATCH", fields)));
+}
+
+// Also deletes the event's samples, signals and worker run history
+export async function deleteEvent(id: number): Promise<void> {
+  return asJson(await fetch(`${API_BASE_URL}/events/${id}`, {method: "DELETE"}));
+}
+
+export async function getVehicles(): Promise<Vehicle[]> {
+  return asJson(await fetch(`${API_BASE_URL}/vehicles`));
+}
+
+export async function getPipelineEditions(): Promise<PipelineEdition[]> {
+  return asJson(await fetch(`${API_BASE_URL}/pipeline-editions`));
 }
 
 // Polled every few seconds, so only the most recent runs rather than every run ever

@@ -40,6 +40,8 @@ export function ConfirmButton({
 
   return (
     <button
+      // Not a submit button, even inside a form: the first click only arms it
+      type="button"
       className={`${className ?? ""} ${armed ? "danger" : ""}`.trim()}
       disabled={disabled}
       onClick={handleClick}

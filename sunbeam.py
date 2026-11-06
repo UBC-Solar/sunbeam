@@ -2,11 +2,10 @@ import argparse
 import logging
 import os
 
-from sqlalchemy import create_engine
+from sqlalchemy import Engine, create_engine
 
-from config import EventManager
 from config.context import INFLUX_ENV, Context
-from config.events import EventConfig
+from config.events import EventConfig, load_event
 from db.telemetrydb.connection_check import event_window
 from orchestration.bootstrap import build_control
 from orchestration.control import WorkerControl
@@ -65,24 +64,20 @@ def apply_connection_flags(args: argparse.Namespace) -> None:
             os.environ[env] = value
 
 
-def run(event: EventConfig, control: WorkerControl, *, reprocess: bool) -> None:
-    engine = create_engine(Context().sunbeam_db.build_url(), echo=False)
-    try:
-        results = run_preflight_checks(
-            engine,
-            check_server=control.is_orchestrated,
-            window=event_window(event.starts_at, event.ends_at),
-        )
-        failures = [r for r in results if not r.ok]
-        if failures:
-            message = "Preflight failed: " + "; ".join(f"{r.name}: {r.detail}" for r in failures)
-            logger.error(message)
-            control.complete(success=False, message=message)
-            raise SystemExit(1)
+def run(event: EventConfig, control: WorkerControl, engine: Engine, *, reprocess: bool) -> None:
+    results = run_preflight_checks(
+        engine,
+        check_server=control.is_orchestrated,
+        window=event_window(event.starts_at, event.ends_at),
+    )
+    failures = [r for r in results if not r.ok]
+    if failures:
+        message = "Preflight failed: " + "; ".join(f"{r.name}: {r.detail}" for r in failures)
+        logger.error(message)
+        control.complete(success=False, message=message)
+        raise SystemExit(1)
 
-        Executor.from_event(event, engine, reprocess=reprocess, control=control).run()
-    finally:
-        engine.dispose()
+    Executor.from_event(event, engine, reprocess=reprocess, control=control).run()
 
 
 def main() -> None:
@@ -107,9 +102,13 @@ def main() -> None:
         },
     )
 
-    event = EventManager().get_event(args.event_name)
-    control = build_control(serverless, event, reprocess=args.reprocess)
-    run(event, control, reprocess=args.reprocess)
+    engine = create_engine(Context().sunbeam_db.build_url(), echo=False)
+    try:
+        event = load_event(engine, args.event_name)
+        control = build_control(serverless, event, reprocess=args.reprocess)
+        run(event, control, engine, reprocess=args.reprocess)
+    finally:
+        engine.dispose()
 
 
 if __name__ == "__main__":

@@ -15,6 +15,28 @@ class LaunchWorkerRequest(BaseModel):
     reprocess: bool = False
 
 
+class EventCreate(BaseModel):
+    name: str
+    vehicle_id: int
+    description: str | None = None
+    starts_at: datetime
+    # None for an ongoing event, which a worker runs live
+    ends_at: datetime | None = None
+    pipeline_edition: str
+    stages: list[str]
+
+
+class EventUpdate(BaseModel):
+    """ Only the fields sent change; send ends_at as null to make the event ongoing. """
+    name: str | None = None
+    vehicle_id: int | None = None
+    description: str | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    pipeline_edition: str | None = None
+    stages: list[str] | None = None
+
+
 class ConnectionFields(BaseModel):
     url: str
     organization: str

@@ -157,7 +157,10 @@ class TestPipelineEditionRoutes:
         response = client.get("/pipeline-editions")
 
         assert response.status_code == 200
-        assert "v3_0" in response.json()
+        v3_0 = next(edition for edition in response.json() if edition["id"] == "v3_0")
+        assert v3_0["name"] == "Brightside 2024"
+        assert "MotorPower" in v3_0["stages"]
+        assert "Ingress" not in v3_0["stages"]
 
 
 class TestLaunchRoute:
@@ -226,7 +229,7 @@ class TestLaunchRoute:
         response = client.post("/workers/launch", json={"event_id": seeded_event.event_id})
 
         assert response.status_code == 409
-        assert "already has an active worker" in response.json()["detail"]
+        assert "has an active worker" in response.json()["detail"]
 
     def test_launch_unknown_event_is_404(self, client):
         response = client.post(

@@ -11,7 +11,7 @@ API and a read/stream API for the derived data.
 ## Architecture, Briefly
 
 A **worker** process (`sunbeam.py`) runs one event's pipeline: it reads
-`config/events.toml` to find which stages an event needs, builds a
+its event from Postgres to find which stages it needs, builds a
 dependency graph from their declared inputs/outputs
 (`pipeline/pipeline_generator.py`), splits it into same-rate subgraphs,
 and schedules each subgraph based on its frequency. Stages that consume signals
@@ -78,7 +78,7 @@ tests/          v3_0/ (pure stage unit tests), infrastructure/ (everything else,
 
 ### Configuration Files
 ```
-config/*.toml              events.toml, vehicles.toml (connections come from the environment and the dashboard; see docs/USAGE.md)
+config/                   vehicles.toml, plus loading a worker's event and connection settings (events and connections are created in the dashboard; see docs/USAGE.md)
 stage/stage_registry.toml  Stage name -> class registry, per pipeline edition
 ```
 

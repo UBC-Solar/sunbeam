@@ -261,6 +261,7 @@ def seed_basic_event(engine) -> SeededEvent:
             starts_at=datetime(2026, 7, 1, 12, 0, 0),
             ends_at=None,
             pipeline_edition="v3_0",
+            stages=["MotorPower"],
             status=EventStatus.UNPROCESSED,
             description="test event",
         )

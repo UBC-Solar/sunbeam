@@ -49,6 +49,10 @@ these endpoints read from, see `db/sunbeamdb/models.py`.
 
 ## Events
 
+Events exist only in the database: they're created, edited and deleted here
+(the dashboard's **Add event…** and the dialog behind each event's row), and a
+worker reads its event from the database when it starts.
+
 ### `GET /events`
 
 List all events, newest-starting first.
@@ -58,7 +62,7 @@ List all events, newest-starting first.
   {
     "id": 2, "name": "realtime", "vehicle_id": 1,
     "starts_at": "2026-05-30T01:00:00Z", "ends_at": null,
-    "pipeline_edition": "v3_0", "status": "ongoing",
+    "pipeline_edition": "v3_0", "stages": ["PackPower"], "status": "ongoing",
     "description": "Ongoing", "is_replay": false,
     "running": true, "sample_count": 184320
   }
@@ -83,6 +87,40 @@ and any other event only when its `status` changes.
 ### `GET /events/{event_id}`
 
 Same shape as one element above. `404` if `event_id` doesn't exist.
+
+### `POST /events`
+
+```json
+{
+  "name": "FSGP_2024_Day_2", "vehicle_id": 1, "description": "Second day",
+  "starts_at": "2024-07-17T15:00:00Z", "ends_at": "2024-07-18T04:00:00Z",
+  "pipeline_edition": "v3_0", "stages": ["MotorPower", "Efficiency"]
+}
+```
+
+`ends_at` may be omitted or `null` for an ongoing event. Returns `201` with
+the event (as `GET`, `status: "unprocessed"`), and creates its signals. `409`
+if the name is taken; `400` if the vehicle or edition doesn't exist, a stage
+isn't one of the edition's (see `GET /pipeline-editions`), there are no
+stages, or it ends before it starts.
+
+### `PATCH /events/{event_id}`
+
+Any of `POST`'s fields; only those sent change (send `"ends_at": null` to make
+the event ongoing). Checked like `POST`, and `409` while the event has an
+active worker. Changes apply to the next run. A replay rewrites everything,
+but a realtime run appends, so launch it with `reprocess` after changing its
+stages.
+
+### `DELETE /events/{event_id}`
+
+`204`. Deletes the event with all of its samples, signals and worker run
+history. `409` while it has an active worker.
+
+### `GET /vehicles`
+
+`[{"id": 1, "name": "Brightside", "description": "..."}]` — the vehicles an
+event can belong to, synced from `config/vehicles.toml` at startup.
 
 ---
 
@@ -244,8 +282,10 @@ clients.
 {"success": true, "message": "Pipeline completed."}
 ```
 
-Sets `status` to `completed` or `failed`, `stopped_at` to now,
-`failure_reason` to `message` iff `success: false`, and clears any cached
+Sets `status` to `completed`, or for `success: false` to `cancelled` if a
+stop was requested (how every realtime run ends) and `failed` otherwise, with
+`failure_reason` set to `message` only for `failed`. Also sets `stopped_at` to
+now and clears any cached
 metrics for the worker. A worker already resolved as terminal (e.g. the
 watchdog marked it `lost`) keeps that status; the late report is logged and
 ignored. `404` for unknown `worker_id`. The worker only calls this once its
@@ -326,10 +366,12 @@ stream below). Same `404` conditions as above.
 ### `GET /pipeline-editions`
 
 ```json
-["v3_0"]
+[{"id": "v3_0", "name": "Brightside 2024", "stages": ["Efficiency", "MotorSpeed", "..."]}]
 ```
 
-Every top-level table key in `stage/stage_registry.toml` — see
+Every edition in `stage/stage_registry.toml`, with the stages an event of
+that edition can choose (every registered stage except the ingress ones,
+which the pipeline adds itself) — see
 [`STAGES.md`](STAGES.md#pipeline-editions-and-stage_registrytoml).
 
 ## Connections

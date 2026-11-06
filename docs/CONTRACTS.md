@@ -146,10 +146,12 @@ from the environment.
   environment when accessed, so there is nothing to load or reset.
   `TelemetryDB.as_env()` is the inverse: the variables the server sets on a
   worker it launches.
-- `EventManager`, `VehicleManager`, `SignalManager` (`config/events.py`,
-  `vehicles.py`, `signals.py`) — read `events.toml` / `vehicles.toml` and
-  `sync_*` them into the database (create or update by name, so edits to
-  `events.toml` reach the database; never delete). Also the read side: `EventManager.get_event(name)` returns an `EventConfig` (the
+- `VehicleManager` and `SignalManager` (`config/vehicles.py`, `signals.py`)
+  sync `vehicles.toml` and each event's localized signals into the database
+  at server startup (create by name; never delete).
+- `load_event(engine, name)` (`config/events.py`) is how a worker reads its
+  event, which is defined only in the database (created and edited through
+  `/events`, i.e. the dashboard). It returns an `EventConfig` (the
   event's `stages`, `pipeline_edition`, `starts_at`, and `ends_at`, which is
   `None` for an ongoing event), whose `is_past()` is what decides whether a
   worker replays the event or runs it live.
@@ -191,7 +193,7 @@ the schema evolves):
 | Table | Holds | Relates to |
 |---|---|---|
 | `vehicle` | One row per physical car (currently just `Brightside`), synced from `config/vehicles.toml`. | Parent of `event`. |
-| `event` | One row per race/session/debug run (`FSGP_2024_Day_1`, `realtime`, ...), synced from `config/events.toml`. Carries `status` (`unprocessed` → `ongoing` while a worker's `EventWriter` is open → `processed` once its writes finish, success or failure) and `pipeline_edition` (which stage code applies — see [`STAGES.md`](STAGES.md#versioning-stages-what-v3_0-vs-v4_0-means)). Whether its last run succeeded is that `worker_run`'s status; at most one non-terminal run exists per event at a time. | Belongs to a `vehicle`; parent of `signal`, `worker_run`, and (via `event_id`) every `sample` row. |
+| `event` | One row per race/session/debug run (`FSGP_2024_Day_1`, `realtime`, ...), created and edited in the dashboard (`POST`/`PATCH`/`DELETE /events`). Carries `stages` (which of its edition's stages run), `status` (`unprocessed` → `ongoing` while a worker's `EventWriter` is open → `processed` once its writes finish, success or failure) and `pipeline_edition` (which stage code applies — see [`STAGES.md`](STAGES.md#versioning-stages-what-v3_0-vs-v4_0-means)). Whether its last run succeeded is that `worker_run`'s status; at most one non-terminal run exists per event at a time. | Belongs to a `vehicle`; parent of `signal`, `worker_run`, and (via `event_id`) every `sample` row. |
 | `signal` | One row per `(event, CanonicalName)` pair actually relevant to that event, with `unit`/`frequency`/`source` metadata — populated by `SignalManager.sync_signals` from the localization tables, not hand-edited. | Belongs to an `event`; referenced by `signal_id` from `sample`. |
 | `worker_run` | One row per worker process, ever — the orchestration/supervision record described in the paragraph below and in full in [`API.md`](API.md#workers). `kind` distinguishes a Docker-launched worker from a self-registered one (see [`USAGE.md`](USAGE.md#the-three-ways-a-cli-worker-can-run)). | Belongs to an `event`. |
 | `sample` | **The actual pipeline output** — one row per `(event, signal, timestamp)` for every value a stage or ingress produced, written by every running worker via `EventWriter`/`QueuedEventWriter`. This is what the telemetry query and stream API (`server/routes/data.py`) reads back out. | TimescaleDB hypertable, chunked on `ts`, indexed on `(event_id, signal_id, ts DESC)` and `(event_id, ts DESC)` — exactly the access patterns `server/services/data_service.py` queries. |
@@ -311,7 +313,7 @@ a running worker uses to pass values between pipelines, and `Frame`/
 
 **Owns:** the `Stage` abstract base class (the computation contract every
 pipeline step implements) and `StageLibrary`, which resolves stage names
-(from `events.toml` and `stage_registry.toml`) to concrete classes.
+(from an event's `stages` and `stage_registry.toml`) to concrete classes.
 
 **Contract:**
 - Every `Stage` subclass declares `stage_name`, `inputs`, `outputs`,
@@ -359,8 +361,8 @@ at the end of it.
   `BatchFrameWriter` (what `db.sunbeamdb` implements). Depend on these
   protocols, not on `Pipeline` or `EventWriter` concretely, wherever you
   want a fake in tests.
-- `Executor` is constructed two ways: `Executor.from_event(event_name,
-  engine, ...)` does the full production wiring (reads `events.toml`,
+- `Executor` is constructed two ways: `Executor.from_event(event,
+  engine, ...)` does the full production wiring (takes the worker's `EventConfig`,
   chooses realtime or replay, builds the stage graph, opens a
   `QueuedEventWriter`, wiping the event's old samples for a replay); the plain
   `Executor(pipelines, ingress_pipelines, writer, control, ...)`
@@ -369,7 +371,7 @@ at the end of it.
   argument. If you need to test executor *behavior* (stop/crash/completion
   handling), use the second form — don't reach for `from_event`.
 - `pipeline` imports `config` (`pipeline_generator.py` and `preflight.py`
-  read `Context` for the InfluxDB connection details, and `EventManager` via
+  read `Context` for the InfluxDB connection details, and `EventConfig` via
   `from_event`), `state`, `stage`, `db` (`db.sunbeamdb` for
   the concrete writer types used by `from_event`, `db.telemetrydb` for the
   ingress protocols and the shared connection check), and `orchestration` (for

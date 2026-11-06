@@ -30,6 +30,23 @@ def _run_in_thread(target: Callable[[], None]) -> None:
     threading.Thread(target=target, name="sunbeam-worker-build", daemon=True).start()
 
 
+def check_no_active_run(db: Session, event: Event) -> None:
+    """
+    Two runs of one event would both write (and a replay wipe) the same samples, and an event can't change under a
+    running worker.
+    """
+    active = db.scalar(
+        select(WorkerRun).where(
+            WorkerRun.event_id == event.id,
+            WorkerRun.status.not_in(TERMINAL_WORKER_STATUSES),
+        )
+    )
+    if active is not None:
+        raise Conflict(
+            f"Event {event.name!r} has an active worker ({active.id}, {active.status.value}); stop it first."
+        )
+
+
 class WorkerService:
     def __init__(
         self,
@@ -74,21 +91,6 @@ class WorkerService:
             raise LookupError("Worker not found")
         return worker
 
-    @staticmethod
-    def _check_no_active_run(db: Session, event: Event) -> None:
-        """ Two runs of one event would both write (and a replay wipe) the same samples. """
-        active = db.scalar(
-            select(WorkerRun).where(
-                WorkerRun.event_id == event.id,
-                WorkerRun.status.not_in(TERMINAL_WORKER_STATUSES),
-            )
-        )
-        if active is not None:
-            raise Conflict(
-                f"Event {event.name!r} already has an active worker ({active.id}, {active.status.value}); "
-                f"stop it first."
-            )
-
     def _worker_environment(self, *, worker: WorkerRun, event_name: str, telemetry_db: TelemetryDB) -> dict:
         """ Everything a launched worker needs to know; it reads nothing else to find its connections. """
         context = Context()
@@ -131,7 +133,7 @@ class WorkerService:
 
         # Editions are added rarely enough that any ref being launched is assumed to have the event's edition too
         self._library.validate_pipeline_edition(pipeline_edition)
-        self._check_no_active_run(db, event)
+        check_no_active_run(db, event)
 
         connection = self._connections.resolve(db, influx_connection_id)
 
@@ -292,7 +294,7 @@ class WorkerService:
             raise LookupError(f"No event exists with name {event_name!r}")
 
         self._library.validate_pipeline_edition(pipeline_edition)
-        self._check_no_active_run(db, event)
+        check_no_active_run(db, event)
 
         worker = WorkerRun(
             event_id=event.id,
@@ -405,9 +407,15 @@ class WorkerService:
             db.commit()
             return worker
 
-        worker.status = WorkerStatus.COMPLETED if success else WorkerStatus.FAILED
+        if success:
+            worker.status = WorkerStatus.COMPLETED
+        elif worker.stop_requested:
+            # Stopping because it was told to isn't a failure (it's how every realtime run ends)
+            worker.status = WorkerStatus.CANCELLED
+        else:
+            worker.status = WorkerStatus.FAILED
         worker.status_message = message
-        worker.failure_reason = None if success else message
+        worker.failure_reason = None if success or worker.status == WorkerStatus.CANCELLED else message
         worker.stopped_at = utcnow()
 
         db.commit()

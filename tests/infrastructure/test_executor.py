@@ -283,7 +283,7 @@ class TestReplayWindow:
         from config.events import EventConfig
 
         return EventConfig(
-            name="e", vehicle="v", description=None, stages=[], pipeline_edition="v3_0",
+            name="e", description=None, stages=[], pipeline_edition="v3_0",
             starts_at=REPLAY_START, ends_at=ends_at,
         )
 
@@ -320,7 +320,7 @@ class TestFromEventWipe:
                     self.frames.extend(frames)
 
             event = EventConfig(
-                name="e", vehicle="v", description=None, stages=[], pipeline_edition="v3_0",
+                name="e", description=None, stages=[], pipeline_edition="v3_0",
                 starts_at=REPLAY_START, ends_at=ends_at,
             )
             monkeypatch.setattr(executor_module, "EventWriter", FakeEventWriter)

@@ -11,7 +11,7 @@ import {
   stopWorker,
 } from "./api";
 import {ConnectionsPanel} from "./components/ConnectionsPanel";
-import {EventStatus} from "./components/EventStatus";
+import {EventsPanel} from "./components/EventsPanel";
 import {LaunchDialog} from "./components/LaunchDialog";
 import {WorkerDetail} from "./components/WorkerDetail";
 import {WorkersTable} from "./components/WorkersTable";
@@ -76,50 +76,12 @@ function App() {
 
       {loaded && (
         <>
-          <div className="card">
-            <div className="card-header">
-              <h2>Events</h2>
-            </div>
-
-            <table>
-              <thead>
-                <tr>
-                  <th>Event</th>
-                  <th>Mode</th>
-                  <th>Status</th>
-                  <th>Description</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {events.length === 0 && (
-                  <tr className="empty-row">
-                    <td colSpan={5}>No events found.</td>
-                  </tr>
-                )}
-                {events.map((event) => (
-                  <tr key={event.id}>
-                    <td>{event.name}</td>
-                    <td className="text-secondary">{event.is_replay ? "Replay" : "Realtime"}</td>
-                    <td>
-                      <EventStatus event={event} />
-                    </td>
-                    <td className="text-secondary">{event.description ?? "—"}</td>
-                    <td>
-                      <button
-                        className="primary"
-                        onClick={() => setLaunchingEvent(event)}
-                        disabled={connections.length === 0}
-                        title={connections.length === 0 ? "Add an InfluxDB connection first" : undefined}
-                      >
-                        Launch worker…
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <EventsPanel
+            events={events}
+            canLaunch={connections.length > 0}
+            onLaunch={setLaunchingEvent}
+            onChanged={refresh}
+          />
 
           <WorkersTable
             workers={workers}

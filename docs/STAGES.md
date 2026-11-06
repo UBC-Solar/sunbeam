@@ -151,7 +151,7 @@ though you rarely call it directly:
 
 The upshot: **you never manually wire a pipeline together**. You write
 stages with correct `inputs`/`outputs`/`frequency`, list the stages an
-event should run in `events.toml`, and the generator does the rest — figures
+event should run when you create it in the dashboard, and the generator does the rest — figures
 out what needs to come from ingress, groups by rate, and orders execution.
 
 ### Cross-Rate Dependencies
@@ -196,8 +196,8 @@ class = "OfflineIngress"
 
 `StageLibrary(pipeline_edition)` (`stage/stage_library.py`) reads this file
 and resolves `get_stage_by_name("Array")` to the `Array` class via
-`importlib.import_module`. An event's `pipeline_edition` field in
-`events.toml` (see below) selects which top-level table
+`importlib.import_module`. An event's `pipeline_edition` (chosen when
+it's created) selects which top-level table
 (`[v3_0]`/`[v4_0]`/...) is used.
 
 ### Directory Convention
@@ -249,8 +249,8 @@ suit both editions, give the new edition its own copy.
    ```
    Skip this and `StageLibrary.get_stage_by_name` raises `ValueError:
    Stage 'YourStage' not found.` the moment an event tries to use it.
-3. **Add it to the event(s) that should run it**, in `config/events.toml`'s
-   `stages = [...]` list. A stage not listed for an event simply never
+3. **Add it to the event(s) that should run it**: tick it in the event's
+   dialog on the dashboard (click the event's row). A stage not listed for an event simply never
    runs for that event — no error, it's just absent from the graph.
 4. **If it depends on a new third-party package**, add that package to the
    pipeline edition's `[project.optional-dependencies]` extra in

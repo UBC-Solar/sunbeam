@@ -1,10 +1,12 @@
 import tomllib
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from config import EVENTS_PATH, VEHICLES_PATH, EventManager, SignalManager, VehicleManager
+from config import VEHICLES_PATH, SignalManager, VehicleManager
+from config.events import load_event
 from db.sunbeamdb.models import Event, EventStatus, Signal, Vehicle
 
 
@@ -12,24 +14,6 @@ from db.sunbeamdb.models import Event, EventStatus, Signal, Vehicle
 def raw_vehicles():
     with open(VEHICLES_PATH, "rb") as f:
         return tomllib.load(f)["vehicle"]
-
-
-@pytest.fixture
-def raw_events():
-    with open(EVENTS_PATH, "rb") as f:
-        return tomllib.load(f)["event"]
-
-
-def _to_toml(events: list[dict]) -> str:
-    def value(v):
-        if isinstance(v, list):
-            return "[" + ", ".join(value(item) for item in v) + "]"
-        return f'"{v}"'
-
-    return "\n".join(
-        "[[event]]\n" + "\n".join(f"{key} = {value(v)}" for key, v in event.items()) + "\n"
-        for event in events
-    )
 
 
 def count(engine, model) -> int:
@@ -53,67 +37,31 @@ class TestVehicleManager:
         assert count(engine, Vehicle) == len(raw_vehicles)
 
 
-class TestEventManager:
-    def test_sync_requires_vehicles(self, engine):
-        with pytest.raises(RuntimeError, match="not found"):
-            EventManager().sync_events(engine)
+class TestLoadEvent:
+    def test_loads_the_event_from_the_database(self, engine, seeded_event):
+        event = load_event(engine, seeded_event.event_name)
 
-    def test_sync_creates_all_configured_events(self, engine, raw_events):
-        VehicleManager().sync_vehicles(engine)
-        EventManager().sync_events(engine)
+        assert event.name == seeded_event.event_name
+        assert event.pipeline_edition == "v3_0"
+        assert event.stages == ["MotorPower"]
+        assert event.starts_at.tzinfo is not None
+        assert event.ends_at is None and not event.is_past()
 
-        with Session(engine) as session:
-            events = session.scalars(select(Event)).all()
-
-        assert {event.name for event in events} == {
-            event["name"] for event in raw_events
-        }
-        assert all(event.status == EventStatus.UNPROCESSED for event in events)
-
-    def test_sync_is_idempotent(self, engine, raw_events):
-        VehicleManager().sync_vehicles(engine)
-        EventManager().sync_events(engine)
-        EventManager().sync_events(engine)
-
-        assert count(engine, Event) == len(raw_events)
-
-    def test_sync_updates_events_edited_in_the_config(self, engine, raw_events, tmp_path):
-        VehicleManager().sync_vehicles(engine)
-        EventManager().sync_events(engine)
-
-        edited = dict(raw_events[0], ends_at="2030-01-01T00:00:00Z", description="edited")
-        events_path = tmp_path / "events.toml"
-        events_path.write_text(_to_toml([edited]))
-        EventManager(events_path).sync_events(engine)
-
-        with Session(engine) as session:
-            event = session.scalar(select(Event).where(Event.name == edited["name"]))
-
-        assert event.description == "edited"
-        assert event.ends_at.year == 2030
-
-    def test_lookup_helpers_agree_with_toml(self, raw_events):
-        manager = EventManager()
-        first = raw_events[0]
-
-        event = manager.get_event(first["name"])
-
-        assert event.stages == first["stages"]
-        assert event.pipeline_edition == first["pipeline_edition"]
-        assert event.starts_at.date().isoformat() == str(first["starts_at"])[:10]
-
-    def test_unknown_event_raises(self):
-        manager = EventManager()
-
-        with pytest.raises(ValueError, match="not found"):
-            manager.get_event("no-such-event")
+    def test_unknown_event_raises(self, engine):
+        with pytest.raises(LookupError, match="not found"):
+            load_event(engine, "no-such-event")
 
 
 class TestSignalManager:
     @pytest.fixture
     def synced_engine(self, engine):
         VehicleManager().sync_vehicles(engine)
-        EventManager().sync_events(engine)
+        with Session(engine) as session:
+            session.add(Event(
+                name="FSGP_2024_Day_1", vehicle_id=session.scalar(select(Vehicle.id)), pipeline_edition="v3_0",
+                stages=["MotorPower"], status=EventStatus.UNPROCESSED, starts_at=datetime(2024, 7, 16, 15, tzinfo=UTC),
+            ))
+            session.commit()
         return engine
 
     def test_sync_creates_signals_for_events(self, synced_engine):

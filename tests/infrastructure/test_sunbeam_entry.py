@@ -12,7 +12,7 @@ from orchestration.control import OrchestratedWorkerControl, ServerlessWorkerCon
 
 
 EVENT = EventConfig(
-    name="realtime", vehicle="Brightside", description=None, stages=[], pipeline_edition="v3_0",
+    name="realtime", description=None, stages=[], pipeline_edition="v3_0",
     starts_at=datetime(2026, 1, 1, tzinfo=timezone.utc), ends_at=None,
 )
 

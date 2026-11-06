@@ -5,6 +5,10 @@ from stage import STAGE_REGISTRY_PATH
 from stage.stage import Stage
 
 
+# Every edition registers these, but the pipeline generator adds them itself; an event only chooses the rest
+INGRESS_STAGES = ("Ingress", "Offline_Ingress")
+
+
 def _load_registry() -> dict:
     with open(STAGE_REGISTRY_PATH, "rb") as f:
         return tomllib.load(f)
@@ -26,6 +30,16 @@ class StageLibrary:
     @property
     def pipeline_editions(self) -> list[str]:
         return list(self._raw_data)
+
+    @property
+    def display_name(self) -> str:
+        """ The edition's `name`, e.g. "Brightside 2024". """
+        return self._edition.get("name", "")
+
+    @property
+    def stage_names(self) -> list[str]:
+        """ The stages an event of this edition can run. """
+        return [name for name, meta in self._edition.items() if isinstance(meta, dict) and name not in INGRESS_STAGES]
 
     def validate_pipeline_edition(self, pipeline_edition: str) -> None:
         if pipeline_edition not in self._raw_data:

@@ -5,11 +5,16 @@ from db.sunbeamdb.models import Event
 from db.sunbeamdb.seed_data import collect_signal_metadata_for_event, get_or_create_signal
 
 
+def add_signals(session: Session, event: Event) -> None:
+    """ Create every signal the event's date has a localization for (existing ones are kept). Doesn't commit. """
+    for signal_data in collect_signal_metadata_for_event(event):
+        get_or_create_signal(session, **signal_data)
+
+
 class SignalManager:
     @staticmethod
     def sync_signals(engine: Engine) -> None:
         with Session(engine) as session:
             for event in session.scalars(select(Event)).all():
-                for signal_data in collect_signal_metadata_for_event(event):
-                    get_or_create_signal(session, **signal_data)
+                add_signals(session, event)
             session.commit()

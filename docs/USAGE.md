@@ -79,7 +79,7 @@ This starts three services (`docker-compose.yaml`):
 - **`db`** — `timescale/timescaledb`, exposed on `localhost:5432`.
 - **`server`** — the FastAPI app (`server/Dockerfile`, `--extra server`),
   exposed on `localhost:8000`. On startup it runs Alembic migrations (see
-  [`ALEMBIC.md`](ALEMBIC.md)), syncs `vehicles.toml`/`events.toml` into the
+  [`ALEMBIC.md`](ALEMBIC.md)), syncs `vehicles.toml` into the
   database, and **builds one `sunbeam-worker:<edition>` Docker image per
   pipeline edition** found in `stage_registry.toml` (this is why the first
   `docker compose up` takes noticeably longer than subsequent ones — it's
@@ -183,7 +183,7 @@ uv run sunbeam.py --event_name realtime
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--event_name` | `$SUNBEAM_EVENT_NAME` or `"realtime"` | Which event (from `events.toml`) to run. |
+| `--event_name` | `$SUNBEAM_EVENT_NAME` or `"realtime"` | Which event to run, by name. Events are created and edited in the dashboard (**Add event…**); the worker reads its event from Postgres. |
 | `--serverless` | off | Run with no server at all — see below. |
 | `--reprocess` | `$SUNBEAM_REPROCESS` or `false` | Delete the event's existing `sample` rows before writing. Replays always do this regardless (see below), so this only matters for realtime runs, which otherwise append to whatever an earlier run wrote. |
 | `--influx-url`, `--influx-org`, `--influx-bucket`, `--influx-token` | `$SUNBEAM_INFLUX_URL`, `_ORG`, `_BUCKET`, `_TOKEN` | The InfluxDB to read telemetry from. Required (as flags or variables); there are no defaults. |
@@ -198,8 +198,7 @@ vars rather than CLI args).
 
 ### Realtime vs Replay worker runs
 
-`Executor.from_event` picks one of two modes from the event's entry in
-`events.toml`:
+`Executor.from_event` picks one of two modes from the event's end time:
 
 - **Realtime** — events with no `ends_at` (like `realtime`), or one still in
   the future. Ingress polls InfluxDB for the latest values on a schedule (one
