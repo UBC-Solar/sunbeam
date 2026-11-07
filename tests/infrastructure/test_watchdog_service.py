@@ -31,7 +31,7 @@ def fake_docker():
 
 @pytest.fixture
 def watchdog(fake_docker, session_factory):
-    return WatchdogService(
+    service = WatchdogService(
         docker_client=fake_docker,
         session_factory=session_factory,
         heartbeat_timeout_s=10.0,
@@ -39,6 +39,9 @@ def watchdog(fake_docker, session_factory):
         stop_grace_s=30.0,
         build_timeout_s=600.0,
     )
+    # A server that has been up a while, so a worker's silence counts in full
+    service._started_at = naive_utcnow() - timedelta(hours=1)
+    return service
 
 
 @pytest.fixture
@@ -245,6 +248,18 @@ class TestHeartbeatTimeout:
         worker = get_worker(worker_id)
         assert worker.status == WorkerStatus.LOST
         assert "stopped heartbeating" in worker.status_message
+
+    def test_silence_while_the_server_was_down_doesnt_count(
+        self, fake_docker, session_factory, make_worker, get_worker
+    ):
+        container = add_container(fake_docker, status="running")
+        # Its last heartbeat was before this server (re)started, more than the timeout ago
+        worker_id = make_worker(container_id=container.id, heartbeat_age_s=60)
+        restarted = WatchdogService(docker_client=fake_docker, session_factory=session_factory, heartbeat_timeout_s=10.0)
+
+        restarted._sweep()
+
+        assert get_worker(worker_id).status == WorkerStatus.RUNNING
 
     def test_fresh_heartbeat_left_alone(
         self, watchdog, fake_docker, make_worker, get_worker

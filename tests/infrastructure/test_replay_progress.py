@@ -233,7 +233,8 @@ class TestRenderMetricsTable:
         payload = {
             "idle_pct": 90.0, "busy_pct": 10.0, "writer_ms": 1.5,
             "pipelines": [{
-                "name": "A -> B", "total_ms": 4.0, "avg_ms": 0.4, "ticks": 10, "late_now_ms": 0.0, "late_max_ms": 1.0,
+                "name": "10 Hz", "frequency": 10.0, "total_ms": 4.0, "avg_ms": 0.4, "max_ms": 0.9, "ticks": 10,
+                "late_now_ms": 0.0, "late_max_ms": 1.0,
                 "stages": [{"name": "A", "total_ms": 3.0, "avg_ms": 0.3, "max_ms": 0.5, "calls": 10}],
             }],
         }
@@ -242,5 +243,6 @@ class TestRenderMetricsTable:
         Console(file=output, width=160).print(render_metrics_table(payload))
 
         rendered = output.getvalue()
-        assert "A -> B" in rendered
+        assert "10 Hz" in rendered
+        assert "0.900 ms" in rendered  # the pipeline's slowest tick
         assert "0.300 ms/call" in rendered

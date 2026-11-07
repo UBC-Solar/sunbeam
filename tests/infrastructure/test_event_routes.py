@@ -163,9 +163,3 @@ class TestDelete:
 
         assert api_client.delete(f"/events/{seeded_event.event_id}").status_code == 409
         assert count(session_factory, Event) == 1
-
-
-def test_lists_vehicles(api_client, seeded_event):
-    vehicles = api_client.get("/vehicles").json()
-
-    assert [vehicle["id"] for vehicle in vehicles] == [seeded_event.vehicle_id]

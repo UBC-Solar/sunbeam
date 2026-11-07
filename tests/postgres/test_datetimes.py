@@ -46,7 +46,6 @@ class TestAwareDatetimeRoundTrips:
                 db,
                 worker_id=worker.id,
                 status=WorkerStatus.RUNNING,
-                current_stage=None,
                 status_message=None,
                 host=None,
             )

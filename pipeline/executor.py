@@ -201,7 +201,6 @@ class Executor:
         self._control.complete(success=success, message=message)
 
     def _handle_pipeline_output(self, pipeline, frame, timestamp):
-        self._control.set_stage(pipeline.name)
         self._writer.write_frame(frame)
 
     def _should_stop(self) -> bool:

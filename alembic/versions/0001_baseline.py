@@ -26,7 +26,9 @@ workerstatus = sa.Enum(
 workerkind = sa.Enum("CONTAINER", "EXTERNAL", name="workerkind")
 connectionkind = sa.Enum("INFLUXDB", name="connectionkind")
 
-# So a fresh install can launch a worker straight away. Both hosts are only reachable over the team's Tailnet.
+# So a fresh install can create an event and launch a worker straight away. Both InfluxDB hosts are only reachable
+# over the team's Tailnet.
+DEFAULT_VEHICLES = [{"name": "Brightside", "description": "UBC Solar's 3rd generation solar race car"}]
 DEFAULT_CONNECTIONS = [
     {
         "name": "UBC Influx (CAN_log)",
@@ -52,7 +54,7 @@ DEFAULT_CONNECTIONS = [
 def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS timescaledb")
 
-    op.create_table(
+    vehicle = op.create_table(
         "vehicle",
         sa.Column("id", BigIntegerPK, autoincrement=True, nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
@@ -117,7 +119,6 @@ def upgrade() -> None:
         sa.Column("host", sa.String(length=255), nullable=True),
         sa.Column("container_id", sa.String(length=255), nullable=True),
         sa.Column("container_name", sa.String(length=255), nullable=True),
-        sa.Column("current_stage", sa.String(length=255), nullable=True),
         sa.Column("status_message", sa.Text(), nullable=True),
         sa.Column("stop_requested", sa.Boolean(), nullable=False),
         sa.Column("influx_connection_id", BigIntegerPK, nullable=True),
@@ -152,6 +153,7 @@ def upgrade() -> None:
     op.execute("CREATE INDEX sample_event_signal_ts_idx ON sample (event_id, signal_id, ts DESC)")
     op.execute("CREATE INDEX sample_event_ts_idx ON sample (event_id, ts DESC)")
 
+    op.bulk_insert(vehicle, DEFAULT_VEHICLES)
     op.bulk_insert(connection, DEFAULT_CONNECTIONS)
 
 

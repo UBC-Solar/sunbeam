@@ -47,8 +47,8 @@ class Array(Stage):
 ```
 
 - **`stage_name`** — unique within a pipeline edition; becomes the node
-  name in the dependency graph and shows up in `current_stage` on the
-  dashboard and in `TimingStats` logs.
+  name in the dependency graph and shows up in the worker's timing, on the
+  dashboard and in its logs.
 - **`inputs`** / **`outputs`** — lists of `CanonicalName` (or plain string)
   signal identifiers. These are what wire stages together — see
   "How stages become a graph" below.

@@ -113,7 +113,6 @@ def heartbeat(
         db,
         worker_id=worker_id,
         status=payload.status,
-        current_stage=payload.current_stage,
         status_message=payload.status_message,
         host=payload.host,
     )
@@ -127,7 +126,7 @@ def get_permission(
 ):
     """
     Polled by the worker about every second; `allowed: false` means stop now. A worker that can't reach the server
-    for about ten polls in a row stops itself.
+    for about a minute stops itself.
     """
     allowed, reason = service.permission_for(db, worker_id)
     return WorkerPermissionResponse(allowed=allowed, reason=reason)

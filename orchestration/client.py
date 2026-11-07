@@ -73,12 +73,10 @@ class OrchestratorClient:
         self,
         *,
         status: str = "running",
-        current_stage: Optional[str] = None,
         status_message: Optional[str] = None,
     ) -> None:
         _post(f"{self._worker_url}/heartbeat", {
             "status": status,
-            "current_stage": current_stage,
             "status_message": status_message,
             "host": socket.gethostname(),
         })

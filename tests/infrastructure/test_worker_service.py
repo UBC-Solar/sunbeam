@@ -418,7 +418,6 @@ class TestRegisterWorker:
             db,
             worker_id=worker.id,
             status=WorkerStatus.RUNNING,
-            current_stage="compute",
             status_message=None,
             host=None,
         )
@@ -453,13 +452,11 @@ class TestHeartbeat:
             db,
             worker_id=worker.id,
             status=WorkerStatus.RUNNING,
-            current_stage="ingress",
             status_message="all good",
             host="worker-host",
         )
 
         assert updated.status == WorkerStatus.RUNNING
-        assert updated.current_stage == "ingress"
         assert updated.status_message == "all good"
         assert updated.host == "worker-host"
         assert updated.last_heartbeat_at is not None
@@ -473,7 +470,6 @@ class TestHeartbeat:
             db,
             worker_id=worker.id,
             status=WorkerStatus.RUNNING,
-            current_stage=None,
             status_message=None,
             host=None,
         )
@@ -487,7 +483,6 @@ class TestHeartbeat:
             db,
             worker_id=worker.id,
             status=WorkerStatus.RUNNING,
-            current_stage=None,
             status_message=None,
             host=None,
         )
@@ -501,7 +496,6 @@ class TestHeartbeat:
                 db,
                 worker_id=uuid.uuid4(),
                 status=WorkerStatus.RUNNING,
-                current_stage=None,
                 status_message=None,
                 host=None,
             )

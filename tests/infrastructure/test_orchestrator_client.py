@@ -55,12 +55,11 @@ class TestClientRequests:
 
         monkeypatch.setattr("orchestration.client.requests.post", fake_post)
 
-        client.heartbeat(status="running", current_stage="ingress", status_message="ok")
+        client.heartbeat(status="running", status_message="ok")
 
         url, payload = calls[0]
         assert url == f"http://server:9000/workers/{worker_id}/heartbeat"
         assert payload["status"] == "running"
-        assert payload["current_stage"] == "ingress"
         assert payload["status_message"] == "ok"
         assert "host" in payload
 

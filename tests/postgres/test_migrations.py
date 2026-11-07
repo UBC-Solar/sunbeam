@@ -91,7 +91,7 @@ class TestBaseline:
 
         command.check(config)
 
-    def test_seeds_the_default_connections(self, alembic_config):
+    def test_seeds_a_vehicle_and_the_default_connections(self, alembic_config):
         from sqlalchemy import create_engine
 
         config, url = alembic_config
@@ -101,10 +101,12 @@ class TestBaseline:
         try:
             with engine.connect() as conn:
                 connections = conn.execute(text("SELECT name, is_default FROM connection ORDER BY id")).all()
+                vehicles = conn.scalars(text("SELECT name FROM vehicle")).all()
         finally:
             engine.dispose()
 
         assert connections == [("UBC Influx (CAN_log)", True), ("Production (CAN_prod)", False)]
+        assert vehicles == ["Brightside"]
 
 
 class TestServerStartupUpgrade:

@@ -60,9 +60,7 @@ class TestExecutorServerStop:
 
         executor.run()
 
-        # Every written frame was preceded by set_stage(pipeline.name).
-        assert len(control.stages) == len(writer.frames)
-        assert set(control.stages) <= {"compute", "ingress"}
+        assert len(writer.frames) > 0
 
 
 class TestExecutorIngressCrash:

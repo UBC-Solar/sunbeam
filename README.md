@@ -15,7 +15,7 @@ as possible. Output goes through a batching writer into the `sample` table.
 
 The **server** (`server/`, FastAPI) launches workers as Docker containers, supervises them with heartbeats and a
 watchdog, and serves the data. Workers can also run by hand, reporting to the server or with none at all. The
-**dashboard** (`dashboard/`, React) is where events and connections are created, and workers launched and watched.
+**dashboard** (`dashboard/`, React) is where events, vehicles and connections are created, and workers launched and watched.
 
 | Document | Covers |
 |---|---|
@@ -44,7 +44,7 @@ uv run sunbeam.py --event_name realtime --serverless   # plus the --influx-* set
 ## Layout
 
 ```
-config/         The environment (Context), vehicles.toml, loading a worker's event
+config/         The environment (Context), loading a worker's event, creating its signals
 state/          State, the latest value of every signal, and the Frame views stages see
 stage/          The Stage base class, StageLibrary, stage_registry.toml, and each edition's stages
 pipeline/       Graph building, scheduling, the Executor, metrics, worker Dockerfiles

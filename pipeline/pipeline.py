@@ -14,7 +14,8 @@ logger = logging.getLogger("sunbeam.worker")
 
 
 class Pipeline:
-    def __init__(self, node_graph: nx.DiGraph, frequency: float):
+    def __init__(self, node_graph: nx.DiGraph, frequency: float, name: str | None = None):
+        """ :param name: How it's shown in logs and metrics; defaults to its stages, in order """
         self.graph = node_graph
         self.frequency = frequency
         self.timing = StageTimingStats()
@@ -25,7 +26,12 @@ class Pipeline:
             for node_id in nx.topological_sort(self.graph)
         ]
 
-        self.name = " -> ".join(stage.stage_name for stage in self._stages)
+        self.name = name or " -> ".join(self.stage_names)
+
+    @property
+    def stage_names(self) -> list[str]:
+        """ In the order they run. """
+        return [stage.stage_name for stage in self._stages]
 
     def run(self, state: State, timestamp: datetime.datetime) -> Iterator[FrameView]:
         for stage in self._stages:

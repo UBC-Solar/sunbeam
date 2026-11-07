@@ -1,40 +1,17 @@
-import tomllib
 from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from config import VEHICLES_PATH, SignalManager, VehicleManager
+from config import SignalManager
 from config.events import load_event
 from db.sunbeamdb.models import Event, EventStatus, Signal, Vehicle
-
-
-@pytest.fixture
-def raw_vehicles():
-    with open(VEHICLES_PATH, "rb") as f:
-        return tomllib.load(f)["vehicle"]
 
 
 def count(engine, model) -> int:
     with Session(engine) as session:
         return session.scalar(select(func.count()).select_from(model))
-
-
-class TestVehicleManager:
-    def test_sync_creates_all_configured_vehicles(self, engine, raw_vehicles):
-        VehicleManager().sync_vehicles(engine)
-
-        with Session(engine) as session:
-            names = set(session.scalars(select(Vehicle.name)))
-
-        assert names == {vehicle["name"] for vehicle in raw_vehicles}
-
-    def test_sync_is_idempotent(self, engine, raw_vehicles):
-        VehicleManager().sync_vehicles(engine)
-        VehicleManager().sync_vehicles(engine)
-
-        assert count(engine, Vehicle) == len(raw_vehicles)
 
 
 class TestLoadEvent:
@@ -55,10 +32,12 @@ class TestLoadEvent:
 class TestSignalManager:
     @pytest.fixture
     def synced_engine(self, engine):
-        VehicleManager().sync_vehicles(engine)
         with Session(engine) as session:
+            vehicle = Vehicle(name="Brightside")
+            session.add(vehicle)
+            session.flush()
             session.add(Event(
-                name="FSGP_2024_Day_1", vehicle_id=session.scalar(select(Vehicle.id)), pipeline_edition="v3_0",
+                name="FSGP_2024_Day_1", vehicle_id=vehicle.id, pipeline_edition="v3_0",
                 stages=["MotorPower"], status=EventStatus.UNPROCESSED, starts_at=datetime(2024, 7, 16, 15, tzinfo=UTC),
             ))
             session.commit()

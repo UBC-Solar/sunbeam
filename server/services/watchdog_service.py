@@ -51,6 +51,8 @@ class WatchdogService:
         self._startup_grace_s = startup_grace_s
         self._stop_grace_s = stop_grace_s
         self._build_timeout_s = build_timeout_s
+        # Workers can't heartbeat to a server that isn't running, so silence is only counted from here on
+        self._started_at = utcnow()
 
         self._shutdown_event = threading.Event()
         self._thread = threading.Thread(
@@ -168,7 +170,9 @@ class WatchdogService:
                 return
 
         if worker.status in HEARTBEATING_STATUSES:
-            if older_than(worker.last_heartbeat_at, self._heartbeat_timeout_s):
+            # Not while this server was down (restarting): the worker had nowhere to send its heartbeats
+            last_heard = max(worker.last_heartbeat_at or worker.created_at, self._started_at)
+            if older_than(last_heard, self._heartbeat_timeout_s):
                 self._resolve(db, worker, WorkerStatus.LOST, "Worker stopped heartbeating.")
             return
 

@@ -31,7 +31,6 @@ export type WorkerRun = {
   host: string | null;
   container_id: string | null;
   container_name: string | null;
-  current_stage: string | null;
   status_message: string | null;
   stop_requested: boolean;
   influx_connection_id: number | null;
@@ -83,6 +82,13 @@ export type EventFields = {
 
 export type Vehicle = {
   id: number;
+  name: string;
+  description: string | null;
+  // A vehicle can only be deleted once it has none
+  event_count: number;
+};
+
+export type VehicleFields = {
   name: string;
   description: string | null;
 };
@@ -137,10 +143,14 @@ export type StageMetric = {
   calls: number;
 };
 
+// One pipeline's timing since the last report; a worker lists them in a fixed order (fastest first)
 export type PipelineMetric = {
   name: string;
+  frequency: number | null;
   total_ms: number;
   avg_ms: number;
+  // The slowest tick; null from workers built before it was reported
+  max_ms: number | null;
   ticks: number;
   late_now_ms: number;
   late_max_ms: number;
@@ -159,11 +169,24 @@ export type ReplayProgress = {
   eta_s: number | null;
 };
 
+export type WriterQueueStats = {
+  queue_depth: number;
+  queue_capacity: number;
+  queue_high_water: number;
+  frames_enqueued: number;
+  frames_written: number;
+  batches_flushed: number;
+  avg_flush_ms: number;
+  max_flush_ms: number;
+};
+
 export type WorkerMetrics = {
   idle_pct: number;
   busy_pct: number;
   writer_ms: number;
   pipelines: PipelineMetric[];
+  // Null until the writer has flushed once
+  writer_queue: WriterQueueStats | null;
   replay: ReplayProgress | null;
   reported_at: string;
 };
@@ -216,6 +239,19 @@ export async function deleteEvent(id: number): Promise<void> {
 
 export async function getVehicles(): Promise<Vehicle[]> {
   return asJson(await fetch(`${API_BASE_URL}/vehicles`));
+}
+
+export async function createVehicle(fields: VehicleFields): Promise<Vehicle> {
+  return asJson(await fetch(`${API_BASE_URL}/vehicles`, jsonRequest("POST", fields)));
+}
+
+export async function updateVehicle(id: number, fields: Partial<VehicleFields>): Promise<Vehicle> {
+  return asJson(await fetch(`${API_BASE_URL}/vehicles/${id}`, jsonRequest("PATCH", fields)));
+}
+
+// Refused while the vehicle has events
+export async function deleteVehicle(id: number): Promise<void> {
+  return asJson(await fetch(`${API_BASE_URL}/vehicles/${id}`, {method: "DELETE"}));
 }
 
 export async function getPipelineEditions(): Promise<PipelineEdition[]> {

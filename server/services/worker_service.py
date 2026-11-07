@@ -353,7 +353,6 @@ class WorkerService:
         *,
         worker_id: uuid.UUID,
         status: WorkerStatus,
-        current_stage: str | None,
         status_message: str | None,
         host: str | None,
     ) -> WorkerRun:
@@ -371,7 +370,6 @@ class WorkerService:
         else:
             worker.status = status
 
-        worker.current_stage = current_stage
         worker.status_message = status_message
         worker.last_heartbeat_at = utcnow()
 

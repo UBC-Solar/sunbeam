@@ -7,77 +7,110 @@ import {
   createEvent,
   deleteEvent,
   getPipelineEditions,
-  getVehicles,
   updateEvent,
 } from "../api";
 import {ConfirmButton} from "./ConfirmButton";
 import {EventStatus} from "./EventStatus";
+import {VehicleDialog, VehiclesTable} from "./VehiclesPanel";
 
 type EventsPanelProps = {
   events: Event[];
+  vehicles: Vehicle[];
   canLaunch: boolean;
   onLaunch: (event: Event) => void;
   onChanged: () => Promise<void>;
 };
 
-export function EventsPanel({events, canLaunch, onLaunch, onChanged}: EventsPanelProps) {
-  // null: closed; "new": creating; otherwise the event being edited
+// Events and the vehicles they belong to share a card, one tab at a time: vehicles are seldom changed
+export function EventsPanel({events, vehicles, canLaunch, onLaunch, onChanged}: EventsPanelProps) {
+  const [tab, setTab] = useState<"events" | "vehicles">("events");
+  // null: closed; "new": creating; otherwise the event or vehicle being edited
   const [editing, setEditing] = useState<Event | "new" | null>(null);
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | "new" | null>(null);
 
   return (
     <div className="card">
       <div className="card-header">
-        <h2>Events</h2>
-        <button onClick={() => setEditing("new")}>Add event…</button>
+        <div className="tabs card-tabs">
+          <button className={`tab ${tab === "events" ? "active" : ""}`} onClick={() => setTab("events")}>
+            Events ({events.length})
+          </button>
+          <button className={`tab ${tab === "vehicles" ? "active" : ""}`} onClick={() => setTab("vehicles")}>
+            Vehicles ({vehicles.length})
+          </button>
+        </div>
+        {tab === "events" ? (
+          <button
+            onClick={() => setEditing("new")}
+            disabled={vehicles.length === 0}
+            title={vehicles.length === 0 ? "Add a vehicle first" : undefined}
+          >
+            Add event…
+          </button>
+        ) : (
+          <button onClick={() => setEditingVehicle("new")}>Add vehicle…</button>
+        )}
       </div>
 
-      <table>
-        <thead>
-          <tr>
-            <th>Event</th>
-            <th>Mode</th>
-            <th>Status</th>
-            <th>Description</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {events.length === 0 && (
-            <tr className="empty-row">
-              <td colSpan={5}>No events yet. Add one to launch a worker for it.</td>
+      {tab === "vehicles" && <VehiclesTable vehicles={vehicles} onEdit={setEditingVehicle} />}
+
+      {tab === "events" && (
+        <table>
+          <thead>
+            <tr>
+              <th>Event</th>
+              <th>Mode</th>
+              <th>Status</th>
+              <th>Description</th>
+              <th />
             </tr>
-          )}
-          {events.map((event) => (
-            <tr key={event.id} className="clickable" onClick={() => setEditing(event)}>
-              <td>{event.name}</td>
-              <td className="text-secondary">{event.is_replay ? "Replay" : "Realtime"}</td>
-              <td>
-                <EventStatus event={event} />
-              </td>
-              <td className="text-secondary">{event.description ?? "—"}</td>
-              <td>
-                <button
-                  className="primary"
-                  onClick={(e) => {
-                    // The row itself opens the editor
-                    e.stopPropagation();
-                    onLaunch(event);
-                  }}
-                  disabled={!canLaunch}
-                  title={canLaunch ? undefined : "Add an InfluxDB connection first"}
-                >
-                  Launch worker…
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {events.length === 0 && (
+              <tr className="empty-row">
+                <td colSpan={5}>No events yet. Add one to launch a worker for it.</td>
+              </tr>
+            )}
+            {events.map((event) => (
+              <tr key={event.id} className="clickable" onClick={() => setEditing(event)}>
+                <td>{event.name}</td>
+                <td className="text-secondary">{event.is_replay ? "Replay" : "Realtime"}</td>
+                <td>
+                  <EventStatus event={event} />
+                </td>
+                <td className="text-secondary">{event.description ?? "—"}</td>
+                <td>
+                  <button
+                    className="primary"
+                    onClick={(e) => {
+                      // The row itself opens the editor
+                      e.stopPropagation();
+                      onLaunch(event);
+                    }}
+                    disabled={!canLaunch}
+                    title={canLaunch ? undefined : "Add an InfluxDB connection first"}
+                  >
+                    Launch worker…
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
       {editing && (
         <EventDialog
           event={editing === "new" ? null : editing}
+          vehicles={vehicles}
           onClose={() => setEditing(null)}
+          onChanged={onChanged}
+        />
+      )}
+      {editingVehicle && (
+        <VehicleDialog
+          vehicle={editingVehicle === "new" ? null : editingVehicle}
+          onClose={() => setEditingVehicle(null)}
           onChanged={onChanged}
         />
       )}
@@ -118,31 +151,31 @@ function formFor(event: Event | null): Form {
 
 type EventDialogProps = {
   event: Event | null;
+  vehicles: Vehicle[];
   onClose: () => void;
   onChanged: () => Promise<void>;
 };
 
-function EventDialog({event, onClose, onChanged}: EventDialogProps) {
+function EventDialog({event, vehicles, onClose, onChanged}: EventDialogProps) {
   const [form, setForm] = useState<Form>(() => formFor(event));
   const [newStage, setNewStage] = useState("");
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [editions, setEditions] = useState<PipelineEdition[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getVehicles(), getPipelineEditions()])
-      .then(([vehiclesData, editionsData]) => {
-        setVehicles(vehiclesData);
+    getPipelineEditions()
+      .then((editionsData) => {
         setEditions(editionsData);
-        // A new event starts on the first of each, so the form is never blank
+        // A new event starts on the first vehicle and the newest edition, so the form is never blank
         setForm((current) => ({
           ...current,
-          vehicle_id: current.vehicle_id ?? vehiclesData[0]?.id ?? null,
+          vehicle_id: current.vehicle_id ?? vehicles[0]?.id ?? null,
           pipeline_edition: current.pipeline_edition || editionsData[editionsData.length - 1]?.id || "",
         }));
       })
       .catch((err) => setError((err as Error).message));
+    // Once, when the dialog opens: the vehicles are only for its starting value
   }, []);
 
   useEffect(() => {
@@ -254,11 +287,7 @@ function EventDialog({event, onClose, onChanged}: EventDialogProps) {
           <div className="field-row">
             <label className="field">
               <span className="field-label">Starts (UTC)</span>
-              <input
-                type="datetime-local"
-                value={form.starts_at}
-                onChange={(e) => set("starts_at", e.target.value)}
-              />
+              <input type="datetime-local" value={form.starts_at} onChange={(e) => set("starts_at", e.target.value)} />
             </label>
             <label className="field">
               <span className="field-label">Ends (UTC)</span>
@@ -296,7 +325,10 @@ function EventDialog({event, onClose, onChanged}: EventDialogProps) {
             <span className="field-label">Stages</span>
             <div className="stage-picker">
               {[...registered, ...unregistered].map((stage) => (
-                <label key={stage} title={registered.includes(stage) ? undefined : "Not in the server's copy of the code"}>
+                <label
+                  key={stage}
+                  title={registered.includes(stage) ? undefined : "Not in the server's copy of the code"}
+                >
                   <input
                     type="checkbox"
                     checked={form.stages.includes(stage)}

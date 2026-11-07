@@ -54,7 +54,6 @@ export function WorkersTable({workers, events, onSelect, onStop}: WorkersTablePr
             <th>Edition · connection</th>
             {tab === "active" ? (
               <>
-                <th>Stage</th>
                 <th>Message</th>
                 <th>Heartbeat</th>
               </>
@@ -70,7 +69,7 @@ export function WorkersTable({workers, events, onSelect, onStop}: WorkersTablePr
         <tbody>
           {rows.length === 0 && (
             <tr className="empty-row">
-              <td colSpan={7}>
+              <td colSpan={6}>
                 {tab === "active" ? "No active workers." : "No past runs yet."}
               </td>
             </tr>
@@ -89,7 +88,6 @@ export function WorkersTable({workers, events, onSelect, onStop}: WorkersTablePr
               </td>
               {tab === "active" ? (
                 <>
-                  <td className="text-secondary">{worker.current_stage ?? "—"}</td>
                   <td className="text-secondary wrap">{worker.status_message ?? "—"}</td>
                   <td className="text-muted">{formatRelative(worker.last_heartbeat_at)}</td>
                 </>

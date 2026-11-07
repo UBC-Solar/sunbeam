@@ -1,19 +1,17 @@
-import {useEffect, useRef, useState} from "react";
+import {useEffect, useState} from "react";
 import {
   ACTIVE_STATUSES,
   Event,
   WorkerMetrics,
   WorkerRun,
-  getWorkerLogs,
   getWorkerMetrics,
   shortRef,
-  workerLogStreamUrl,
 } from "../api";
-import {formatClock, formatDuration, formatRelative} from "../time";
+import {formatClock, formatDuration} from "../time";
 import {ConfirmButton} from "./ConfirmButton";
 import {StatusBadge} from "./StatusBadge";
-import {ReplayProgressBar} from "./ReplayProgress";
-import {BusyIdleMeter, PipelineLatencyBars} from "./TimingCharts";
+import {LogTerminal} from "./LogTerminal";
+import {TimingConsole} from "./TimingConsole";
 
 type WorkerDetailProps = {
   worker: WorkerRun;
@@ -30,12 +28,6 @@ export function WorkerDetail({worker, events, onClose, onStop}: WorkerDetailProp
   const [metrics, setMetrics] = useState<WorkerMetrics | null>(null);
   const [metricsError, setMetricsError] = useState<string | null>(null);
 
-  const [logs, setLogs] = useState<string[]>([]);
-  const [logsLoading, setLogsLoading] = useState(false);
-  const [logsError, setLogsError] = useState<string | null>(null);
-  const [liveTail, setLiveTail] = useState(false);
-
-  const logViewerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isActive) {
@@ -70,49 +62,6 @@ export function WorkerDetail({worker, events, onClose, onStop}: WorkerDetailProp
       clearTimeout(timeout);
     };
   }, [worker.id, isActive]);
-
-  async function refreshLogs() {
-    setLogsLoading(true);
-    setLogsError(null);
-    try {
-      const result = await getWorkerLogs(worker.id, 500);
-      setLogs(result?.lines ?? []);
-    } catch (err) {
-      setLogsError((err as Error).message);
-    } finally {
-      setLogsLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    setLogs([]);
-    setLiveTail(false);
-    refreshLogs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [worker.id]);
-
-  useEffect(() => {
-    if (!isActive && liveTail) setLiveTail(false);
-  }, [isActive, liveTail]);
-
-  useEffect(() => {
-    if (!liveTail) return;
-
-    const source = new EventSource(workerLogStreamUrl(worker.id, 50));
-    source.onmessage = (event) => {
-      setLogs((prev) => [...prev, event.data]);
-    };
-    source.onerror = () => {
-      setLogsError("Live log stream disconnected.");
-    };
-
-    return () => source.close();
-  }, [liveTail, worker.id]);
-
-  useEffect(() => {
-    const el = logViewerRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [logs]);
 
   return (
     <div className="overlay" onClick={onClose}>
@@ -173,88 +122,39 @@ export function WorkerDetail({worker, events, onClose, onStop}: WorkerDetailProp
           <dt>Duration</dt>
           <dd>{formatDuration(worker.started_at, worker.stopped_at)}</dd>
 
-          {isActive && (
-            <>
-              <dt>Stage</dt>
-              <dd>{worker.current_stage ?? "—"}</dd>
-            </>
-          )}
-
-          <dt>Message</dt>
-          <dd>{worker.status_message ?? "—"}</dd>
+          <dt className="wide">Message</dt>
+          <dd className="wide">{worker.status_message ?? "—"}</dd>
 
           {worker.failure_reason && (
             <>
-              <dt>Failure reason</dt>
-              <dd style={{color: "var(--status-critical)"}}>{worker.failure_reason}</dd>
+              <dt className="wide">Failure reason</dt>
+              <dd className="wide" style={{color: "var(--status-critical)"}}>
+                {worker.failure_reason}
+              </dd>
             </>
           )}
         </dl>
 
-        {isActive && metrics?.replay && (
-          <div className="card" style={{marginTop: "1.25rem"}}>
-            <h3>Replay progress</h3>
-            <ReplayProgressBar replay={metrics.replay} />
-          </div>
-        )}
-
-        <div className="card" style={{marginTop: "1.25rem"}}>
+        <section className="drawer-section">
           <h3>Live timing</h3>
 
           {!isActive && (
-            <p className="text-muted">
-              Worker is no longer active — live metrics aren't retained after a run ends.
-            </p>
+            <p className="text-muted">Worker is no longer active — live metrics aren't retained after a run ends.</p>
           )}
 
-          {isActive && metricsError && (
-            <div className="error-banner">Failed to load metrics: {metricsError}</div>
-          )}
+          {isActive && metricsError && <div className="error-banner">Failed to load metrics: {metricsError}</div>}
 
           {isActive && !metricsError && metrics === null && (
             <p className="text-muted">Waiting for the worker's first metrics report…</p>
           )}
 
-          {isActive && metrics && (
-            <>
-              <BusyIdleMeter busyPct={metrics.busy_pct} />
-              <p className="text-muted" style={{fontSize: "0.75rem", margin: "0.6rem 0 1rem"}}>
-                Reported {formatRelative(metrics.reported_at)} · writer {metrics.writer_ms.toFixed(2)} ms
-              </p>
-              <PipelineLatencyBars pipelines={metrics.pipelines} />
-            </>
-          )}
-        </div>
+          {isActive && metrics && <TimingConsole metrics={metrics} />}
+        </section>
 
-        <div className="card">
-          <div className="log-toolbar">
-            <h3 style={{margin: 0}}>Logs</h3>
-            <button onClick={refreshLogs} disabled={logsLoading}>
-              {logsLoading ? "Refreshing…" : "Refresh"}
-            </button>
-            {isActive && (
-              <button
-                className={`pill-toggle ${liveTail ? "on" : ""}`}
-                onClick={() => setLiveTail((v) => !v)}
-              >
-                {liveTail ? "Live tail: on" : "Live tail: off"}
-              </button>
-            )}
-          </div>
-
-          {logsError && <div className="error-banner">{logsError}</div>}
-
-          <div className="log-viewer" ref={logViewerRef}>
-            {logs.length === 0 && !logsLoading && (
-              <span className="text-muted">No logs available.</span>
-            )}
-            {logs.map((line, i) => (
-              <div className="log-line" key={i}>
-                {line}
-              </div>
-            ))}
-          </div>
-        </div>
+        <section className="drawer-section">
+          <h3>Logs</h3>
+          <LogTerminal workerId={worker.id} containerName={worker.container_name} isActive={isActive} />
+        </section>
       </div>
     </div>
   );

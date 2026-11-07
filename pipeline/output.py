@@ -159,7 +159,7 @@ def render_metrics_table(payload: dict) -> Group:
             f"[bold]{pipeline['name']}[/bold]",
             f"{pipeline['total_ms']:.2f} ms",
             f"{pipeline['avg_ms']:.3f} ms/tick",
-            "",
+            f"{pipeline['max_ms']:.3f} ms",
             f"{pipeline['late_now_ms']:.3f} ms",
             f"{pipeline['late_max_ms']:.3f} ms",
         )

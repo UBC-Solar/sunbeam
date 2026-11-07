@@ -105,6 +105,17 @@ class TestBuildPipelineFromNodes:
 
         pipelines = build_pipeline_from_nodes([a, b, c])
 
-        assert sorted(p.frequency for p in pipelines) == [1.0, 10.0]
-        names = {p.name for p in pipelines}
-        assert names == {"A -> B", "C"}
+        # Fastest first, named by rate
+        assert [(p.name, p.stage_names) for p in pipelines] == [("10 Hz", ["A", "B"]), ("1 Hz", ["C"])]
+
+    def test_order_and_names_dont_depend_on_the_stage_order(self):
+        a = make_stage("A", [], ["x"], 5.0)
+        b = make_stage("B", [], ["y"], 5.0)
+        c = make_stage("C", [], ["z"], 10.0)
+
+        for nodes in ([a, b, c], [c, b, a]):
+            pipelines = build_pipeline_from_nodes(nodes, prefix="Ingress ")
+
+            assert [(p.name, p.stage_names) for p in pipelines] == [
+                ("Ingress 10 Hz", ["C"]), ("Ingress 5 Hz", ["A"]), ("Ingress 5 Hz #2", ["B"]),
+            ]

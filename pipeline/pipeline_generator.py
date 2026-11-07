@@ -75,11 +75,26 @@ def bin_signals_by_frequency(signals: list[CanonicalName], event_date: date) -> 
     return signal_bins
 
 
-def build_pipeline_from_nodes(nodes: list[Stage]) -> list[Pipeline]:
-    graph = build_node_graph(nodes)
-    subgraphs = same_rate_components(graph)
+def build_pipeline_from_nodes(nodes: list[Stage], prefix: str = "") -> list[Pipeline]:
+    """
+    The same-rate pipelines for the nodes, fastest first, then by their stages' names, so a run always lists (and
+    names) them the same way. Each is named by its rate after the prefix: "10 Hz", then "10 Hz #2" for another at
+    the same rate. One that is never scheduled (rate 0: a replay's fetch) is just the prefix.
+    """
+    subgraphs = sorted(
+        same_rate_components(build_node_graph(nodes)),
+        key=lambda component: (-component[1], sorted(component[0].nodes)),
+    )
 
-    return [Pipeline(subgraph, frequency) for (subgraph, frequency) in subgraphs]
+    pipelines = []
+    seen_per_rate: dict[float, int] = {}
+    for subgraph, frequency in subgraphs:
+        seen_per_rate[frequency] = seen_per_rate.get(frequency, 0) + 1
+        name = f"{prefix}{frequency:g} Hz" if frequency else prefix.strip()
+        if seen_per_rate[frequency] > 1:
+            name += f" #{seen_per_rate[frequency]}"
+        pipelines.append(Pipeline(subgraph, frequency, name=name))
+    return pipelines
 
 
 def _telemetry_db_kwargs() -> dict[str, str]:
@@ -146,4 +161,4 @@ def generate_pipelines(nodes: list[Stage], ingress_factory: IngressFactory) -> t
     """
     ingress_nodes = ingress_factory.make_ingress(collect_signals_for_ingress(nodes))
 
-    return build_pipeline_from_nodes(nodes), build_pipeline_from_nodes(ingress_nodes)
+    return build_pipeline_from_nodes(nodes), build_pipeline_from_nodes(ingress_nodes, prefix="Ingress ")

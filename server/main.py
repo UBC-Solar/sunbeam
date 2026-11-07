@@ -9,13 +9,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import create_engine, text
 
-from config import SignalManager, VehicleManager
+from config import SignalManager
 from config.context import Context
 from server.db import get_engine
 from server.errors import Conflict
 from server.migrations import upgrade_database
 from server.preflight import check_docker, check_postgres
-from server.routes import connections, data, events, pipeline_editions, workers
+from server.routes import connections, data, events, pipeline_editions, vehicles, workers
 from server.services.connection_service import ConnectionTestFailed
 from server.services.image_builder import WorkerImageBuilder
 from server.services.sample_counts import SampleCounts
@@ -51,7 +51,6 @@ def on_startup() -> None:
 
         upgrade_database(engine)
 
-        VehicleManager().sync_vehicles(engine)
         SignalManager.sync_signals(engine)
     finally:
         engine.dispose()
@@ -135,7 +134,7 @@ def create_app(lifespan=lifespan) -> FastAPI:
     app.get("/health")(health)
 
     app.include_router(events.router)
-    app.include_router(events.vehicles_router)
+    app.include_router(vehicles.router)
     app.include_router(workers.router)
     app.include_router(pipeline_editions.router)
     app.include_router(connections.router)

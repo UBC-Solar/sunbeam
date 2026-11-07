@@ -57,7 +57,6 @@ class TestHeartbeatBacksOffAfterWatchdogWins:
                     db,
                     worker_id=worker_id,
                     status=WorkerStatus.RUNNING,
-                    current_stage="compute",
                     status_message="still here",
                     host=None,
                 )

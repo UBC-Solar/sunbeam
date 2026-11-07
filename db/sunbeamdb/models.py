@@ -214,7 +214,6 @@ class WorkerRun(Base):
     host: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     container_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     container_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    current_stage: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     status_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     stop_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # What the worker was started with. The name is a snapshot, so it survives the connection being renamed or

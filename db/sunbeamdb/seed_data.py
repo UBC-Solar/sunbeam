@@ -1,22 +1,11 @@
 """
-Get-or-create helpers that sync vehicles and signals from config into the database (see config/).
+Helpers that create an event's signals from the localization tables (see config/signals.py).
 """
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from data_tools.localization import CanonicalName, SunbeamDBLanguageLocalization
-from db.sunbeamdb.models import Event, Signal, Vehicle
-
-
-def get_or_create_vehicle(session: Session, *, name: str, description: str | None = None) -> Vehicle:
-    vehicle = session.scalar(select(Vehicle).where(Vehicle.name == name))
-    if vehicle is not None:
-        return vehicle
-
-    vehicle = Vehicle(name=name, description=description)
-    session.add(vehicle)
-    session.flush()
-    return vehicle
+from db.sunbeamdb.models import Event, Signal
 
 
 def collect_signal_metadata_for_event(event: Event) -> list[dict]:

@@ -147,7 +147,6 @@ class FakeControl(WorkerControl):
     def __init__(self):
         self.started = False
         self.stopped = False
-        self.stages = []
         self.messages = []
         self.completions = []
         self._stop = threading.Event()
@@ -163,9 +162,6 @@ class FakeControl(WorkerControl):
 
     def request_stop(self):
         self._stop.set()
-
-    def set_stage(self, stage):
-        self.stages.append(stage)
 
     def set_message(self, message):
         self.messages.append(message)

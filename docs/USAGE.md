@@ -38,7 +38,7 @@ starts three services (`docker-compose.yaml`):
 
 - **`db`**: TimescaleDB on `localhost:5432`.
 - **`server`**: the FastAPI app on `localhost:8000`. On startup it migrates the database ([`ALEMBIC.md`](ALEMBIC.md)),
-  syncs `vehicles.toml`, and builds a `sunbeam-worker:<edition>` image for each edition in `stage_registry.toml`
+  syncs each event's signals, and builds a `sunbeam-worker:<edition>` image for each edition in `stage_registry.toml`
   (which is why the first start is slow).
 - **`dashboard`**: a Vite dev server on `localhost:5173`. It calls the API at `/api`, which the dev server proxies
   to the server (`SUNBEAM_API_PROXY_TARGET`), so it works from other machines on the Tailnet too.
@@ -47,7 +47,8 @@ On the dashboard:
 
 1. **Add event…** creates an event: its dates (UTC; no end means it's ongoing), vehicle, pipeline edition, and the
    edition's stages to run (pick from the server's, or add any by name for a git ref). Click an event's row to edit or delete it (not while a worker is running it). The
-   Status column shows whether it has run, and how many samples it has.
+   Status column shows whether it has run, and how many samples it has. The **Vehicles** tab beside it adds and
+   edits the cars events belong to; a fresh database starts with Brightside.
 2. **Launch worker…** picks the InfluxDB connection (see [Connections](#connections)), where the code comes from
    (the server's copy, or a [git ref](#building-workers-from-git)), and whether to reprocess (always on for replays).
 3. The server tests the connection over the event's window first, and refuses the launch if it can't reach InfluxDB,

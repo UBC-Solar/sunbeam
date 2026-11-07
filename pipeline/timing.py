@@ -6,10 +6,6 @@ from dataclasses import dataclass, field
 from pipeline.protocols import RunnablePipeline
 
 
-def _by_total_desc(totals: dict[str, int]) -> list[tuple[str, int]]:
-    return sorted(totals.items(), key=lambda item: item[1], reverse=True)
-
-
 @dataclass
 class StageTimingStats:
     """ Per-stage run times within one pipeline. """
@@ -24,17 +20,19 @@ class StageTimingStats:
             self.calls[stage_name] += 1
             self.max_ns[stage_name] = max(self.max_ns[stage_name], elapsed_ns)
 
-    def metrics_and_reset(self) -> list[dict]:
+    def metrics_and_reset(self, order: list[str] | None = None) -> list[dict]:
+        """ :param order: The stages in the order to list them (the order they run); otherwise as first recorded """
         with self.lock:
+            names = [name for name in (order or []) if name in self.total_ns] or list(self.total_ns)
             stages = [
                 {
                     "name": name,
-                    "total_ms": ns / 1e6,
-                    "avg_ms": ns / max(self.calls[name], 1) / 1e6,
+                    "total_ms": self.total_ns[name] / 1e6,
+                    "avg_ms": self.total_ns[name] / max(self.calls[name], 1) / 1e6,
                     "max_ms": self.max_ns[name] / 1e6,
                     "calls": self.calls[name],
                 }
-                for name, ns in _by_total_desc(self.total_ns)
+                for name in names
             ]
             self.total_ns.clear()
             self.calls.clear()
@@ -47,6 +45,10 @@ class TimingStats:
     """
     Scheduler timing (a SchedulerObserver), shared by every scheduler thread. One consumer turns it into a metrics
     payload at a time (see pipeline.output.MetricsReporter), since doing so resets it.
+
+    Pipelines are reported in the order of pipelines_by_name and stages in the order they run, never by how long they
+    took, so a display of the reports holds still. A pipeline is listed from its first run on, even through a report
+    in which it didn't run.
     """
     # Mapping (not dict) so callers can pass dicts of concrete Pipeline subtypes without variance errors.
     pipelines_by_name: Mapping[str, RunnablePipeline]
@@ -54,7 +56,10 @@ class TimingStats:
     idle_ns: int = 0
     writer_ns: int = 0
     pipeline_ns: dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    pipeline_max_ns: dict[str, int] = field(default_factory=lambda: defaultdict(int))
     ticks: dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    # Every pipeline that has run at all
+    seen: set[str] = field(default_factory=set)
     current_late_ns: dict[str, int] = field(default_factory=lambda: defaultdict(int))
     max_late_ns: dict[str, int] = field(default_factory=lambda: defaultdict(int))
     lock: threading.RLock = field(default_factory=threading.RLock)
@@ -71,7 +76,9 @@ class TimingStats:
     def on_pipeline_done(self, pipeline_name: str, elapsed_ns: int) -> None:
         with self.lock:
             self.pipeline_ns[pipeline_name] += elapsed_ns
+            self.pipeline_max_ns[pipeline_name] = max(self.pipeline_max_ns[pipeline_name], elapsed_ns)
             self.ticks[pipeline_name] += 1
+            self.seen.add(pipeline_name)
 
     def on_writer_done(self, elapsed_ns: int) -> None:
         with self.lock:
@@ -84,16 +91,22 @@ class TimingStats:
             total_ns = busy_ns + self.idle_ns
 
             pipelines = []
-            for name, ns in _by_total_desc(self.pipeline_ns):
-                timing = getattr(self.pipelines_by_name.get(name), "timing", None)
+            for name in [*self.pipelines_by_name, *sorted(self.seen - set(self.pipelines_by_name))]:
+                if name not in self.seen:
+                    continue
+                pipeline = self.pipelines_by_name.get(name)
+                timing = getattr(pipeline, "timing", None)
+                ns = self.pipeline_ns[name]
                 pipelines.append({
                     "name": name,
+                    "frequency": getattr(pipeline, "frequency", None),
                     "total_ms": ns / 1e6,
                     "avg_ms": ns / max(self.ticks[name], 1) / 1e6,
+                    "max_ms": self.pipeline_max_ns[name] / 1e6,
                     "ticks": self.ticks[name],
                     "late_now_ms": self.current_late_ns[name] / 1e6,
                     "late_max_ms": self.max_late_ns[name] / 1e6,
-                    "stages": timing.metrics_and_reset() if timing is not None else [],
+                    "stages": timing.metrics_and_reset(getattr(pipeline, "stage_names", None)) if timing else [],
                 })
 
             payload = {
@@ -106,6 +119,7 @@ class TimingStats:
             self.idle_ns = 0
             self.writer_ns = 0
             self.pipeline_ns.clear()
+            self.pipeline_max_ns.clear()
             self.ticks.clear()
             self.current_late_ns.clear()
             self.max_late_ns.clear()

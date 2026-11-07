@@ -14,9 +14,12 @@ class FakeOrchestratorClient:
         self.reason = None
         self.permission_error = None
         self.complete_error = None
+        self.heartbeat_error = None
 
-    def heartbeat(self, *, status="running", current_stage=None, status_message=None):
-        self.heartbeats.append((status, current_stage, status_message))
+    def heartbeat(self, *, status="running", status_message=None):
+        if self.heartbeat_error is not None:
+            raise self.heartbeat_error
+        self.heartbeats.append((status, status_message))
 
     def permission(self) -> WorkerPermission:
         if self.permission_error is not None:
@@ -34,12 +37,13 @@ class FakeOrchestratorClient:
         self.completions.append((success, message))
 
 
-def make_control(client) -> OrchestratedWorkerControl:
+def make_control(client, **kwargs) -> OrchestratedWorkerControl:
     return OrchestratedWorkerControl(
         client,
         heartbeat_interval_s=0.01,
         permission_interval_s=0.01,
         poll_interval_s=0.005,
+        **kwargs,
     )
 
 
@@ -58,11 +62,10 @@ class TestServerlessControl:
 
 
 class TestOrchestratedControlLoop:
-    def test_heartbeats_carry_stage_and_message(self):
+    def test_heartbeats_carry_the_message(self):
         client = FakeOrchestratorClient()
         control = make_control(client)
 
-        control.set_stage("ingress")
         control.set_message("warming up")
         control.start()
         try:
@@ -70,10 +73,7 @@ class TestOrchestratedControlLoop:
         finally:
             control.stop()
 
-        status, stage, message = client.heartbeats[0]
-        assert status == "running"
-        assert stage == "ingress"
-        assert message == "warming up"
+        assert client.heartbeats[0] == ("running", "warming up")
 
     def test_permission_denied_requests_stop(self):
         client = FakeOrchestratorClient()
@@ -87,7 +87,7 @@ class TestOrchestratedControlLoop:
         finally:
             control.stop()
 
-        assert control._snapshot()[1] == "Stop requested."
+        assert control._status_message == "Stop requested."
 
     def test_permission_denied_without_reason_gets_default_message(self):
         client = FakeOrchestratorClient()
@@ -100,7 +100,7 @@ class TestOrchestratedControlLoop:
         finally:
             control.stop()
 
-        assert control._snapshot()[1] == "Stop requested by server."
+        assert control._status_message == "Stop requested by server."
 
     def test_briefly_unreachable_server_is_tolerated(self):
         client = FakeOrchestratorClient()
@@ -121,7 +121,7 @@ class TestOrchestratedControlLoop:
     def test_server_unreachable_for_too_long_stops_the_worker(self):
         client = FakeOrchestratorClient()
         client.permission_error = requests.exceptions.ConnectionError("down")
-        control = make_control(client)
+        control = make_control(client, max_unreachable_polls=3)
 
         control.start()
         try:
@@ -129,7 +129,25 @@ class TestOrchestratedControlLoop:
         finally:
             control.stop()
 
-        assert control._snapshot()[1] == "Lost contact with the server."
+        assert control._status_message == "Lost contact with the server."
+
+    def test_an_unreachable_server_is_a_warning_not_a_traceback(self, caplog):
+        # A restarting server refuses connections; a hung one times out
+        for error in (requests.exceptions.ConnectionError("refused"), requests.exceptions.Timeout("slow")):
+            client = FakeOrchestratorClient()
+            client.permission_error = client.heartbeat_error = error
+            control = make_control(client, max_unreachable_polls=1000)
+            caplog.clear()
+
+            control.start()
+            try:
+                assert wait_until(lambda: "3 in a row" in caplog.text)
+            finally:
+                control.stop()
+
+            assert not control.should_stop()
+            assert "Worker control loop error" not in caplog.text
+            assert "Traceback" not in caplog.text
 
     def test_request_stop_works_without_server(self):
         control = make_control(FakeOrchestratorClient())
@@ -149,7 +167,7 @@ class TestOrchestratedControlLoop:
         finally:
             control.stop()
 
-        assert {status for status, _, _ in client.heartbeats} == {"stopping"}
+        assert {status for status, _ in client.heartbeats} == {"stopping"}
 
     def test_stop_joins_thread(self):
         client = FakeOrchestratorClient()

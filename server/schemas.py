@@ -46,12 +46,23 @@ class EventRead(BaseModel):
     sample_count: int
 
 
-class VehicleRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class VehicleCreate(BaseModel):
+    name: str
+    description: str | None = None
 
+
+class VehicleUpdate(BaseModel):
+    """ Only the fields sent change. """
+    name: str | None = None
+    description: str | None = None
+
+
+class VehicleRead(BaseModel):
     id: int
     name: str
     description: str | None
+    # A vehicle can only be deleted once it has none
+    event_count: int
 
 
 class PipelineEditionRead(BaseModel):
@@ -140,7 +151,6 @@ class WorkerRunRead(BaseModel):
     container_id: str | None
     container_name: str | None
 
-    current_stage: str | None
     status_message: str | None
     stop_requested: bool
     influx_connection_id: int | None
@@ -185,7 +195,6 @@ class SignalDataResponse(BaseModel):
 
 class WorkerHeartbeatRequest(BaseModel):
     status: WorkerStatus = WorkerStatus.RUNNING
-    current_stage: str | None = None
     status_message: str | None = None
     host: str | None = None
 
@@ -219,8 +228,10 @@ class StageMetric(BaseModel):
 
 class PipelineMetric(BaseModel):
     name: str
+    frequency: float | None = None  # Hz
     total_ms: float
     avg_ms: float
+    max_ms: float | None = None  # The slowest tick; not reported by workers built before it was
     ticks: int
     late_now_ms: float
     late_max_ms: float

@@ -61,14 +61,13 @@ server at all.
 
 ## `config`
 
-**Owns** reading the environment and `config/vehicles.toml`.
+**Owns** reading the environment, and loading what a worker needs from the database.
 
 - `Context` (`config/context.py`) reads connection details from the environment each time a property is accessed:
   `sunbeam_db`, `telemetry_db` (`SUNBEAM_INFLUX_*`, raising if one is unset), `sunbeam_server`, and the server's
   settings for the workers it launches. `TelemetryDB.as_env()` turns a connection back into those variables.
-- `VehicleManager` and `SignalManager` sync vehicles and each event's localized signals into the database at
-  server startup (create by name, never delete); `add_signals` does the same for one event when it's created or
-  edited.
+- `SignalManager` syncs each event's localized signals into the database at server startup (create by name, never
+  delete); `add_signals` does the same for one event when it's created or edited.
 - `load_event(engine, name)` (`config/events.py`) is how a worker reads its event, which exists only in the
   database. Its `EventConfig.is_past()` decides between replay and realtime.
 
@@ -93,7 +92,7 @@ frames are never dropped (a full queue blocks), a dead flush thread makes the ne
 
 | Table | Holds |
 |---|---|
-| `vehicle` | One row per car, from `config/vehicles.toml`. |
+| `vehicle` | One row per car, created in the dashboard. One with events can't be deleted. |
 | `event` | One per race or session, created in the dashboard. `stages` are the edition's stages it runs. `status` goes `unprocessed` → `ongoing` while a worker writes it → `processed` when that worker's writes finish, whether or not it succeeded (that's its `worker_run`'s status). At most one active run per event. |
 | `signal` | One per signal the event's date has a localization for, with unit, frequency and source. |
 | `worker_run` | One per worker, ever: what the server supervises. `kind` is `container` (launched) or `external` (registered itself). |
@@ -161,8 +160,8 @@ picks one.
 
 **The control loop.** `OrchestratedWorkerControl` runs one background thread that does all the talking to the
 server; schedulers only check `should_stop()`, an in-memory flag. About every second the thread polls
-`/permission` and sends a heartbeat with the current stage. A denied poll sets the flag; so does about ten failed
-polls in a row, so a blip doesn't end a run but a vanished server does. A local stop (a crashed ingress pipeline)
+`/permission` and sends a heartbeat with its status message. A denied poll sets the flag; so does a minute of failed
+polls in a row, so a server restart doesn't end a run but a vanished server does. A local stop (a crashed ingress pipeline)
 sets it too. Once stopping, heartbeats continue as `stopping` until the worker finishes, so the watchdog can tell
 winding down from dead. Separately, the scheduler's tick sends metrics (every 5 s realtime, 0.5 s replay). When the
 scheduler loop exits for any reason, `Executor.run()` waits for the writes to finish, then calls `complete()` exactly
@@ -174,9 +173,9 @@ once. A worker that dies without it is caught by the watchdog's heartbeat timeou
 
 ## `server`
 
-**Owns** the FastAPI process: the authoritative writer of `event`, `signal`, `worker_run` and `connection`, Docker
-container lifecycle, the `WatchdogService` that reconciles runs with their containers, and the telemetry query and
-stream routes. Its API reference is `/docs` on a running server.
+**Owns** the FastAPI process: the authoritative writer of `vehicle`, `event`, `signal`, `worker_run` and
+`connection`, Docker container lifecycle, the `WatchdogService` that reconciles runs with their containers, and the
+telemetry query and stream routes. Its API reference is `/docs` on a running server.
 
 **Contract**
 - Routes parse input, call a function in `server/services/`, and return. Services raise `LookupError` (404),

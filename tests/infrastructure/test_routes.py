@@ -309,13 +309,13 @@ class TestWorkerLifecycleRoutes:
 
         response = client.post(
             f"/workers/{worker_id}/heartbeat",
-            json={"status": "running", "current_stage": "ingress"},
+            json={"status": "running", "status_message": "ok"},
         )
 
         assert response.status_code == 200
         body = response.json()
         assert body["status"] == "running"
-        assert body["current_stage"] == "ingress"
+        assert body["status_message"] == "ok"
         assert body["last_heartbeat_at"] is not None
 
     def test_heartbeat_unknown_worker_is_404(self, client):

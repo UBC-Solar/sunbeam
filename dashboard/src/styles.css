@@ -194,6 +194,11 @@ tbody tr.clickable:hover {
   margin-bottom: 0.9rem;
 }
 
+/* Tabs in place of a card's title */
+.card-tabs {
+  margin-bottom: 0;
+}
+
 .tab {
   background: transparent;
   border: 1px solid transparent;
@@ -247,7 +252,7 @@ tbody tr.clickable:hover {
 }
 
 .drawer {
-  width: min(640px, 100%);
+  width: min(760px, 100%);
   height: 100%;
   background: var(--page);
   border-left: 1px solid var(--border);
@@ -263,9 +268,10 @@ tbody tr.clickable:hover {
   margin-bottom: 1.25rem;
 }
 
+/* Two label-value pairs per row; long values (the message, a failure) take a row to themselves */
 .drawer-meta {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
   gap: 0.3rem 1rem;
   font-size: 0.82rem;
   color: var(--text-secondary);
@@ -278,113 +284,25 @@ tbody tr.clickable:hover {
 .drawer-meta dd {
   margin: 0;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
 }
 
-.bar-row {
-  display: grid;
-  grid-template-columns: 120px 1fr auto;
-  align-items: center;
-  gap: 0.6rem;
-  font-size: 0.78rem;
-  margin-bottom: 0.45rem;
+.drawer-meta dt.wide {
+  grid-column: 1;
 }
 
-.bar-track {
-  position: relative;
-  height: 14px;
-  background: var(--gridline);
-  border-radius: 4px;
-  overflow: hidden;
+.drawer-meta dd.wide {
+  grid-column: 2 / -1;
 }
 
-.bar-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: 4px;
-  background: var(--accent);
-}
+@media (max-width: 600px) {
+  .drawer-meta {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
 
-.bar-fill.stage {
-  background: var(--text-muted);
-}
-
-.bar-value {
-  font-variant-numeric: tabular-nums;
-  color: var(--text-secondary);
-  min-width: 4.5rem;
-  text-align: right;
-}
-
-.split-bar {
-  display: flex;
-  height: 20px;
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--gridline);
-  gap: 2px;
-}
-
-.split-bar-segment {
-  height: 100%;
-}
-
-.legend {
-  display: flex;
-  gap: 1.1rem;
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-  margin-top: 0.4rem;
-}
-
-.legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.legend-swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-}
-
-.stage-list {
-  margin-left: 1.2rem;
-  padding-top: 0.2rem;
-}
-
-.log-viewer {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.75rem 0.9rem;
-  font-size: 0.76rem;
-  line-height: 1.5;
-  max-height: 360px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.log-line {
-  color: var(--text-secondary);
-}
-
-.log-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-bottom: 0.6rem;
-}
-
-.pill-toggle {
-  border-radius: 999px;
-}
-
-.pill-toggle.on {
-  background: var(--status-good);
-  border-color: var(--status-good);
-  color: #ffffff;
+  .drawer-meta dd.wide {
+    grid-column: 2;
+  }
 }
 
 .error-banner {
@@ -395,53 +313,6 @@ tbody tr.clickable:hover {
   padding: 0.6rem 0.9rem;
   font-size: 0.82rem;
   margin-bottom: 1rem;
-}
-
-.stat-row {
-  display: flex;
-  gap: 1.75rem;
-  margin-bottom: 1rem;
-}
-
-.stat-tile .stat-label {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.stat-tile .stat-value {
-  font-size: 1.3rem;
-  font-weight: 600;
-}
-.progress-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.45rem;
-  font-size: 0.82rem;
-}
-
-.progress-pct {
-  font-size: 1.3rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.progress-track {
-  height: 12px;
-  background: var(--accent-track);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 6px;
-  /* Ease between reports (twice a second) instead of jumping */
-  transition: width 0.4s ease-out;
 }
 
 .modal-overlay {
@@ -602,4 +473,238 @@ input[type="text"].mono, input[type="password"].mono {
 
 .default-star {
   color: var(--status-warning);
+}
+
+/* A running worker's metrics (TimingConsole): a dense, monospaced readout, like a CLI's status display */
+.console {
+  --segment: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.7;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.25rem 0.9rem;
+}
+
+.console-section {
+  padding: 0.6rem 0;
+}
+
+.drawer-section {
+  margin: 1.5rem 0;
+}
+
+.console-section + .console-section {
+  border-top: 1px dashed var(--baseline);
+}
+
+.console-line {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  white-space: nowrap;
+}
+
+.console-stats {
+  gap: 1.4rem;
+  flex-wrap: wrap;
+}
+
+.console-label {
+  width: 6ch;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.68rem;
+}
+
+.console-dim {
+  color: var(--text-muted);
+}
+
+.console-strong {
+  font-weight: 600;
+  min-width: 6ch;
+}
+
+.console-warn {
+  color: var(--status-warning);
+}
+
+/* Whole segments, filled from the left, so a bar reads like block characters */
+.console-bar {
+  flex: none;
+  width: calc(24 * var(--segment));
+  height: 0.7rem;
+  background: repeating-linear-gradient(90deg, var(--gridline) 0 4px, transparent 4px var(--segment));
+}
+
+.console-bar-fill {
+  display: block;
+  height: 100%;
+  background: repeating-linear-gradient(90deg, var(--accent) 0 4px, transparent 4px var(--segment));
+}
+
+.console-bar-fill.dim {
+  background: repeating-linear-gradient(90deg, var(--text-muted) 0 4px, transparent 4px var(--segment));
+}
+
+/* name | avg | max | share bar | share %: fixed columns, so nothing can overlap */
+.console-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8ch 8ch calc(24 * var(--segment)) 5ch;
+  align-items: center;
+  column-gap: 1.5ch;
+}
+
+/* Same font size as the rows: the columns are measured in ch, which a smaller font would shrink */
+.console-row.header {
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.console-row.pipeline {
+  margin-top: 0.35rem;
+  font-weight: 600;
+}
+
+.console-row.stage {
+  color: var(--text-secondary);
+}
+
+.console-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console-tree {
+  color: var(--text-muted);
+  margin: 0 1ch 0 0.5ch;
+}
+
+.console-num {
+  text-align: right;
+}
+
+/* A worker's logs (LogTerminal): always dark, like a terminal, whatever the dashboard's theme */
+.terminal {
+  --term-bg: #0e1014;
+  --term-bar: #161920;
+  --term-rule: #242833;
+  --term-text: #d6dbe3;
+  --term-dim: #5d6573;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  background: var(--term-bg);
+  color: var(--term-text);
+  border: 1px solid var(--term-rule);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem 0.4rem 0.8rem;
+  background: var(--term-bar);
+  border-bottom: 1px solid var(--term-rule);
+  color: var(--term-dim);
+}
+
+.terminal-bar .spacer {
+  flex: 1;
+}
+
+.terminal-button {
+  font: inherit;
+  background: transparent;
+  color: #a9b1be;
+  border: 1px solid var(--term-rule);
+  border-radius: 4px;
+  padding: 0.1rem 0.55rem;
+}
+
+.terminal-button:hover:not(:disabled) {
+  border-color: #3a4050;
+  color: var(--term-text);
+}
+
+.terminal-button.on {
+  color: #4ade80;
+  border-color: #24533a;
+}
+
+.terminal-body {
+  max-height: 440px;
+  overflow-y: auto;
+  padding: 0.5rem 0;
+  line-height: 1.6;
+  scrollbar-color: #2c313c transparent;
+}
+
+.terminal-body ::selection {
+  background: #2a4a7a;
+}
+
+/* time | level | logger and message, the message wrapping under itself */
+.term-line {
+  display: grid;
+  grid-template-columns: 12ch 3ch minmax(0, 1fr);
+  column-gap: 1.5ch;
+  padding: 0 0.8rem;
+}
+
+.term-line.level-WARNING {
+  background: rgba(251, 191, 36, 0.06);
+}
+
+.term-line.level-ERROR,
+.term-line.level-CRITICAL {
+  background: rgba(248, 113, 113, 0.09);
+}
+
+.term-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.term-time,
+.term-dim {
+  color: var(--term-dim);
+}
+
+.term-dim {
+  padding: 0 0.8rem;
+}
+
+.term-level {
+  font-weight: 600;
+}
+
+.term-level.level-DEBUG { color: #6b7280; }
+.term-level.level-INFO { color: #60a5fa; }
+.term-level.level-WARNING { color: #fbbf24; }
+.term-level.level-ERROR { color: #f87171; }
+.term-level.level-CRITICAL { color: #0e1014; background: #f87171; }
+
+.term-logger {
+  color: #a78bfa;
+}
+
+.term-key {
+  color: #7d8593;
+}
+
+.term-ok {
+  color: #4ade80;
+}
+
+.term-bad,
+.term-error-text {
+  color: #fca5a5;
 }

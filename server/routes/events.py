@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from db.sunbeamdb.models import TERMINAL_WORKER_STATUSES, Event, Vehicle, WorkerRun
+from db.sunbeamdb.models import TERMINAL_WORKER_STATUSES, Event, WorkerRun
 from server.deps import get_db
-from server.schemas import EventCreate, EventRead, EventUpdate, VehicleRead
+from server.schemas import EventCreate, EventRead, EventUpdate
 from server.services import event_service
 from server.services.sample_counts import SampleCounts
 from stage.stage_library import StageLibrary
@@ -102,12 +102,3 @@ def _event_read(event: Event, running: bool, sample_count: int) -> EventRead:
         running=running,
         sample_count=sample_count,
     )
-
-
-vehicles_router = APIRouter(prefix="/vehicles", tags=["events"])
-
-
-@vehicles_router.get("", response_model=list[VehicleRead])
-def list_vehicles(db: Session = Depends(get_db)):
-    """ The vehicles an event can belong to, synced from config/vehicles.toml at startup. """
-    return db.scalars(select(Vehicle).order_by(Vehicle.name)).all()

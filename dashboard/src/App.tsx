@@ -3,9 +3,11 @@ import {
   Connection,
   Event,
   LaunchOptions,
+  Vehicle,
   WorkerRun,
   getConnections,
   getEvents,
+  getVehicles,
   getWorkers,
   launchWorker,
   stopWorker,
@@ -20,6 +22,7 @@ function App() {
   const [events, setEvents] = useState<Event[]>([]);
   const [workers, setWorkers] = useState<WorkerRun[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [launchingEvent, setLaunchingEvent] = useState<Event | null>(null);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
 
@@ -28,15 +31,17 @@ function App() {
 
   async function refresh() {
     try {
-      const [eventsData, workersData, connectionsData] = await Promise.all([
+      const [eventsData, workersData, connectionsData, vehiclesData] = await Promise.all([
         getEvents(),
         getWorkers(),
         getConnections(),
+        getVehicles(),
       ]);
 
       setEvents(eventsData);
       setWorkers(workersData);
       setConnections(connectionsData);
+      setVehicles(vehiclesData);
       setError(null);
       setLoaded(true);
     } catch (err) {
@@ -78,6 +83,7 @@ function App() {
         <>
           <EventsPanel
             events={events}
+            vehicles={vehicles}
             canLaunch={connections.length > 0}
             onLaunch={setLaunchingEvent}
             onChanged={refresh}
