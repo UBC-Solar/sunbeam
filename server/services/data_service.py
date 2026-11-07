@@ -20,8 +20,8 @@ from db.sunbeamdb.models import Event, Sample, Signal
 
 logger = logging.getLogger("sunbeam.server")
 
-# 10 hours of a 10 Hz signal.
-MAX_POINTS = 360_000
+# What a query returns at most unless it asks otherwise: 10 hours of a 10 Hz signal.
+DEFAULT_LIMIT = 360_000
 
 # Safety bound on rows fetched by a single stream poll.
 STREAM_POLL_ROW_LIMIT = 10_000
@@ -138,14 +138,14 @@ def query_samples(
     signal: Signal,
     start: Optional[datetime],
     end: Optional[datetime],
-    limit: int = MAX_POINTS,
+    limit: int | None = DEFAULT_LIMIT,
 ) -> tuple[list[int], list[Optional[float]], bool]:
     """
     Samples for one signal in [start, end), ascending; a None bound is
     unbounded. When the window holds more than `limit` rows, the MOST RECENT
     `limit` are returned and the truncated flag is set, so a client wanting
     everything pages backwards by passing the earliest timestamp it got as
-    the next request's end.
+    the next request's end. A None limit returns the whole window.
     """
     stmt = select(Sample.ts, Sample.value_f64).where(
         Sample.event_id == signal.event_id,
@@ -155,11 +155,15 @@ def query_samples(
         stmt = stmt.where(Sample.ts >= start)
     if end is not None:
         stmt = stmt.where(Sample.ts < end)
-    stmt = stmt.order_by(Sample.ts.desc()).limit(limit + 1)
+
+    # Newest first, so a limit keeps the most recent; one extra row tells whether anything was cut
+    stmt = stmt.order_by(Sample.ts.desc())
+    if limit is not None:
+        stmt = stmt.limit(limit + 1)
 
     rows = list(db.execute(stmt).all())
 
-    truncated = len(rows) > limit
+    truncated = limit is not None and len(rows) > limit
     if truncated:
         rows = rows[:limit]
 

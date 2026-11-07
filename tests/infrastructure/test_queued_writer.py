@@ -1,6 +1,9 @@
 import threading
+import time
 
-from db.sunbeamdb.queued_writer import QueuedEventWriter
+import pytest
+
+from db.sunbeamdb.queued_writer import QueuedEventWriter, WriterThreadError
 
 
 class FakeBatchWriter:
@@ -127,3 +130,50 @@ class TestQueuedEventWriter:
         writer.close()
 
         assert inner.batches == []
+
+
+class SlowBatchWriter(FakeBatchWriter):
+    def write_frames(self, frames):
+        time.sleep(0.2)
+        super().write_frames(frames)
+
+
+class TestWaitUntilWritten:
+    def test_returns_once_everything_queued_is_written(self):
+        inner = SlowBatchWriter()
+        writer = QueuedEventWriter(inner, batch_size=2, flush_interval_s=0.01)
+
+        try:
+            for i in range(4):
+                writer.write_frame(f"frame-{i}")
+            writer.wait_until_written(poll_s=0.01)
+
+            assert sum(len(batch) for batch in inner.batches) == 4
+        finally:
+            writer.close()
+
+    def test_gives_up_when_told_to_stop(self):
+        inner = SlowBatchWriter()
+        writer = QueuedEventWriter(inner, batch_size=1, flush_interval_s=0.01)
+
+        try:
+            for i in range(10):
+                writer.write_frame(f"frame-{i}")
+            start = time.monotonic()
+            writer.wait_until_written(should_stop=lambda: True, poll_s=0.01)
+
+            assert time.monotonic() - start < 0.2
+        finally:
+            writer.close()
+
+    @pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")  # the thread dies on purpose
+    def test_raises_if_the_writer_thread_died(self):
+        class FailingWriter(FakeBatchWriter):
+            def write_frames(self, frames):
+                raise RuntimeError("database gone")
+
+        writer = QueuedEventWriter(FailingWriter(), batch_size=1, flush_interval_s=0.01)
+        writer.write_frame("frame")
+
+        with pytest.raises(WriterThreadError):
+            writer.wait_until_written(poll_s=0.01)

@@ -27,6 +27,17 @@ def clock():
 
 
 class TestReplayProgress:
+    def test_clock_is_times_within_one_day(self, clock):
+        progress = ReplayProgress(START, END, monotonic=clock)
+
+        assert progress.clock == "15:00:00 / 16:00:00 UTC"
+
+    def test_clock_has_dates_for_a_window_over_days(self, clock):
+        progress = ReplayProgress(START, START + timedelta(days=4), monotonic=clock)
+        progress.update(START + timedelta(days=1))
+
+        assert progress.clock == "2024-07-17 15:00:00 / 2024-07-20 15:00:00 UTC"
+
     def test_starts_at_zero_with_unknown_speed(self, clock):
         progress = ReplayProgress(START, END, monotonic=clock)
 

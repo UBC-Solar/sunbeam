@@ -33,7 +33,9 @@ def query_signal_data(
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
     last_seconds: Optional[float] = None,
-    limit: int = Query(default=data_service.MAX_POINTS, ge=1, le=data_service.MAX_POINTS),
+    limit: int = Query(
+        default=data_service.DEFAULT_LIMIT, ge=0, description="The most samples to return; 0 for no limit.",
+    ),
     db: Session = Depends(get_db),
 ):
     """
@@ -51,8 +53,9 @@ def query_signal_data(
     of the window is reported as the event's own start (or end, or now for a live event).
 
     Timestamps are epoch milliseconds. More than `limit` samples returns the most recent `limit` with
-    `truncated: true`: to get everything, page backwards by passing the earliest timestamp as the next `end`
-    (what data_tools' `SunbeamClient.get_time_series` does).
+    `truncated: true`. To get everything, pass `limit=0` for the whole window in one response (which can be large),
+    or page backwards by passing the earliest timestamp as the next `end` (what data_tools'
+    `SunbeamClient.get_time_series` does).
     """
     try:
         window_start, window_end = data_service.resolve_time_window(
@@ -64,7 +67,7 @@ def query_signal_data(
     signal = data_service.get_signal(db, event_name, signal_name)
 
     timestamps, values, truncated = data_service.query_samples(
-        db, signal, window_start, window_end, limit=limit
+        db, signal, window_start, window_end, limit=limit or None
     )
 
     # An unbounded side of the window reports the event's own bound

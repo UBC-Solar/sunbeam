@@ -97,6 +97,22 @@ class TestQueryEndpoint:
         assert body["truncated"] is True
         assert body["values"] == [6.0, 7.0, 8.0, 9.0]
 
+    def test_limit_zero_returns_everything(self, api_client, session_factory, seeded_event):
+        seed_samples(session_factory, seeded_event, count=10)
+
+        body = api_client.get(self.url(seeded_event), params={"limit": 0}).json()
+
+        assert body["truncated"] is False
+        assert body["values"] == [float(i) for i in range(10)]
+
+    def test_limit_has_no_maximum(self, api_client, seeded_event):
+        response = api_client.get(self.url(seeded_event), params={"limit": 10_000_000})
+
+        assert response.status_code == 200
+
+    def test_negative_limit_is_422(self, api_client, seeded_event):
+        assert api_client.get(self.url(seeded_event), params={"limit": -1}).status_code == 422
+
     def test_both_modes_is_422(self, api_client, seeded_event):
         response = api_client.get(
             self.url(seeded_event),

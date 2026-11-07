@@ -239,6 +239,23 @@ class TestExecutorReplay:
         assert control.completions == [(True, "Pipeline completed.")]
         assert writer.closed
 
+    def test_fetched_telemetry_is_written_before_the_replay_starts(self, fake_clock):
+        events = []
+
+        class WaitingWriter(RecordingWriter):
+            def wait_until_written(self, should_stop):
+                events.append(("waited", len(self.frames)))
+
+        compute = [FakePipeline("compute", 5.0)]
+        executor, writer, control, _ = make_replay_executor(fake_clock, writer=WaitingWriter(), compute=compute)
+
+        executor.run()
+
+        # Only the ingress frame had been written when it waited; the compute ticks came after
+        assert events == [("waited", 1)]
+        assert "Writing the fetched telemetry to the database" in control.messages
+        assert compute[0].run_count > 0
+
     def test_replay_is_trimmed_to_the_telemetry(self, fake_clock):
         executor, writer, control, compute = make_replay_executor(fake_clock, ingress_length_s=5.0)
 

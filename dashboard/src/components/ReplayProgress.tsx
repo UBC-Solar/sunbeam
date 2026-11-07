@@ -1,7 +1,9 @@
 import {ReplayProgress} from "../api";
 
-function utcClock(iso: string): string {
-  return new Date(iso).toISOString().slice(11, 19);
+// "17:41:06", or "2024-07-17 17:41:06" when the replay spans more than one day
+function utcClock(iso: string, withDate: boolean): string {
+  const text = new Date(iso).toISOString();
+  return withDate ? `${text.slice(0, 10)} ${text.slice(11, 19)}` : text.slice(11, 19);
 }
 
 function fmtSeconds(seconds: number | null): string {
@@ -19,13 +21,14 @@ function fmtSeconds(seconds: number | null): string {
 
 export function ReplayProgressBar({replay}: {replay: ReplayProgress}) {
   const pct = Math.max(0, Math.min(100, replay.fraction * 100));
+  const withDate = replay.start.slice(0, 10) !== replay.end.slice(0, 10);
 
   return (
     <div>
       <div className="progress-header">
         <span className="progress-pct">{pct.toFixed(1)}%</span>
         <span className="text-secondary mono">
-          {utcClock(replay.current)} / {utcClock(replay.end)} UTC
+          {utcClock(replay.current, withDate)} / {utcClock(replay.end, withDate)} UTC
         </span>
       </div>
 

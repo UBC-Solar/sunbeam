@@ -48,6 +48,12 @@ class ReplayProgress:
         speed = self.speed
         return (self.total_s - self.processed_s) / speed if speed else None
 
+    @property
+    def clock(self) -> str:
+        """ ``17:41:06 / 21:53:49 UTC``, with dates when the window spans more than one day. """
+        time_format = "%H:%M:%S" if self.start.date() == self.end.date() else "%Y-%m-%d %H:%M:%S"
+        return f"{self.current.strftime(time_format)} / {self.end.strftime(time_format)} UTC"
+
     def snapshot(self) -> dict:
         """ The progress as a JSON-ready dict, the ``replay`` field of a worker's metrics report. """
         return {

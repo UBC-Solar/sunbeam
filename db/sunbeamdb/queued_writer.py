@@ -1,6 +1,7 @@
 import queue
 import threading
 import time
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from state.frame import FrameView
@@ -73,6 +74,17 @@ class QueuedEventWriter:
             "avg_flush_ms": (self._flush_ns_total / batches / 1e6) if batches else 0.0,
             "max_flush_ms": self._flush_ns_max / 1e6,
         }
+
+    def wait_until_written(self, should_stop: Callable[[], bool] = lambda: False, poll_s: float = 0.1) -> None:
+        """
+        Block until every frame queued so far is in the database, or should_stop() says to give up waiting.
+
+        :raises WriterThreadError: The writer thread died
+        """
+        while self._frames_written < self._frames_enqueued and not should_stop():
+            self._raise_if_failed()
+            time.sleep(poll_s)
+        self._raise_if_failed()
 
     def close(self, timeout_s: float | None = None):
         """

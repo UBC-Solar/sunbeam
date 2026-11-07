@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import select, text
@@ -69,3 +69,40 @@ class TestEventWriterOnHypertable:
         assert all(sample.ts == ts for sample in samples)
         assert all(sample.ts.tzinfo is not None for sample in samples)
         assert event.status == EventStatus.PROCESSED
+
+    def test_timeseries_and_plain_values_load_together(self, pg_engine, pg_seeded_event):
+        """ A replay's flush: its fetched telemetry (TimeSeries) and computed values, in one COPY. """
+        import numpy as np
+        from data_tools.collections import TimeSeries
+
+        start = datetime(2026, 7, 1, 12, 0, 0, tzinfo=timezone.utc)
+        series = TimeSeries(
+            np.arange(11, dtype=float), start_time=start, stop_time=start + timedelta(seconds=1),
+            period=0.1, length=1.0, units="",
+        )
+        writer = EventWriter(pg_seeded_event.event_name, pg_engine)
+
+        writer.write_frames([FrameView(start, {"speed": series}), FrameView(start, {"power": 200.0})])
+        writer.close()
+
+        with Session(pg_engine) as session:
+            speed = session.scalars(
+                select(Sample).where(Sample.signal_id == pg_seeded_event.signal_ids["speed"]).order_by(Sample.ts)
+            ).all()
+            power = session.scalars(select(Sample).where(Sample.signal_id == pg_seeded_event.signal_ids["power"])).all()
+
+        assert [sample.value_f64 for sample in speed] == [float(i) for i in range(11)]
+        assert (speed[0].ts, speed[-1].ts) == (start, start + timedelta(seconds=1))
+        assert [(sample.ts, sample.value_f64) for sample in power] == [(start, 200.0)]
+
+    def test_a_failed_write_leaves_nothing_behind(self, pg_engine, pg_seeded_event):
+        writer = EventWriter(pg_seeded_event.event_name, pg_engine)
+        ts = datetime(2026, 7, 1, 12, 0, 1, tzinfo=timezone.utc)
+        writer.write_frame(FrameView(ts, {"speed": 1.0}))
+
+        # The same sample again breaks the primary key, so the whole COPY rolls back, including the new one
+        with pytest.raises(Exception, match="duplicate key"):
+            writer.write_frames([FrameView(ts, {"power": 2.0}), FrameView(ts, {"speed": 1.0})])
+
+        with Session(pg_engine) as session:
+            assert len(session.scalars(select(Sample)).all()) == 1

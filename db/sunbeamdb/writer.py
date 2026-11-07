@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+
 import numpy as np
 import pandas as pd
 from data_tools.collections import TimeSeries
@@ -7,8 +9,32 @@ from sqlalchemy.orm import Session
 from db.sunbeamdb.models import Event, EventStatus, Sample, Signal
 from state.frame import FrameView
 
+# The sample columns every row gives, in this order. Taken from the model, so renaming one fails here, not in the
+# database.
+SAMPLE_COLUMNS = (
+    Sample.__table__.c.event_id,
+    Sample.__table__.c.signal_id,
+    Sample.__table__.c.ts,
+    Sample.__table__.c.value_f64,
+)
+
+# Postgres's bulk-loading command: "read rows for these columns from the client" (see EventWriter)
+COPY_SAMPLES = f"COPY {Sample.__tablename__} ({', '.join(column.name for column in SAMPLE_COLUMNS)}) FROM STDIN"
+
+SampleRow = tuple[int, int, object, float]  # event_id, signal_id, ts (a datetime), value_f64
+
 
 class EventWriter:
+    """
+    Writes one event's samples: what the worker's stages (and, in a replay, its ingress) produce.
+
+    Samples are loaded with Postgres's COPY rather than INSERT. Postgres executes an INSERT one row at a time, even
+    when SQLAlchemy sends thousands at once, and that is the limit on how fast a replay can run (about 20k rows/s,
+    whatever the batching). COPY streams the rows into the table and is 3-4 times faster. SQLAlchemy has no COPY
+    construct, so _write_rows uses the psycopg connection underneath SQLAlchemy's for that one statement; everything
+    else here is ordinary SQLAlchemy.
+    """
+
     def __init__(self, event_name: str, engine: Engine, reprocess: bool = False):
         """
         Marks the event ONGOING; close() marks it PROCESSED.
@@ -48,45 +74,49 @@ class EventWriter:
         self.write_frames([frame])
 
     def write_frames(self, frames: list[FrameView]):
-        """ Writes scalar values with one bulk insert, and every TimeSeries value with its own COPY. """
-        rows = []
+        """ Writes every value in the frames, in one transaction. """
+        if frames:
+            self._write_rows(self._rows(frames))
 
+    def _rows(self, frames: list[FrameView]) -> Iterator[SampleRow]:
+        """
+        One row per value: a plain value is the sample at its frame's timestamp, while a TimeSeries (a replay's
+        fetched telemetry) holds a whole signal's samples, each at its own timestamp. Generated lazily, since a
+        TimeSeries can hold millions.
+        """
         for frame in frames:
             for signal, value in frame:
+                signal_id = self._signal_names_to_id[signal]
+
                 if isinstance(value, TimeSeries):
-                    self.write_series(signal, value)
+                    timestamps = pd.to_datetime(value.unix_x_axis, unit="s", utc=True).to_pydatetime()
+                    values = np.asarray(value, dtype=float).tolist()
+                    for ts, sample in zip(timestamps, values, strict=True):
+                        yield self._event_id, signal_id, ts, sample
                 else:
-                    rows.append({
-                        "event_id": self._event_id,
-                        "ts": frame.timestamp,
-                        "signal_id": self._signal_names_to_id[signal],
-                        "value_f64": float(value),
-                    })
+                    yield self._event_id, signal_id, frame.timestamp, float(value)
 
-        if not rows:
-            return
-
-        with Session(self._engine) as session:
-            session.execute(insert(Sample), rows)
-            session.commit()
-
-    def write_series(self, signal: str, series: TimeSeries):
-        """ Bulk-loads every sample of a TimeSeries with COPY.
-
-        SQLAlchemy has no COPY construct, and its bulk insert() is ~2x slower here and holds the GIL long
-        enough to noticeably slow the compute thread, so this drops to psycopg's COPY on a SQLAlchemy-managed
-        connection: engine.begin() still owns the transaction (commit/rollback) and returning it to the pool.
+    def _write_rows(self, rows: Iterator[SampleRow]) -> None:
         """
-        signal_id = self._signal_names_to_id[signal]
-        timestamps = pd.to_datetime(series.unix_x_axis, unit="s", utc=True).to_pydatetime()
-        values = np.asarray(series, dtype=float).tolist()
+        Insert the rows into sample with COPY, in one transaction.
 
+        `engine.begin()` works as for any query: it commits when the block ends (or rolls back if it raises) and
+        returns the connection to the pool. Inside it, `connection.connection.driver_connection` is the psycopg
+        connection SQLAlchemy is using, and psycopg's `cursor.copy()` sends each row given to `write_row`.
+
+        The default tests run on SQLite, which has no COPY; there, the rows go in with an ordinary bulk insert().
+        """
         with self._engine.begin() as connection:
-            driver_connection = connection.connection.driver_connection
-            assert driver_connection is not None, "COPY needs a live psycopg connection"
+            if connection.dialect.name != "postgresql":
+                columns = [column.name for column in SAMPLE_COLUMNS]
+                values = [dict(zip(columns, row)) for row in rows]
+                if values:
+                    connection.execute(insert(Sample), values)
+                return
 
-            with driver_connection.cursor() as cursor, cursor.copy(
-                f"COPY {Sample.__tablename__} (event_id, signal_id, ts, value_f64) FROM STDIN"
-            ) as copy:
-                for ts, value in zip(timestamps, values, strict=True):
-                    copy.write_row((self._event_id, signal_id, ts, value))
+            psycopg_connection = connection.connection.driver_connection
+            assert psycopg_connection is not None, "COPY needs an open psycopg connection"
+
+            with psycopg_connection.cursor() as cursor, cursor.copy(COPY_SAMPLES) as copy:
+                for row in rows:
+                    copy.write_row(row)

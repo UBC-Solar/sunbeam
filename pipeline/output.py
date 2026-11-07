@@ -110,10 +110,9 @@ class MetricsReporter:
     def _log(self, payload: dict) -> None:
         if self._replay is not None:
             logger.info(
-                "replay %.1f%% %s / %s UTC %s realtime, eta %s",
+                "replay %.1f%% %s %s realtime, eta %s",
                 100 * self._replay.fraction,
-                f"{self._replay.current:%H:%M:%S}",
-                f"{self._replay.end:%H:%M:%S}",
+                self._replay.clock,
                 format_speed(self._replay.speed),
                 format_duration(self._replay.eta_s),
             )
@@ -250,7 +249,7 @@ class RichReplayOutputManager:
         self._progress.update(
             self._task,
             completed=replay.processed_s,
-            clock=f"{replay.current:%H:%M:%S} / {replay.end:%H:%M:%S} UTC",
+            clock=replay.clock,
             speed=format_speed(replay.speed),
             eta=format_duration(replay.eta_s),
             queue=queue,

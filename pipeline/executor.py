@@ -287,17 +287,28 @@ class Executor:
         if bounds is None:
             raise RuntimeError("No telemetry found for the event window; nothing to process.")
 
+        # The fetched telemetry is queued to be written as raw samples. Let it finish first: the replay's own writes
+        # would queue behind it anyway, stalling the first tick (and every report) until it's done.
+        wait_until_written = getattr(self._writer, "wait_until_written", None)
+        if wait_until_written is not None:
+            self._control.set_message("Writing the fetched telemetry to the database")
+            logger.info("Writing the fetched telemetry to the database.")
+            write_start = time.monotonic()
+            wait_until_written(self._should_stop)
+            logger.info("Wrote the fetched telemetry in %.1f s.", time.monotonic() - write_start)
+
         start, end = bounds
         scheduler = ReplayScheduler(
             self._pipelines, observer=self._timing,
             now_wall=start, end_wall=end, monotonic_ns=self._monotonic_ns,
         )
 
+        window = f"{start:%Y-%m-%d %H:%M:%S} -> {end:%Y-%m-%d %H:%M:%S} UTC"
         wall_start = time.monotonic()
-        logger.info("Starting replay of %s -> %s.", f"{start:%H:%M:%S}", f"{end:%H:%M:%S}")
-        self._control.set_message(f"Replaying {start:%Y-%m-%d %H:%M:%S} -> {end:%H:%M:%S} UTC")
+        logger.info("Starting replay of %s.", window)
+        self._control.set_message(f"Replaying {window}")
         self._run_scheduler(scheduler, self._output_managers(ReplayProgress(start, end)))
-        logger.info("Replayed %s -> %s in %.1f s.", f"{start:%H:%M:%S}", f"{end:%H:%M:%S}", time.monotonic() - wall_start)
+        logger.info("Replayed %s in %.1f s.", window, time.monotonic() - wall_start)
 
     def _run_realtime(self) -> None:
         # One scheduler (and one thread) per ingress pipeline: ingress runs are blocking I/O, so a slow query in one
