@@ -25,18 +25,39 @@ installs the `server` extra.
 ## Processes
 
 ```
- Dashboard ── HTTP + SSE ──► Server ◄── Docker API ──► Docker daemon
-                              ▲   │                       │ runs
-                     register,│   │ events, workers,      ▼
-          heartbeat, permission,  │ connections        Worker ── reads raw CAN ──► InfluxDB
-               complete, metrics  ▼                       │
-                              Postgres ◄── samples ───────┘
+                                                  ┌──────────────────────┐
+                                                  │  Dashboard / other   │
+                                                  │  HTTP clients        │
+                                                  └──────────┬───────────┘
+                                                             │  HTTP + SSE: /events, /workers,
+                                                             │  /events/{name}/data (query + stream)
+                                                             ▼
+┌──────────────────┐     HTTP: register,          ┌───────────────────────┐  Docker API: launch,
+│     Worker       │     heartbeat,               │       Server          │  inspect logs, kill    ┌────────────────┐
+│  (sunbeam.py,    │◄─── permission, ──────────►  │   (server/, one       │◄──────────────────────►│  Docker daemon │
+│  one process     │     complete, metrics        │    FastAPI process)   │                        └────────────────┘
+│  per running     │     (skipped entirely        └─────────┬─────────────┘
+│  event)          │     in --serverless mode)              │
+└───┬───────────┬──┘                                        │ reads/writes vehicles, events,
+    │           │                                           │ signals, worker runs, connections
+    │           │  writes sample rows;                      ▼
+    │           │  reads for preflight checks    ┌───────────────────────────┐
+    │           └───────────────────────────────►│  Postgres / TimescaleDB   │
+    │                                            └───────────────────────────┘
+    │  reads raw CAN
+    ▼
+┌────────────────────────┐
+│      InfluxDB          │
+│  (via Tailscale VPN)   │
+└────────────────────────┘
 ```
 
-A launched worker is a container the server starts, inspects and kills through Docker; inside, it talks to
-Postgres, InfluxDB and the server like any other worker. The server and workers each connect to Postgres directly:
-samples never pass through the server. See [`USAGE.md`](USAGE.md#the-three-ways-a-cli-worker-can-run) for the three
-ways a worker can run, including with no server at all.
+A worker launched from the dashboard is a container the Docker daemon runs for the server: the Docker API arrow is
+how the server starts, inspects and kills it, and the worker inside still talks to Postgres, InfluxDB and the server
+as drawn. The server and workers each connect to Postgres directly: samples never pass through the server. The calls
+behind the worker-server arrow are described in [`orchestration`](#orchestration) below. See
+[`USAGE.md`](USAGE.md#the-three-ways-a-cli-worker-can-run) for the three ways a worker can run, including with no
+server at all.
 
 ## `config`
 
@@ -64,8 +85,9 @@ ways a worker can run, including with no server at all.
 writing samples, and reading InfluxDB (`db/telemetrydb/`: `RealtimeIngressQuerier` for the latest values,
 `OfflineIngressQuerier` for a whole window, and the connection check the server and worker preflight share).
 
-`EventWriter` bulk-inserts a frame's values, and loads a replay's `TimeSeries` with `COPY`; with `reprocess=True`
-it first deletes the event's samples. `QueuedEventWriter` puts a bounded queue and flush thread in front of it:
+`EventWriter` loads samples with Postgres's `COPY`, 3-4 times faster than any `INSERT` (its docstring explains how,
+for anyone who knows only SQLAlchemy); on SQLite, in the tests, it uses a plain bulk insert. With `reprocess=True` it
+first deletes the event's samples. `QueuedEventWriter` puts a bounded queue and flush thread in front of it:
 frames are never dropped (a full queue blocks), a dead flush thread makes the next write or `close()` raise
 `WriterThreadError`, and `close()` waits for everything queued.
 
