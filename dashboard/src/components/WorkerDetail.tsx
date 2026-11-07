@@ -217,7 +217,7 @@ export function WorkerDetail({worker, events, onClose, onStop}: WorkerDetailProp
 
           {isActive && metrics && (
             <>
-              <BusyIdleMeter idlePct={metrics.idle_pct} busyPct={metrics.busy_pct} />
+              <BusyIdleMeter busyPct={metrics.busy_pct} />
               <p className="text-muted" style={{fontSize: "0.75rem", margin: "0.6rem 0 1rem"}}>
                 Reported {formatRelative(metrics.reported_at)} · writer {metrics.writer_ms.toFixed(2)} ms
               </p>

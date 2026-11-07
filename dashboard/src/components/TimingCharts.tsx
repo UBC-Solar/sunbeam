@@ -5,7 +5,7 @@ function fmtMs(ms: number): string {
   return `${ms.toFixed(ms < 10 ? 2 : 1)} ms`;
 }
 
-export function BusyIdleMeter({idlePct, busyPct}: {idlePct: number; busyPct: number}) {
+export function BusyIdleMeter({busyPct}: {busyPct: number}) {
   const busy = Math.max(0, Math.min(100, busyPct));
   const idle = Math.max(0, 100 - busy);
 

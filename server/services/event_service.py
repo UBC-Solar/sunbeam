@@ -12,7 +12,7 @@ from db.sunbeamdb.models import Event, EventStatus, Sample, Signal, Vehicle, Wor
 from db.timeutil import as_utc
 from server.errors import Conflict
 from server.services.worker_service import check_no_active_run
-from stage.stage_library import StageLibrary
+from stage.stage_library import INGRESS_STAGES, StageLibrary
 
 EDITABLE_FIELDS = ("name", "vehicle_id", "description", "starts_at", "ends_at", "pipeline_edition", "stages")
 # The rest can't be cleared
@@ -114,10 +114,11 @@ def _apply_and_check(db: Session, event: Event, fields: dict) -> None:
     if event.pipeline_edition not in StageLibrary().pipeline_editions:
         raise ValueError(f"Unknown pipeline edition {event.pipeline_edition!r}.")
 
-    available = StageLibrary(event.pipeline_edition).stage_names
+    # Stages the server's own copy of the code doesn't have are allowed: they may exist in a git ref the event will be
+    # launched from (trying out a new stage). A worker without them fails, saying so.
+    event.stages = list(dict.fromkeys(stage.strip() for stage in event.stages if stage.strip()))
     if not event.stages:
         raise ValueError("Choose at least one stage.")
-    unknown = [stage for stage in event.stages if stage not in available]
-    if unknown:
-        raise ValueError(f"{', '.join(unknown)} isn't a {event.pipeline_edition} stage. Choose from: {', '.join(available)}.")
-    event.stages = list(dict.fromkeys(event.stages))
+    ingress = [stage for stage in event.stages if stage in INGRESS_STAGES]
+    if ingress:
+        raise ValueError(f"{', '.join(ingress)} can't be chosen: the pipeline adds ingress itself.")

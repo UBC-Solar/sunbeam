@@ -1,176 +1,53 @@
-# Alembic Quick Guide
+# Migrations
 
-Sunbeam uses [Alembic](https://alembic.sqlalchemy.org/) to version the
-Postgres/TimescaleDB schema. This is a practical how-to for this repo
-specifically — the mental model, the day-to-day workflow, and the two
-non-obvious things this codebase does with it (a pre-Alembic-database
-transition shim, and a lock timeout so a blocked migration fails loudly
-instead of hanging server startup).
+[Alembic](https://alembic.sqlalchemy.org/) versions the Postgres/TimescaleDB schema. Migrations live in
+`alembic/versions/`, starting from `0001_baseline.py`, the 2.0.0 schema. Each database records the revision it's at
+in its `alembic_version` table.
 
-## Introduction
+## The server migrates itself
 
-The schema's history is a chain of migration files in
-`alembic/versions/`. Each file has a random ID, an `upgrade()` and a
-`downgrade()`, and a pointer to its parent (`down_revision`). Every
-database carries a one-row bookkeeping table, `alembic_version`, recording
-which link of the chain it's currently at. `alembic upgrade head` means
-"walk the chain from wherever this database is to the newest revision,
-executing each `upgrade()` along the way."
+On startup the server runs `alembic upgrade head` against its database (`server/migrations.py`), so a database the
+server manages never needs migrating by hand. Commit the migration with the model change and restart the server.
 
-The first links in the chain:
+Every migration waits at most 10 s for a lock. If another session holds one (usually a connection left idle in a
+transaction), startup fails with a message to find it with `pg_blocking_pids(pid)` and end it, rather than hanging.
 
-1. `f3f709edb0e7` — baseline: all six tables
-   (`vehicle`, `event`, `signal`, `worker_run`, `raw_sample`,
-   `aligned_sample`), the TimescaleDB extension, both hypertables, and the
-   query indexes — a frozen snapshot of the schema from before this repo
-   used Alembic.
-2. `6044f7bdb7d9` — adds `worker_run.kind` (`WorkerKind`, for
-   self-registered workers — see [`USAGE.md`](USAGE.md)) and makes
-   `worker_run.image_tag` nullable.
-
-Later, `d4b8e1f06a92` drops `raw_sample` (nothing ever wrote to it) and
-renames `aligned_sample`, with its constraints and indexes, to `sample`.
-
-Run `uv run alembic history --verbose` to see the current chain.
-
-## Connecting
-
-`alembic/env.py` resolves the database URL in this order:
-
-1. `config.attributes["sunbeam_database_url"]` — set programmatically by
-   `server/migrations.py` when the server runs migrations on its own
-   startup (see below); you won't set this by hand.
-2. the `SUNBEAM_DATABASE_URL` environment variable, which defaults to the
-   `docker compose` database on `localhost:5432` (see
-   [`USAGE.md`](USAGE.md#connections)).
-
-So against your normal local `docker compose` Postgres, plain
-`uv run alembic <command>` just works. Point at a
-different database explicitly with:
+## Changing the schema
 
 ```bash
-export SUNBEAM_DATABASE_URL="postgresql+psycopg://user:pass@host:5432/dbname"
-uv run alembic upgrade head
-```
-
-## Automatic Migrations
-
-`server/main.py`'s `on_startup` calls `server/migrations.py`'s
-`upgrade_database(engine)` — the server always brings its database to
-`head` before serving requests. You do not need to manually run
-`alembic upgrade head` against a database the server manages; it happens
-every time the server (re)starts, and is a no-op when already at `head`.
-
-### Migration Failures
-
-Every migration connection sets Postgres's `lock_timeout` to 10 seconds
-before running (`alembic/env.py`, overridable via
-`upgrade_database(engine, lock_timeout=...)`). `lock_timeout` only bounds
-*waiting for a lock*, not statement execution — a legitimately long data
-migration runs to completion normally. But if some other session (most
-often an "idle in transaction" connection) is holding a lock on a table
-Alembic needs to `ALTER`, the migration — and therefore server startup —
-fails after 10 seconds with a message telling you to inspect
-`pg_blocking_pids(pid)` and terminate the offending session, rather than
-hanging indefinitely.
-
-## Changing the Schema
-
-Say you add a column to `Event` in `db/sunbeamdb/models.py`:
-
-```bash
-# 1. Make sure your target DB is at head (autogenerate diffs models vs. the live DB)
-uv run alembic upgrade head
-
-# 2. Generate a draft migration from the diff
+# Change db/sunbeamdb/models.py, then, with the database at head:
 uv run alembic revision --autogenerate -m "add lap_number to event"
-
-# 3. READ the generated file in alembic/versions/  <- not optional, see below
-
-# 4. Apply it
+# Read the generated file before trusting it (see below), then:
 uv run alembic upgrade head
 ```
 
-### Step 3 is not optional
+`uv run alembic <command>` uses `SUNBEAM_DATABASE_URL`, which defaults to the `docker compose` database on
+`localhost:5432`.
 
-Autogenerate is a heuristic diff, not a compiler, and it has specific,
-recurring blind spots — this repo's own migration #2 hit two of them on
-its first draft:
+Autogenerate diffs the models against the database, and gets simple additions right. Check its draft for:
 
-- **Renames** look like *drop column + add column* to autogenerate, which
-  destroys data. Hand-edit to `op.alter_column(..., new_column_name=...)`.
-- **Postgres enum types**: `ADD COLUMN` of an `Enum` type does not
-  implicitly create the enum type on Postgres — you need an explicit
-  `sa.Enum(...).create(op.get_bind(), checkfirst=True)` call (see
-  migration `6044f7bdb7d9` for the pattern), and the matching `.drop(...)`
-  in `downgrade()`. Adding a *value* to an existing enum isn't detected by
-  autogenerate at all — hand-write
-  `op.execute("ALTER TYPE workerstatus ADD VALUE 'paused'")`.
-- **Anything TimescaleDB-specific** — new hypertables, chunk intervals,
-  compression policies, or (as happened on migration #2) autogenerate
-  proposing to **drop** the baseline's hand-written hypertable indexes
-  because they don't exist in the SQLAlchemy model metadata. Check every
-  generated `op.drop_index(...)` against the baseline migration before
-  trusting it.
-- Server defaults and some constraint changes are hit-or-miss; skim the
-  whole diff, not just the parts you expected.
+- **Renames**, which it sees as a drop and an add, losing the data. Use `op.alter_column(..., new_column_name=...)`.
+- **New Postgres enum values**, which it doesn't notice. Write `op.execute("ALTER TYPE workerstatus ADD VALUE 'x'")`.
+  A new enum *column* needs its type created first: `sa.Enum(..., name=...).create(op.get_bind(), checkfirst=True)`.
+- **TimescaleDB**: hypertables, chunk intervals and the hand-made `sample` indexes aren't in the models.
+  `alembic/env.py` keeps autogenerate from proposing to drop indexes the models don't declare.
+- **Anything touching `sample`**, which has millions of rows: think about how long it holds locks.
 
-Simple column/table/index additions that don't touch any of the above,
-autogenerate gets right essentially every time.
+Don't edit a migration once it has run anywhere that matters; write another. If two branches each add one,
+`alembic heads` prints two revisions and `upgrade` refuses to run: `uv run alembic merge heads -m "merge"`.
 
-## Commands Quick Guide
+## Useful commands
 
 ```bash
-uv run alembic current            # what revision is this DB at?
-uv run alembic history --verbose  # the full chain, newest first
-uv run alembic upgrade head       # apply everything pending
-uv run alembic downgrade -1       # step back one migration
-uv run alembic upgrade --sql head # print the SQL, execute nothing - review before prod
-uv run alembic heads              # should print exactly ONE id (see below)
+uv run alembic current            # this database's revision
+uv run alembic history            # the chain
+uv run alembic upgrade --sql head # print the SQL without running it
+uv run alembic downgrade -1
+uv run alembic check              # fails if the models and migrations disagree
 ```
 
-## Data Migrations
+## Tests
 
-Migrations can move data, not just DDL:
-
-```python
-def upgrade():
-    op.add_column("event", sa.Column("lap_number", sa.Integer(), nullable=True))
-    op.execute("UPDATE event SET lap_number = 0 WHERE lap_number IS NULL")
-```
-
-Keep these idempotent where practical. Anything touching `sample` (the
-hypertable — potentially millions of rows) deserves
-extra care: prefer batched raw SQL, and think about how long the migration
-holds locks given the `lock_timeout` behavior above.
-
-## Merging
-
-Migration files are code: committed, reviewed alongside the model change
-that motivated them, and never edited after being applied anywhere that
-matters — if a migration turns out wrong, write a new one to fix it rather
-than rewriting history.
-
-If two branches each add a migration off the same parent revision, merging
-both gives you **two heads**, and `upgrade head` refuses to run
-ambiguously. `uv run alembic heads` printing more than one ID is the tell;
-fix it with:
-
-```bash
-uv run alembic merge heads -m "merge"
-```
-
-which creates an empty migration with two parents, restoring a single
-linear (well, DAG-with-one-sink) chain.
-
-## Testing
-
-`tests/postgres/test_migrations.py` (Postgres-marked — see the
-[README](../README.md#running-tests)) keeps the chain honest on every
-CI run: a fresh database upgraded to `head` must produce the full schema
-including hypertables, `downgrade base` must remove it cleanly, and
-`upgrade_database`'s lock-timeout behavior has a dedicated test (a second
-connection holds
-an `ACCESS EXCLUSIVE` lock and asserting the migration fails within the
-timeout rather than hanging). If you add a migration with any of the sharp
-edges above, add a matching assertion here.
+`tests/postgres/test_migrations.py` upgrades a fresh TimescaleDB to head, checks it matches the models
+(`alembic check`) and has the hypertable, downgrades it to nothing, and checks that a blocked migration fails rather
+than hangs.

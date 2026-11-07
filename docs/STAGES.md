@@ -147,7 +147,8 @@ though you rarely call it directly:
    aren't in `State` yet (e.g. a fast pipeline's first tick, before a
    slower cross-rate producer has run once) skips that tick quietly.
    Telemetry that stops arriving is caught where it goes missing, by the
-   ingress stage's grace period (above). There is no deterministic order in which different pipelines run (_note: perhaps there should be!_).
+   ingress stage's grace period (above). Separate pipelines due at the same
+   instant run in no guaranteed order.
 
 The upshot: **you never manually wire a pipeline together**. You write
 stages with correct `inputs`/`outputs`/`frequency`, list the stages an
@@ -168,11 +169,12 @@ the slow stage's frequency or read a timestamp signal explicitly.
 
 ## Pipeline Editions and `stage_registry.toml`
 
-A **pipeline edition** (`v3_0`, `v4_0`, ...) is a named, versioned set of
-stage implementations — it exists because the vehicle's telemetry format,
-signal set, and computation logic might change between hardware generations, and
-old recorded events still need to replay against the stage code that
-matches *their* era.
+A **pipeline edition** (`v3_0`, `v4_0`, ...) is a complete set of stage
+implementations for one era of the car's telemetry. When the telemetry changes
+enough that old stage logic would misread new data (or the reverse), cut a new
+edition rather than branching inside a stage. An event keeps its
+`pipeline_edition`, so replaying `FSGP_2024_Day_1` always runs `v3_0`'s stages,
+however many editions come after.
 
 `stage/stage_registry.toml` is the map from `(edition, stage_name)` to the
 Python class that implements it:
@@ -250,13 +252,18 @@ suit both editions, give the new edition its own copy.
    Skip this and `StageLibrary.get_stage_by_name` raises `ValueError:
    Stage 'YourStage' not found.` the moment an event tries to use it.
 3. **Add it to the event(s) that should run it**: tick it in the event's
-   dialog on the dashboard (click the event's row). A stage not listed for an event simply never
-   runs for that event — no error, it's just absent from the graph.
+   dialog on the dashboard (click the event's row). A stage not listed for an
+   event never runs for it. To try a stage before the server has it, push it
+   to a branch, type its name into **Add stage** in the event's dialog, and
+   launch the event from that branch (see
+   [`USAGE.md`](USAGE.md#building-workers-from-git)). If the code the worker
+   runs doesn't have the stage, the worker fails before touching the event,
+   and the run's failure names the missing stage and what is registered.
 4. **If it depends on a new third-party package**, add that package to the
    pipeline edition's `[project.optional-dependencies]` extra in
    `pyproject.toml` (e.g. `v3_0 = [...]`), *not* to `executor` or `server`.
    This is the reason editions are separate `uv` extras at all — see
-   [`USAGE.md`](USAGE.md#per-edition-extras) for the full
+   [`USAGE.md`](USAGE.md#dependencies) for the full
    rationale. If your stage needs nothing new, skip this step.
 5. **Write tests** under `tests/<edition>/test_your_stage.py`, following
    the existing pattern: a `conftest.py` fixture constructing the stage,
@@ -276,10 +283,19 @@ suit both editions, give the new edition its own copy.
 
 ## Adding A Pipeline Edition
 
-Pipeline editions need a few things to become valid. If the new version is `v6_7`. `6` is the major version number, indicating the car version, and `7` is the minor, indicating a revision of the telemetry system. Patch numbers are not used. For example, Brightside is our 3rd edition vehicle and so it's first usage in 2024 maps to `v3_0`. In 2025 some new sensors had been added allowing for new stages, hence a new revision to `v3_1`.
-1. A directory in `stage/` holding all of its stages, named according to the new version, in this case `stage/v6_7`.
-2. An entry in the `stage/stage_registry.toml` registering all of the edition's stages (including `Ingress` and `Offline_Ingress`), using the `v6_7` identifier. Stages that don't change can be reused from an earlier edition rather than copied (see [Reusing a stage from another edition](#reusing-a-stage-from-another-edition)).
-3. A new dependency group `v6_7` declared in the `pyproject.toml`'s `[project.optional-dependencies]` table listing the dependencies that the stages require. The new entry should also be added to the group of `conflicts` in `[tool.uv]` to conflict with the existing pipeline editions to ensure only one is activated at a time.
+Editions are named `v<major>_<minor>`: the major number is the car (Brightside,
+the third, is `v3`), and the minor a revision of its telemetry. Brightside's
+2024 telemetry is `v3_0`; new sensors in 2025 made `v3_1`. For a new `v6_7`:
+
+1. Put its stages in `stage/v6_7/`.
+2. Register them under `[v6_7]` in `stage/stage_registry.toml`, including
+   `Ingress` and `Offline_Ingress`. Stages that don't change can
+   [come from an earlier edition](#reusing-a-stage-from-another-edition).
+3. Add a `v6_7` extra to `[project.optional-dependencies]` in
+   `pyproject.toml` with what its stages need, and add it to the
+   `[tool.uv].conflicts` group so only one edition is installed at a time.
+   The server builds its worker image (`sunbeam-worker:v6_7`) when it next
+   starts.
 
 ### A note on `CanonicalName`
 
@@ -289,23 +305,3 @@ Sunbeam itself. If a signal you need doesn't have a `CanonicalName` member
 yet, that's a `data-tools` change, not a Sunbeam one — this repo only
 consumes the enum and the localization tables that map a `CanonicalName` +
 date to a physical field name, source, unit, and frequency in InfluxDB.
-
-## Versioning stages: what "v3_0" vs "v4_0" means
-
-A pipeline edition is a **complete, independently-versioned snapshot** of
-stage behavior — not a feature flag or a diff. When the vehicle's telemetry
-changes enough that old stage logic would misinterpret new data (or new
-stage logic would misinterpret old data), you cut a new edition
-(`stage/v4_0/` and a new `[v4_0]` table in `stage_registry.toml`)
-rather than branching inside existing
-stage code. Recorded events keep their original `pipeline_edition` in the
-database (`Event.pipeline_edition`) forever, so replaying `FSGP_2024_Day_1`
-always runs `v3_0`'s `Array`, even after `v4_0` exists and is the default
-for new events.
-
-Each edition has its own `uv` extra for its stages' dependencies (see
-[`USAGE.md`](USAGE.md#per-edition-extras)), so the **worker Docker image is
-built per edition**: `pipeline/Dockerfile` takes `PIPELINE_EDITION` as a
-build arg, and the server builds one `sunbeam-worker:<edition>` image per
-edition in `stage_registry.toml` at startup. No edition's dependencies leak
-into another's image.

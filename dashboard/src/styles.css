@@ -564,6 +564,17 @@ input[type="text"].mono, input[type="password"].mono {
   cursor: pointer;
 }
 
+.add-stage {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.add-stage input {
+  flex: 1;
+  min-width: 0;
+}
+
 .modal-actions .spacer {
   flex: 1;
 }

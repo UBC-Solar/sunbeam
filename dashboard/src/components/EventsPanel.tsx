@@ -124,6 +124,7 @@ type EventDialogProps = {
 
 function EventDialog({event, onClose, onChanged}: EventDialogProps) {
   const [form, setForm] = useState<Form>(() => formFor(event));
+  const [newStage, setNewStage] = useState("");
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [editions, setEditions] = useState<PipelineEdition[]>([]);
   const [busy, setBusy] = useState(false);
@@ -160,18 +161,28 @@ function EventDialog({event, onClose, onChanged}: EventDialogProps) {
     setForm((current) => ({...current, [key]: value}));
   }
 
+  const registered = edition?.stages ?? [];
+  // Named by hand: stages the server's copy of the code doesn't have, to come from the git ref the event is launched from
+  const unregistered = form.stages.filter((stage) => !registered.includes(stage));
+
   function chooseEdition(id: string) {
-    // Stages are per edition; keep only the ones the new edition also has
+    // Stages are per edition: drop the old edition's that the new one lacks, but keep any named by hand
     const available = editions.find((e) => e.id === id)?.stages ?? [];
     setForm((current) => ({
       ...current,
       pipeline_edition: id,
-      stages: current.stages.filter((stage) => available.includes(stage)),
+      stages: current.stages.filter((stage) => available.includes(stage) || !registered.includes(stage)),
     }));
   }
 
   function toggleStage(stage: string, on: boolean) {
     set("stages", on ? [...form.stages, stage] : form.stages.filter((s) => s !== stage));
+  }
+
+  function addStage() {
+    const stage = newStage.trim();
+    if (stage && !form.stages.includes(stage)) set("stages", [...form.stages, stage]);
+    setNewStage("");
   }
 
   async function run(action: () => Promise<void>) {
@@ -284,17 +295,42 @@ function EventDialog({event, onClose, onChanged}: EventDialogProps) {
           <div className="field">
             <span className="field-label">Stages</span>
             <div className="stage-picker">
-              {(edition?.stages ?? []).map((stage) => (
-                <label key={stage}>
+              {[...registered, ...unregistered].map((stage) => (
+                <label key={stage} title={registered.includes(stage) ? undefined : "Not in the server's copy of the code"}>
                   <input
                     type="checkbox"
                     checked={form.stages.includes(stage)}
                     onChange={(e) => toggleStage(stage, e.target.checked)}
                   />
                   {stage}
+                  {!registered.includes(stage) && <span className="text-secondary">(git ref only)</span>}
                 </label>
               ))}
             </div>
+            <div className="add-stage">
+              <input
+                type="text"
+                className="mono"
+                placeholder="Another stage, by name"
+                value={newStage}
+                onChange={(e) => setNewStage(e.target.value)}
+                onKeyDown={(e) => {
+                  // Enter adds the stage rather than submitting the dialog
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addStage();
+                  }
+                }}
+              />
+              <button type="button" onClick={addStage} disabled={newStage.trim() === ""}>
+                Add stage
+              </button>
+            </div>
+            <span className="field-hint">
+              {unregistered.length > 0
+                ? "Stages the server's copy of the code doesn't have can only be launched from a git ref that has them; a worker without one fails, naming it."
+                : "To try a stage the server doesn't have yet, add it by name and launch from a git ref that has it."}
+            </span>
           </div>
         </fieldset>
 

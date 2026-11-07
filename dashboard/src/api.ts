@@ -58,6 +58,8 @@ export type Event = {
   pipeline_edition: string;
   // The edition's stages this event runs
   stages: string[];
+  // Those the server's copy of the code lacks: the event can only be launched from a git ref that has them
+  unregistered_stages: string[];
   // A past event: its worker replays it, always wiping earlier samples first
   is_replay: boolean;
   // "ongoing" from a worker opening the event until its writes finish, then "processed"

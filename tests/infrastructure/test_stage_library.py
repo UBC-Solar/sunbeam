@@ -62,3 +62,25 @@ class TestFrom:
 
         with pytest.raises(ValueError, match="loop"):
             StageLibrary("a").get_stage_by_name("PackPower")
+
+
+class TestErrors:
+    def test_an_unregistered_stage_is_named_with_the_choices(self):
+        with pytest.raises(ValueError, match=r"'Nope' isn't registered for v3_0 .* Registered: .*MotorPower"):
+            StageLibrary("v3_0").get_stage_by_name("Nope")
+
+    def test_every_missing_stage_is_reported_at_once(self):
+        with pytest.raises(ValueError, match="'Nope'.*'AlsoNope'"):
+            StageLibrary("v3_0").get_stages_by_names(["Nope", "MotorPower", "AlsoNope"])
+
+    def test_a_stage_that_cant_be_imported_says_where_it_was_looked_for(self, monkeypatch):
+        use_registry(monkeypatch, {"a": {"New": {"module": "stage.v3_0.no_such_module", "class": "New"}}})
+
+        with pytest.raises(ValueError, match="registered as stage.v3_0.no_such_module.New, which can't be loaded"):
+            StageLibrary("a").get_stage_by_name("New")
+
+    def test_a_class_that_isnt_a_stage_is_an_error(self, monkeypatch):
+        use_registry(monkeypatch, {"a": {"New": {"module": "stage.stage_library", "class": "StageLibrary"}}})
+
+        with pytest.raises(ValueError, match="isn't a Stage subclass"):
+            StageLibrary("a").get_stage_by_name("New")

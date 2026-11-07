@@ -40,6 +40,10 @@ def list_connections(
     db: Session = Depends(get_db),
     service: ConnectionService = Depends(get_connection_service),
 ):
+    """
+    By name. Exactly one is the default whenever any exist: the first created, then whichever was last made default;
+    deleting the default promotes the oldest left. Tokens are shown in full: everything is inside the Tailnet.
+    """
     return service.list(db)
 
 
@@ -49,6 +53,7 @@ def create_connection(
     db: Session = Depends(get_db),
     service: ConnectionService = Depends(get_connection_service),
 ):
+    """ 409 if the name is taken. """
     return service.create(db, **payload.model_dump())
 
 
@@ -59,7 +64,7 @@ def test_unsaved_connection(
     db: Session = Depends(get_db),
     service: ConnectionService = Depends(get_connection_service),
 ):
-    """ Test connection settings before saving them. """
+    """ The same test for settings that aren't saved; nothing is recorded. """
     window = service.window_for(db, payload.event_id)
     result = service.check(**payload.model_dump(exclude={"event_id"}), window=window)
     return _test_result(result, window)
@@ -72,6 +77,7 @@ def update_connection(
     db: Session = Depends(get_db),
     service: ConnectionService = Depends(get_connection_service),
 ):
+    """ Changing anything but the name clears the last test result. 409 if the new name is taken. """
     return service.update(db, connection_id, **payload.model_dump())
 
 
@@ -81,6 +87,7 @@ def delete_connection(
     db: Session = Depends(get_db),
     service: ConnectionService = Depends(get_connection_service),
 ):
+    """ Past worker runs keep its name (`influx_connection_name`). """
     service.delete(db, connection_id)
 
 
@@ -100,7 +107,11 @@ def test_connection(
     db: Session = Depends(get_db),
     service: ConnectionService = Depends(get_connection_service),
 ):
-    """ Test a saved connection, optionally for data over an event, and record the result on it. """
+    """
+    Tests a saved connection and records the result on it. Steps run in order, stopping at the first failure:
+    `connect` and `bucket` (5 s timeouts), then with `event_id`, `data`: at least one point in the event's window (all
+    of it if it's over, start to now if it's live; skipped if it hasn't started), with a 15 s timeout.
+    """
     connection = service.get(db, connection_id)
     window = service.window_for(db, event_id)
     return _test_result(service.check_saved(db, connection, window), window)

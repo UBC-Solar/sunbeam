@@ -72,8 +72,8 @@ class TestCreate:
     @pytest.mark.parametrize("change, message", [
         ({"name": "  "}, "needs a name"),
         ({"stages": []}, "at least one stage"),
-        ({"stages": ["Ingress"]}, "isn't a v3_0 stage"),
-        ({"stages": ["NoSuchStage"]}, "isn't a v3_0 stage"),
+        ({"stages": ["  "]}, "at least one stage"),
+        ({"stages": ["Ingress"]}, "adds ingress itself"),
         ({"pipeline_edition": "v0_0"}, "Unknown pipeline edition"),
         ({"vehicle_id": 999}, "No vehicle"),
         ({"ends_at": "2024-07-17T14:00:00Z"}, "end after it starts"),
@@ -83,6 +83,14 @@ class TestCreate:
 
         assert response.status_code == 400
         assert message in response.json()["detail"]
+
+    def test_a_stage_the_server_lacks_is_kept_for_a_git_ref(self, api_client, new_event):
+        new_event["stages"] = ["MotorPower", " TryingThisOut "]
+
+        event = api_client.post("/events", json=new_event).json()
+
+        assert event["stages"] == ["MotorPower", "TryingThisOut"]
+        assert event["unregistered_stages"] == ["TryingThisOut"]
 
     def test_duplicate_stages_are_kept_once(self, api_client, new_event):
         new_event["stages"] = ["MotorPower", "MotorPower"]
@@ -117,11 +125,11 @@ class TestUpdate:
 
         assert response.status_code == 409
 
-    def test_changing_edition_checks_the_stages_against_it(self, api_client, seeded_event):
+    def test_changing_edition_reports_stages_it_lacks(self, api_client, seeded_event):
         response = api_client.patch(f"/events/{seeded_event.event_id}", json={"pipeline_edition": "v4_0"})
 
-        assert response.status_code == 400
-        assert "MotorPower isn't a v4_0 stage" in response.json()["detail"]
+        assert response.status_code == 200
+        assert response.json()["unregistered_stages"] == ["MotorPower"]
 
     def test_running_event_cant_be_edited(self, api_client, session_factory, seeded_event):
         add_worker(session_factory, seeded_event.event_id, WorkerStatus.RUNNING)

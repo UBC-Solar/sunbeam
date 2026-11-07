@@ -16,6 +16,11 @@ if config.config_file_name is not None and config.attributes.get("configure_logg
 target_metadata = Base.metadata
 
 
+def include_object(obj, name, type_, reflected, compare_to) -> bool:
+    """ Leave out indexes made by hand (sample's query indexes) or by TimescaleDB, which the models don't declare. """
+    return not (type_ == "index" and reflected and compare_to is None)
+
+
 def _database_url() -> str:
     """
     Resolution order:
@@ -40,6 +45,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -60,7 +66,7 @@ def run_migrations_online() -> None:
         connection.execute(text(f"SET lock_timeout = '{lock_timeout}'"))
         connection.commit()  # end the autobegun tx; the setting is session-scoped
 
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(connection=connection, target_metadata=target_metadata, include_object=include_object)
 
         with context.begin_transaction():
             context.run_migrations()

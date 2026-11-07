@@ -1,26 +1,23 @@
+# Python
+.venv/
 venv/
+__pycache__/
+*.egg-info/
+.coverage
+
+# Dashboard
+dashboard/node_modules/
+dashboard/dist/
+*.tsbuildinfo
+
+# The compose database's volume, and local settings
 data/
+.env
+
+# Editors and tools
 .idea/
 .vscode/
-.env
-.bin
 .claude
 
-dashboard/node_modules
-sunbeam.egg-info
-
-**/*.log
-**/*.bin
-**/__pycache__/
-dashboard/node_modules
-
-# database files
-db/mongo_data
-db/pg_data
-
-# to help with development
-/sunbeam_old
-
-# tests
-.coverage
-*.egg-info/
+*.log
+*.bin

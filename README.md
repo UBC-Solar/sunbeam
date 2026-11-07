@@ -1,146 +1,76 @@
 # Sunbeam
 
-Sunbeam is UBC Solar's telemetry processing pipeline: it ingests raw CAN
-telemetry (live, via InfluxDB, or from a historical event), runs it through
-a graph of computation **stages** (power, energy, efficiency, position,
-...) at their declared frequencies, and persists the derived signals to a
-TimescaleDB/Postgres database — while a server orchestrates worker
-processes, supervises their lifecycle, and serves both the orchestration
-API and a read/stream API for the derived data.
+UBC Solar's telemetry pipeline. It reads raw CAN telemetry from InfluxDB, live or for a past event, runs it through
+a graph of **stages** (power, energy, efficiency, position, ...) at their own frequencies, and stores the results in
+TimescaleDB. A server launches and supervises the workers that do this, and serves the results over REST and
+server-sent events.
 
-## Architecture, Briefly
+## How it works
 
-A **worker** process (`sunbeam.py`) runs one event's pipeline: it reads
-its event from Postgres to find which stages it needs, builds a
-dependency graph from their declared inputs/outputs
-(`pipeline/pipeline_generator.py`), splits it into same-rate subgraphs,
-and schedules each subgraph based on its frequency. Stages that consume signals
-nothing else produces automatically get their data from generated
-**ingress** stages reading InfluxDB. An ongoing event runs **realtime**,
-polling InfluxDB in step with the wall clock; a past event is **replayed**,
-fetching its whole window up front and processing it as fast as possible
-(see [`docs/USAGE.md`](docs/USAGE.md#realtime-vs-replay-worker-runs)). Output frames flow through a batching,
-non-blocking writer into `sample` table in `sunbeamdb`, Sunbeam's PostgreSQL database. A worker can run
-standalone (`--serverless`), or report in to the **server** — a FastAPI
-app (`server/`) that can launch workers as Docker containers, supervise
-them via heartbeats and a watchdog, and serve derived telemetry back out
-over REST and Server-Sent Events for dashboards. See
-[`docs/CONTRACTS.md`](docs/CONTRACTS.md) for the full module-by-module
-breakdown and the rules that keep these pieces independently testable.
+A **worker** (`sunbeam.py`) runs one event. It reads the event from Postgres, builds a dependency graph from its
+stages' declared inputs and outputs, and splits it into same-rate pipelines, each scheduled at its frequency.
+Signals no stage produces come from generated **ingress** stages that read InfluxDB. An ongoing event runs in
+**realtime**, polling InfluxDB with the wall clock; a past event is **replayed**, fetched whole and processed as fast
+as possible. Output goes through a batching writer into the `sample` table.
 
-## Documentation Map
+The **server** (`server/`, FastAPI) launches workers as Docker containers, supervises them with heartbeats and a
+watchdog, and serves the data. Workers can also run by hand, reporting to the server or with none at all. The
+**dashboard** (`dashboard/`, React) is where events and connections are created, and workers launched and watched.
 
 | Document | Covers |
 |---|---|
-| [`docs/USAGE.md`](docs/USAGE.md) | Running Sunbeam: Docker + dashboard, the CLI's three operating modes, `uv` dependency groups. **Start here to run something.** |
-| [`docs/STAGES.md`](docs/STAGES.md) | What a stage is, how stages become a scheduled pipeline, `stage_registry.toml`, pipeline editions, and the checklist for writing a new stage. **Start here to add computation.** |
-| [`docs/API.md`](docs/API.md) | The full server HTTP/SSE API: events, workers, pipeline editions, and the telemetry query + streaming endpoints. |
-| [`docs/CONTRACTS.md`](docs/CONTRACTS.md) | The contract each module (`config`, `state`, `stage`, `pipeline`, `orchestration`, `db`, `server`) keeps with the others — what it owns, what it's allowed to assume, what must never import what. |
-| [`docs/ALEMBIC.md`](docs/ALEMBIC.md) | Database migrations: the mental model, day-to-day workflow, and this repo's specific setup (auto-migration on server startup, the pre-Alembic transition shim, the lock timeout). |
+| [`docs/USAGE.md`](docs/USAGE.md) | Running Sunbeam: Docker and the dashboard, the CLI, dependencies, configuration. **Start here.** |
+| [`docs/STAGES.md`](docs/STAGES.md) | Stages, how they become pipelines, pipeline editions, and writing a new stage. |
+| [`docs/CONTRACTS.md`](docs/CONTRACTS.md) | What each module owns, and what may import what. |
+| [`docs/ALEMBIC.md`](docs/ALEMBIC.md) | Changing the database schema. |
+| `/docs` on the server | The HTTP API, generated from the code (`http://localhost:8000/docs`). |
 
-## Quick Start
-
-The fast path is Docker (see [`docs/USAGE.md`](docs/USAGE.md#mode-1-docker-with-the-server-and-dashboard)
-for the full explanation of what each service does):
+## Quick start
 
 ```bash
 docker compose up --build
 ```
 
-This brings up Postgres/TimescaleDB, the server (`http://localhost:8000`,
-docs at `/docs`), and the dashboard (`http://localhost:5173`) — the
-dashboard lets you launch a worker against any configured event and watch
-it run.
+starts TimescaleDB, the server (`http://localhost:8000`) and the dashboard (`http://localhost:5173`). On the
+dashboard, add an event, then launch a worker for it.
 
-To run a single worker directly, without Docker, see
-[`docs/USAGE.md`](docs/USAGE.md#mode-2-the-cli-sunbeampy) — you'll need to
-`uv sync` the right extras first:
+To run a worker without Docker:
 
 ```bash
 uv sync --extra executor --extra v3_0
-uv run sunbeam.py --event_name realtime --serverless
+uv run sunbeam.py --event_name realtime --serverless   # plus the --influx-* settings
 ```
 
-## Repository Layout
+## Layout
 
 ```
-config/         TOML config + Context singleton, event/vehicle/signal sync
-state/          In-memory State (signal blackboard) and Frame/FrameView
-stage/          The Stage base class, StageLibrary, and per-edition stage implementations
-pipeline/       Graph building, scheduling, the Executor, timing/metrics
-orchestration/  Worker<->server protocol: WorkerControl, OrchestratorClient, bootstrap
-db/             SQLAlchemy models, event/sample writers, InfluxDB readers
+config/         The environment (Context), vehicles.toml, loading a worker's event
+state/          State, the latest value of every signal, and the Frame views stages see
+stage/          The Stage base class, StageLibrary, stage_registry.toml, and each edition's stages
+pipeline/       Graph building, scheduling, the Executor, metrics, worker Dockerfiles
+orchestration/  The worker's side of the server protocol
+db/             SQLAlchemy models, sample writers, InfluxDB readers
 server/         The FastAPI app: routes and services
-alembic/        Database migration chain (see docs/ALEMBIC.md)
-dashboard/      The React/Vite operator dashboard
-tests/          v3_0/ (pure stage unit tests), infrastructure/ (everything else, SQLite-backed), postgres/ (marked, needs Docker)
-```
-
-### Configuration Files
-```
-config/                   vehicles.toml, plus loading a worker's event and connection settings (events and connections are created in the dashboard; see docs/USAGE.md)
-stage/stage_registry.toml  Stage name -> class registry, per pipeline edition
+alembic/        Database migrations
+dashboard/      The React/Vite dashboard
+tests/          v3_0/ (stage unit tests), infrastructure/ (everything else, on SQLite), postgres/ (needs Docker)
 ```
 
 ## Development
 
-### Setup
-
-Install [`uv`](https://docs.astral.sh/uv/) if you don't have it, then sync
-the extras/groups you need. For full local development (running the
-worker, the test suite, and the lint/type tooling):
-
 ```bash
 uv sync --extra server --extra executor --extra v3_0 --all-groups
-```
 
-See [`docs/USAGE.md`](docs/USAGE.md#dependency-groups-and-why)
-for what each extra/group is for.
-
-### Linting and Type Checking
-
-```bash
 uv run ruff check .        # lint
-uv run ruff check --fix .  # lint, auto-fixing what it can
-uv run mypy .               # type check
+uv run mypy .              # type check
+uv run pytest              # the default suite: SQLite and fake Docker, a few seconds
+uv run pytest -m postgres  # needs Docker: locking, time zones, hypertables, migrations
 ```
 
-Both are configured in `pyproject.toml` (`[tool.ruff]`, `[tool.mypy]`) and
-run in CI on every push and PR (`.github/workflows/ci.yml`).
-
-### Running Tests
-
-```bash
-uv run pytest              # the default suite: fast, no Docker/Postgres needed
-uv run pytest -m postgres  # Postgres-marked tests: locking, timezones, migrations
-```
-
-The default suite (`tests/v3_0/` + `tests/infrastructure/`) runs against
-SQLite in-memory and fake Docker clients — it's the one you run on every
-change, and it's fast (well under a second). It does **not** cover a
-handful of things SQLite can't express: real row-level locking (`SELECT
-... FOR UPDATE`, which the worker heartbeat / watchdog reconciliation
-depends on), timezone-aware datetime round-trips, and the Alembic
-migration chain against real TimescaleDB DDL. Those live in `tests/
-postgres/`, marked `@pytest.mark.postgres` and excluded by default
-(`addopts = "-m 'not postgres'"` in `pyproject.toml`); running them spins
-up a throwaway `timescale/timescaledb` container via `testcontainers`, so
-they need a Docker daemon but nothing else.
-
-CI (`.github/workflows/ci.yml`) runs all four checks — `ruff`, `mypy`, the
-default suite, and the Postgres suite — as separate parallel jobs on every
+The Postgres tests start a throwaway TimescaleDB container with testcontainers, and cover what SQLite can't: row
+locks (`SELECT ... FOR UPDATE`, which heartbeats and the watchdog rely on), time zone round trips, and the
+migrations. CI (`.github/workflows/ci.yml`) runs all of these, and type-checks and builds the dashboard, on every
 push to `main` and every pull request.
 
-### Adding a Database Migration
-
-See [`docs/ALEMBIC.md`](docs/ALEMBIC.md) in full, but in short:
-
-```bash
-uv run alembic revision --autogenerate -m "describe the change"
-# read the generated file in alembic/versions/ before trusting it
-uv run alembic upgrade head
-```
-
-The server applies pending migrations automatically on startup — you don't
-separately deploy a migration step, but you do need to write and commit
-the migration file alongside the model change that motivated it.
+To change the schema, edit `db/sunbeamdb/models.py`, then `uv run alembic revision --autogenerate -m "..."` and read
+what it generated. The server applies migrations when it starts. See [`docs/ALEMBIC.md`](docs/ALEMBIC.md).

@@ -339,3 +339,20 @@ class TestFromEventWipe:
 
     def test_live_run_wipes_when_reprocessing(self, writer_wipes):
         assert writer_wipes(None, reprocess=True)
+
+    def test_unknown_stage_fails_before_the_event_is_touched(self, monkeypatch):
+        import pipeline.executor as executor_module
+        from config.events import EventConfig
+
+        opened = []
+        monkeypatch.setattr(executor_module, "EventWriter", lambda *args, **kwargs: opened.append(args))
+        event = EventConfig(
+            name="e", description=None, stages=["MotorPower", "TryingThisOut"], pipeline_edition="v3_0",
+            starts_at=REPLAY_START, ends_at=REPLAY_START + timedelta(hours=1),
+        )
+
+        with pytest.raises(ValueError, match="'TryingThisOut' isn't registered for v3_0"):
+            executor_module.Executor.from_event(event, engine=None)
+
+        # A replay's writer wipes the event's samples; it must not have been opened
+        assert opened == []

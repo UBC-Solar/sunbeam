@@ -134,15 +134,16 @@ class Executor:
     ) -> "Executor":
         replay_window = replay_window_for(event)
 
-        # A replay rewrites the whole event, so samples from any earlier run must be wiped first or they collide with
-        # the new ones. Live runs only wipe when asked to, since they may be resuming an ongoing event.
-        wipe = reprocess or replay_window is not None
-        writer = QueuedEventWriter(EventWriter(event.name, engine, reprocess=wipe))
-
+        # Before the writer, which touches the event: a stage that can't be built mustn't cost it its samples
         ingress_reporter = IngressProgressReporter() if replay_window is not None else None
         pipelines, ingress_pipelines = build_event_pipelines(
             event, replay_window=replay_window, ingress_observer=ingress_reporter,
         )
+
+        # A replay rewrites the whole event, so samples from any earlier run must be wiped first or they collide with
+        # the new ones. Live runs only wipe when asked to, since they may be resuming an ongoing event.
+        wipe = reprocess or replay_window is not None
+        writer = QueuedEventWriter(EventWriter(event.name, engine, reprocess=wipe))
 
         return cls(
             pipelines, ingress_pipelines, writer, control,

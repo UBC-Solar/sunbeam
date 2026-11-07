@@ -17,7 +17,9 @@ export function LaunchDialog({event, connections, onCancel, onLaunch}: LaunchDia
   const [connectionId, setConnectionId] = useState<number | null>(
     (connections.find((c) => c.is_default) ?? connections[0])?.id ?? null,
   );
-  const [source, setSource] = useState<"local" | "git">("local");
+  // Stages the server's copy lacks can only come from a git ref
+  const needsGitRef = event.unregistered_stages.length > 0;
+  const [source, setSource] = useState<"local" | "git">(needsGitRef ? "git" : "local");
   const [gitRef, setGitRef] = useState("");
   const [reprocess, setReprocess] = useState(event.is_replay);
   const [launching, setLaunching] = useState(false);
@@ -96,6 +98,7 @@ export function LaunchDialog({event, connections, onCancel, onLaunch}: LaunchDia
                 type="radio"
                 name="source"
                 checked={source === "local"}
+                disabled={needsGitRef}
                 onChange={() => setSource("local")}
               />
               Server's working copy
@@ -116,7 +119,9 @@ export function LaunchDialog({event, connections, onCancel, onLaunch}: LaunchDia
             />
           )}
           <span className="field-hint">
-            {source === "git"
+            {needsGitRef
+              ? `The server's copy has no ${event.unregistered_stages.join(", ")} stage, so launch from a ref that has it. A worker without it fails, naming it.`
+              : source === "git"
               ? "Cloned from GitHub and built on first use (this can take a few minutes); later launches of the same commit reuse the image."
               : "The code the server was started with."}
           </span>

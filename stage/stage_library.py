@@ -18,6 +18,7 @@ class StageLibrary:
     def __init__(self, pipeline_edition: str | None = None):
         self._raw_data = _load_registry()
         self._edition: dict = {}
+        self._edition_name = pipeline_edition
 
         if pipeline_edition is not None:
             if pipeline_edition not in self._raw_data:
@@ -50,12 +51,14 @@ class StageLibrary:
     def get_stage_by_name(self, stage_name: str) -> type[Stage]:
         """ Finds and returns the Stage subclass from its name
 
-        :raises ValueError: Stage name not found in the edition's registry
-        :raises TypeError: Found class from registry is not a stage subclass
+        :raises ValueError: The stage isn't registered for this edition, or its class can't be loaded
         """
         meta = self._edition.get(stage_name)
         if not isinstance(meta, dict):
-            raise ValueError(f"Stage {stage_name!r} not found.")
+            raise ValueError(
+                f"Stage {stage_name!r} isn't registered for {self._edition_name} in stage/stage_registry.toml. "
+                f"Registered: {', '.join(self.stage_names)}."
+            )
 
         # An entry like `[v4_0.Efficiency] from = "v3_0"` reuses that edition's stage of the same name, unchanged
         seen = []
@@ -67,12 +70,25 @@ class StageLibrary:
             if len(seen) > len(self._raw_data):
                 raise ValueError(f"Stage {stage_name!r} is taken from editions in a loop: {seen}")
 
-        cls = getattr(import_module(meta["module"]), meta["class"])
+        location = f"{meta.get('module')}.{meta.get('class')}"
+        try:
+            cls = getattr(import_module(meta["module"]), meta["class"])
+        except (ImportError, AttributeError, KeyError) as exc:
+            raise ValueError(f"Stage {stage_name!r} is registered as {location}, which can't be loaded: {exc!r}") from exc
 
-        if not issubclass(cls, Stage):
-            raise TypeError(f"{cls} is not a Stage subclass.")
+        if not (isinstance(cls, type) and issubclass(cls, Stage)):
+            raise ValueError(f"Stage {stage_name!r} is registered as {location}, which isn't a Stage subclass.")
 
         return cls
 
     def get_stages_by_names(self, stage_names: list[str]) -> list[type[Stage]]:
-        return [self.get_stage_by_name(name) for name in stage_names]
+        """ :raises ValueError: Naming every stage that can't be found or loaded, not just the first """
+        stages, errors = [], []
+        for name in stage_names:
+            try:
+                stages.append(self.get_stage_by_name(name))
+            except ValueError as exc:
+                errors.append(str(exc))
+        if errors:
+            raise ValueError(" ".join(errors))
+        return stages

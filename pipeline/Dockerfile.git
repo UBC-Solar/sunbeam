@@ -21,10 +21,6 @@ RUN find /app -mindepth 1 -maxdepth 1 ! -name .venv -exec rm -rf {} + \
 
 WORKDIR /app
 
-# Older commits read connections from config/context.toml, which the server no longer controls
-RUN test -f db/telemetrydb/connection_check.py \
-    || (echo "${GIT_REF} predates server-managed connections (SUNBEAM_INFLUX_*); it can't be launched from here" >&2; exit 1)
-
 # Sync is exact, so this also removes anything the base had that this commit's lock doesn't
 RUN uv sync --locked --extra executor --extra "${PIPELINE_EDITION}"
 

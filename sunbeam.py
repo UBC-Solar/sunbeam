@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+from typing import NoReturn
 
 from sqlalchemy import Engine, create_engine
 
@@ -11,6 +12,7 @@ from orchestration.bootstrap import build_control
 from orchestration.control import WorkerControl
 from pipeline import Executor
 from pipeline.preflight import run_preflight_checks
+from stage.stage_library import StageLibrary
 
 logger = logging.getLogger("sunbeam.worker")
 
@@ -65,6 +67,12 @@ def apply_connection_flags(args: argparse.Namespace) -> None:
 
 
 def run(event: EventConfig, control: WorkerControl, engine: Engine, *, reprocess: bool) -> None:
+    # First, as it needs nothing reachable: an event can name stages this code lacks (it may expect another git ref)
+    try:
+        StageLibrary(event.pipeline_edition).get_stages_by_names(event.stages)
+    except ValueError as exc:
+        _fail(control, f"This worker's code can't run {event.name!r}: {exc}")
+
     results = run_preflight_checks(
         engine,
         check_server=control.is_orchestrated,
@@ -72,12 +80,22 @@ def run(event: EventConfig, control: WorkerControl, engine: Engine, *, reprocess
     )
     failures = [r for r in results if not r.ok]
     if failures:
-        message = "Preflight failed: " + "; ".join(f"{r.name}: {r.detail}" for r in failures)
-        logger.error(message)
-        control.complete(success=False, message=message)
-        raise SystemExit(1)
+        _fail(control, "Preflight failed: " + "; ".join(f"{r.name}: {r.detail}" for r in failures))
 
-    Executor.from_event(event, engine, reprocess=reprocess, control=control).run()
+    try:
+        executor = Executor.from_event(event, engine, reprocess=reprocess, control=control)
+    except Exception as exc:
+        logger.exception("Building the pipeline failed")
+        _fail(control, f"Couldn't build the pipeline for {event.name!r}: {exc}")
+
+    executor.run()
+
+
+def _fail(control: WorkerControl, message: str) -> NoReturn:
+    """ Report the failure to the server (if there is one) and exit. """
+    logger.error(message)
+    control.complete(success=False, message=message)
+    raise SystemExit(1)
 
 
 def main() -> None:

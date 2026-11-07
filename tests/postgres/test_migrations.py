@@ -1,7 +1,6 @@
 """
-Keeps the Alembic migration chain honest: upgrading a fresh database to head
-must produce the full production schema (including hypertables), and the chain
-must be able to walk back down.
+Keeps the Alembic migrations honest: upgrading a fresh database to head must
+produce the models' schema (plus the hypertable), and it must walk back down.
 """
 import pathlib
 
@@ -14,9 +13,6 @@ from alembic.config import Config
 pytestmark = pytest.mark.postgres
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.parent
-
-# The first migration
-BASELINE_REVISION = "f3f709edb0e7"
 
 EXPECTED_TABLES = {
     "vehicle",
@@ -69,7 +65,6 @@ class TestMigrations:
 
         assert EXPECTED_TABLES <= tables
         assert hypertables == {"sample"}
-        assert "raw_sample" not in tables
 
     def test_downgrade_base_removes_schema(self, alembic_config):
         config, url = alembic_config
@@ -88,108 +83,28 @@ class TestMigrations:
         assert EXPECTED_TABLES.isdisjoint(tables)
 
 
-class TestConnectionsMigration:
-    """ c7e2a91f5d3b: context.toml's profiles become connection rows. """
+class TestBaseline:
+    def test_matches_the_models(self, alembic_config):
+        """ Fails when a model changes without a migration: run `alembic revision --autogenerate`. """
+        config, _ = alembic_config
+        command.upgrade(config, "head")
 
-    def test_seeds_connections_and_maps_old_profiles(self, alembic_config):
-        from sqlalchemy import create_engine
+        command.check(config)
 
-        config, url = alembic_config
-        command.upgrade(config, "a3c1e7d2b9f4")
-
-        engine = create_engine(url)
-        try:
-            with engine.begin() as conn:
-                conn.execute(text("INSERT INTO vehicle (name) VALUES ('Brightside')"))
-                conn.execute(text(
-                    "INSERT INTO event (name, vehicle_id, starts_at, pipeline_edition, status) "
-                    "SELECT 'e', id, now(), 'v3_0', 'UNPROCESSED' FROM vehicle"
-                ))
-                for profile in ("debug", "production", "staging"):
-                    conn.execute(
-                        text(
-                            "INSERT INTO worker_run (id, event_id, pipeline_edition, status, stop_requested, "
-                            "configuration_profile) SELECT gen_random_uuid(), id, 'v3_0', 'COMPLETED', false, :p "
-                            "FROM event"
-                        ),
-                        {"p": profile},
-                    )
-
-            command.upgrade(config, "head")
-
-            with engine.connect() as conn:
-                connections = conn.execute(
-                    text("SELECT name, bucket, is_default FROM connection ORDER BY id")
-                ).all()
-                runs = dict(conn.execute(text(
-                    "SELECT influx_connection_name, influx_connection_id IS NOT NULL FROM worker_run"
-                )).all())
-                statuses = set(conn.scalars(text("SELECT unnest(enum_range(NULL::workerstatus))::text")))
-        finally:
-            engine.dispose()
-
-        assert connections == [("UBC Influx (CAN_log)", "CAN_log", True), ("Production (CAN_prod)", "CAN_prod", False)]
-        # Known profiles link to their connection; an unknown one keeps its name only
-        assert runs == {"UBC Influx (CAN_log)": True, "Production (CAN_prod)": True, "staging": False}
-        assert "BUILDING" in statuses
-
-
-class TestSampleTableMigration:
-    """ d4b8e1f06a92: raw_sample is dropped and aligned_sample becomes sample, data and all. """
-
-    def test_samples_survive_and_names_follow_the_table(self, alembic_config):
-        from sqlalchemy import create_engine
-
-        config, url = alembic_config
-        command.upgrade(config, "c7e2a91f5d3b")
-
-        engine = create_engine(url)
-        try:
-            with engine.begin() as conn:
-                conn.execute(text("INSERT INTO vehicle (name) VALUES ('Brightside')"))
-                conn.execute(text(
-                    "INSERT INTO event (name, vehicle_id, starts_at, pipeline_edition, status) "
-                    "SELECT 'e', id, now(), 'v3_0', 'UNPROCESSED' FROM vehicle"
-                ))
-                conn.execute(text("INSERT INTO signal (name, source, event_id) SELECT 'speed', 'derived', id FROM event"))
-                conn.execute(text(
-                    "INSERT INTO aligned_sample (event_id, signal_id, ts, value_f64) "
-                    "SELECT event_id, id, now(), 4.2 FROM signal"
-                ))
-
-            command.upgrade(config, "head")
-
-            with engine.connect() as conn:
-                tables = set(inspect(conn).get_table_names())
-                value = conn.scalar(text("SELECT value_f64 FROM sample"))
-                names = set(conn.scalars(text(
-                    "SELECT conname FROM pg_constraint WHERE conrelid = 'sample'::regclass "
-                    "UNION SELECT indexname FROM pg_indexes WHERE tablename = 'sample'"
-                )))
-                hypertables = set(conn.scalars(text("SELECT hypertable_name FROM timescaledb_information.hypertables")))
-        finally:
-            engine.dispose()
-
-        assert "raw_sample" not in tables and "aligned_sample" not in tables
-        assert value == 4.2
-        assert hypertables == {"sample"}
-        assert {"pk_sample", "sample_event_signal_ts_idx", "sample_event_ts_idx", "sample_ts_idx"} <= names
-        assert not any(name.startswith("aligned_sample") for name in names)
-
-    def test_downgrade_restores_both_tables(self, alembic_config):
+    def test_seeds_the_default_connections(self, alembic_config):
         from sqlalchemy import create_engine
 
         config, url = alembic_config
         command.upgrade(config, "head")
-        command.downgrade(config, "c7e2a91f5d3b")
 
         engine = create_engine(url)
         try:
-            tables = set(inspect(engine).get_table_names())
+            with engine.connect() as conn:
+                connections = conn.execute(text("SELECT name, is_default FROM connection ORDER BY id")).all()
         finally:
             engine.dispose()
 
-        assert {"raw_sample", "aligned_sample"} <= tables and "sample" not in tables
+        assert connections == [("UBC Influx (CAN_log)", True), ("Production (CAN_prod)", False)]
 
 
 class TestServerStartupUpgrade:
@@ -209,15 +124,13 @@ class TestServerStartupUpgrade:
 
         from server.migrations import upgrade_database
 
-        config, url = alembic_config
-        command.upgrade(config, BASELINE_REVISION)
+        _, url = alembic_config
 
         engine = create_engine(url)
         blocker = engine.connect()
         try:
-            # An open transaction holding the table lock - the shape of an
-            # 'idle in transaction' session sitting on worker_run.
-            blocker.execute(text("LOCK TABLE worker_run IN ACCESS EXCLUSIVE MODE"))
+            # An open transaction the migration has to wait for: here one that's creating a table it creates too
+            blocker.execute(text("CREATE TABLE vehicle (id int)"))
 
             with pytest.raises(RuntimeError, match="pg_blocking_pids"):
                 upgrade_database(engine, lock_timeout="500ms")

@@ -60,3 +60,36 @@ class TestBuildControl:
 
         with pytest.raises(SystemExit, match="--serverless"):
             build_control(False, EVENT)
+
+class TestMissingStage:
+    def test_is_reported_to_the_server_before_anything_else(self, monkeypatch):
+        import importlib.util
+        import pathlib
+
+        # sunbeam.py by path: `import sunbeam` finds the repository's package instead
+        path = pathlib.Path(__file__).parents[2] / "sunbeam.py"
+        spec = importlib.util.spec_from_file_location("sunbeam_entry", path)
+        sunbeam = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sunbeam)
+
+        class RecordingControl(ServerlessWorkerControl):
+            is_orchestrated = False
+            completed: dict = {}
+
+            def complete(self, *, success, message=None):
+                self.completed.update(success=success, message=message)
+
+        # Nothing is reachable: the stage check comes first, needing nothing
+        monkeypatch.setattr(sunbeam, "run_preflight_checks", lambda *args, **kwargs: pytest.fail("ran preflight"))
+        event = EventConfig(
+            name="trial", description=None, stages=["TryingThisOut"], pipeline_edition="v3_0",
+            starts_at=datetime(2026, 1, 1, tzinfo=timezone.utc), ends_at=None,
+        )
+        control = RecordingControl()
+
+        with pytest.raises(SystemExit):
+            sunbeam.run(event, control, engine=None, reprocess=False)
+
+        assert control.completed["success"] is False
+        assert "This worker's code can't run 'trial'" in control.completed["message"]
+        assert "'TryingThisOut' isn't registered for v3_0" in control.completed["message"]

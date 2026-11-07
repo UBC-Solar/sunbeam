@@ -171,7 +171,6 @@ class TestLaunchWorker:
         assert environment["SUNBEAM_INFLUX_TOKEN"] == "test-token"
         assert environment["SUNBEAM_DATABASE_URL"] == "postgresql+psycopg://telemetry:telemetry@db:5432/telemetry"
         assert environment["SUNBEAM_SERVER_URL"] == "http://server:8000"
-        assert "SUNBEAM_CONFIGURATION_PROFILE" not in environment
 
     def test_launch_uses_the_chosen_connection_and_reprocess(self, service, fake_docker, db, seeded_event):
         other = Connection(name="other", url="http://other:8086", organization="o", bucket="b2", token="t2")
@@ -253,6 +252,15 @@ class TestLaunchWorker:
 
         assert fake_docker.containers.run_calls == []
 
+    def test_stage_the_server_lacks_needs_a_git_ref(self, service, fake_docker, db, seeded_event):
+        db.get(Event, seeded_event.event_id).stages = ["MotorPower", "TryingThisOut"]
+        db.commit()
+
+        with pytest.raises(ValueError, match="has no TryingThisOut stage. Launch from a git ref"):
+            service.launch_worker(db, event_id=seeded_event.event_id)
+
+        assert fake_docker.containers.run_calls == []
+
     def test_launch_unknown_event_rejected(self, service, db, seeded_event):
         with pytest.raises(LookupError, match="No event exists"):
             service.launch_worker(db, event_id=999_999)
@@ -279,6 +287,14 @@ class TestGitSource:
         assert build["buildargs"]["BASE_IMAGE"] == "sunbeam-worker:v3_0"
         assert "path" not in build  # the Dockerfile clones the code; there is no local build context
         assert fake_docker.containers.run_calls[0]["image"] == worker.image_tag
+
+    def test_stage_the_server_lacks_is_left_to_the_ref(self, service, db, seeded_event):
+        db.get(Event, seeded_event.event_id).stages = ["TryingThisOut"]
+        db.commit()
+
+        worker = service.launch_worker(db, event_id=seeded_event.event_id, source_ref="v4_0")
+
+        assert worker.source_sha == SHA
 
     def test_annotated_tag_resolves_to_its_commit(self, service, db, seeded_event):
         worker = service.launch_worker(db, event_id=seeded_event.event_id, source_ref="v1.0")
@@ -340,14 +356,14 @@ class TestGitSource:
     def test_failed_build_fails_the_worker_with_the_log(self, service, fake_docker, db, seeded_event):
         fake_docker.images.fail_build_with = BuildError(
             "The command returned a non-zero code: 1",
-            [{"stream": "Step 5/7 : RUN test -f ..."}, {"error": "predates server-managed connections"}],
+            [{"stream": "Step 4/6 : RUN uv sync ..."}, {"error": "No solution found when resolving dependencies"}],
         )
 
         worker = service.launch_worker(db, event_id=seeded_event.event_id, source_ref="v4_0")
 
         db.refresh(worker)
         assert worker.status == WorkerStatus.FAILED
-        assert "predates server-managed connections" in worker.failure_reason
+        assert "No solution found" in worker.failure_reason
         assert fake_docker.containers.run_calls == []
 
     def test_unknown_ref_rejected(self, service, db, seeded_event):

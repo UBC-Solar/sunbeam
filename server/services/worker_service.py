@@ -121,7 +121,7 @@ class WorkerService:
 
         :raises LookupError: Unknown event or connection
         :raises Conflict: The event already has an active worker
-        :raises ValueError: Unknown git ref, or an event whose edition this server lacks
+        :raises ValueError: Unknown git ref, or (without one) an event whose edition or stages this server lacks
         :raises ConnectionTestFailed: The connection can't reach InfluxDB or sees no data for the event
         """
         event = db.get(Event, event_id)
@@ -133,6 +133,15 @@ class WorkerService:
 
         # Editions are added rarely enough that any ref being launched is assumed to have the event's edition too
         self._library.validate_pipeline_edition(pipeline_edition)
+        if source_ref is None:
+            # Only a git ref might have stages this copy of the code doesn't; that worker checks its own
+            available = StageLibrary(pipeline_edition).stage_names
+            missing = [stage for stage in event.stages if stage not in available]
+            if missing:
+                raise ValueError(
+                    f"The server's copy of {pipeline_edition} has no {', '.join(missing)} stage. Launch from a git ref "
+                    f"that has it, or remove it from the event."
+                )
         check_no_active_run(db, event)
 
         connection = self._connections.resolve(db, influx_connection_id)

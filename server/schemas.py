@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
-from db.sunbeamdb.models import ConnectionKind, WorkerKind, WorkerStatus
+from db.sunbeamdb.models import ConnectionKind, EventStatus, WorkerKind, WorkerStatus
 
 
 class LaunchWorkerRequest(BaseModel):
@@ -23,6 +23,41 @@ class EventCreate(BaseModel):
     # None for an ongoing event, which a worker runs live
     ends_at: datetime | None = None
     pipeline_edition: str
+    stages: list[str]
+
+
+class EventRead(BaseModel):
+    id: int
+    name: str
+    vehicle_id: int
+    description: str | None
+    starts_at: datetime
+    ends_at: datetime | None
+    pipeline_edition: str
+    stages: list[str]
+    # Those the server's copy of the code doesn't have, so the event can only be launched from a git ref that does
+    unregistered_stages: list[str]
+    status: EventStatus
+    # The event has ended: a worker launched for it replays it, always wiping its earlier samples first
+    is_replay: bool
+    # A worker run for the event hasn't reached a terminal status
+    running: bool
+    # Samples stored for the event; recounted at most every 5 s while it's ongoing, otherwise when its status changes
+    sample_count: int
+
+
+class VehicleRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    description: str | None
+
+
+class PipelineEditionRead(BaseModel):
+    id: str
+    name: str
+    # This copy of the code's stages for the edition, but ingress (the pipeline adds it itself)
     stages: list[str]
 
 

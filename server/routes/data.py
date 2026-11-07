@@ -1,19 +1,6 @@
 """
-Telemetry data read endpoints, keyed by event NAME and signal name.
-
-  GET /events/{event_name}/signals                       - list signals
-  GET /events/{event_name}/signals/{signal_name}/data    - windowed query
-  GET /events/{event_name}/data/stream                   - multiplexed SSE
-
-The stream protocol:
-
-  event: meta          first message; per-signal {signal_id, unit, frequency}
-  event: data          columnar batches {signal: {timestamps[], values[]}}
-  : keepalive          comment lines during quiet stretches
-
-Every data event carries `id: <cursor>` (epoch microseconds). EventSource
-sends it back as Last-Event-ID on reconnect, and the server resumes strictly
-after it - no gaps, no duplicates.
+Telemetry reads, by event and signal name. The query endpoint is for analysis over any window; the stream is for a
+live view of many signals over one connection.
 """
 import json
 import logging
@@ -35,7 +22,7 @@ router = APIRouter(prefix="/events", tags=["data"])
 
 @router.get("/{event_name}/signals", response_model=list[SignalInfo])
 def list_signals(event_name: str, with_data: bool = False, db: Session = Depends(get_db)):
-    """ with_data=true lists only signals with at least one sample to query. """
+    """ Every signal the event defines; `with_data=true` lists only those with at least one sample. """
     return data_service.list_signals(db, event_name, with_data=with_data)
 
 
@@ -49,6 +36,24 @@ def query_signal_data(
     limit: int = Query(default=data_service.MAX_POINTS, ge=1, le=data_service.MAX_POINTS),
     db: Session = Depends(get_db),
 ):
+    """
+    One signal over a window, chosen by the parameters given:
+
+    | Parameters | Window |
+    |---|---|
+    | none | the whole event |
+    | `start`, `end` | `[start, end)` |
+    | `start` | `[start, now)` |
+    | `end` | everything before `end` |
+    | `last_seconds` | `[now - last_seconds, now)` |
+
+    Datetimes must have a time zone. Mixing `last_seconds` with `start`/`end`, or `start >= end`, is 422. An open side
+    of the window is reported as the event's own start (or end, or now for a live event).
+
+    Timestamps are epoch milliseconds. More than `limit` samples returns the most recent `limit` with
+    `truncated: true`: to get everything, page backwards by passing the earliest timestamp as the next `end`
+    (what data_tools' `SunbeamClient.get_time_series` does).
+    """
     try:
         window_start, window_end = data_service.resolve_time_window(
             start, end, last_seconds
@@ -92,6 +97,28 @@ def stream_signal_data(
     last_event_id: Optional[str] = Header(default=None),
     session_factory=Depends(get_db_session_factory),
 ):
+    """
+    Server-sent events for any number of the event's signals:
+
+    ```
+    event: meta
+    data: {"VehicleSpeed": {"signal_id": 14, "unit": "m/s", "frequency": 5.0}, ...}
+
+    event: data
+    id: 1752968412558123
+    data: {"VehicleSpeed": {"timestamps": [1752968412558], "values": [13.1]}, "PackCurrent": {"timestamps": [], "values": []}}
+
+    : keepalive
+    ```
+
+    `meta` comes first, once. Each poll that finds new rows sends a `data` message with every subscribed signal
+    (empty arrays if it had nothing new) and `id:`, the newest row's time in epoch microseconds. Keepalive comments
+    fill quiet stretches. An unknown event or signal is a 404 before the stream opens.
+
+    The stream resumes strictly after `since`, or after the `Last-Event-ID` header, which `EventSource` sends by
+    itself on reconnect: no gaps and no duplicates. To backfill a chart first, query `last_seconds`, then stream with
+    `since` = its last timestamp × 1000.
+    """
     signal_names = [name.strip() for name in signals.split(",") if name.strip()]
     if not signal_names:
         raise HTTPException(status_code=422, detail="No signal names given.")

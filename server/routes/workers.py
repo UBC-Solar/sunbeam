@@ -41,6 +41,7 @@ def list_workers(
     limit: int | None = Query(default=None, ge=1, description="Only the most recent runs."),
     db: Session = Depends(get_db),
 ):
+    """ Newest first. `active_only` leaves out terminal runs (completed, failed, lost, cancelled). """
     stmt = select(WorkerRun).order_by(WorkerRun.created_at.desc())
 
     if active_only:
@@ -57,6 +58,17 @@ def launch_worker(
     db: Session = Depends(get_db),
     service: WorkerService = Depends(get_worker_service),
 ):
+    """
+    Runs a worker container for the event, with the event's own pipeline edition. What the dashboard calls.
+
+    First tests the connection over the event's window: 422 with the failing step, and nothing created, if it can't
+    reach InfluxDB, find the bucket or see any data. 409 if the event already has an active worker; 404 for an unknown
+    event or connection; 400 for an unknown git ref or edition.
+
+    The image is `sunbeam-worker:<edition>`, or `<edition>-<sha12>` from a git ref. If that isn't built yet the run is
+    returned as `building` and starts when the build finishes (or fails with the build log's tail). If Docker itself
+    fails, the run is still returned (200) but `failed`, with the reason in `failure_reason`.
+    """
     return service.launch_worker(
         db,
         event_id=payload.event_id,
@@ -72,6 +84,10 @@ def register_worker(
     db: Session = Depends(get_db),
     service: WorkerService = Depends(get_worker_service),
 ):
+    """
+    How `uv run sunbeam.py` run by hand gets an (`external`) run ID. 404 for an unknown event, 400 for an unknown
+    edition, 409 if the event already has an active worker.
+    """
     return service.register_worker(
         db,
         event_name=payload.event_name,
@@ -89,6 +105,10 @@ def heartbeat(
     db: Session = Depends(get_db),
     service: WorkerService = Depends(get_worker_service),
 ):
+    """
+    Sent by the worker about every second. Once a stop is requested the status stays `stop_requested` whatever the
+    worker reports, and a heartbeat for a terminal run is ignored.
+    """
     return service.heartbeat(
         db,
         worker_id=worker_id,
@@ -105,6 +125,10 @@ def get_permission(
     db: Session = Depends(get_db),
     service: WorkerService = Depends(get_worker_service),
 ):
+    """
+    Polled by the worker about every second; `allowed: false` means stop now. A worker that can't reach the server
+    for about ten polls in a row stops itself.
+    """
     allowed, reason = service.permission_for(db, worker_id)
     return WorkerPermissionResponse(allowed=allowed, reason=reason)
 
@@ -115,6 +139,10 @@ def request_stop(
     db: Session = Depends(get_db),
     service: WorkerService = Depends(get_worker_service),
 ):
+    """
+    Asks the worker to stop; it notices on its next permission poll. If it hasn't stopped within the watchdog's grace
+    period, its container is killed (or, for an external worker, the run is marked `lost`). No-op for a terminal run.
+    """
     return service.request_stop(db, worker_id)
 
 
@@ -125,6 +153,11 @@ def complete_worker(
     db: Session = Depends(get_db),
     service: WorkerService = Depends(get_worker_service),
 ):
+    """
+    Sent by the worker once its writes have finished, so `completed` means the data is there. An unsuccessful run is
+    `cancelled` if a stop was requested (how every realtime run ends), otherwise `failed` with `message` as the reason.
+    A run the watchdog already resolved keeps its status.
+    """
     return service.complete(db, worker_id=worker_id, success=payload.success, message=payload.message)
 
 
@@ -135,6 +168,10 @@ def report_metrics(
     db: Session = Depends(get_db),
     service: WorkerService = Depends(get_worker_service),
 ):
+    """
+    Timing and writer-queue snapshot, sent every 0.5 s by a replay and every 5 s by a realtime worker (1 s in a
+    terminal). 404 once the run is terminal, which a worker's last report can race harmlessly.
+    """
     service.record_metrics(db, worker_id=worker_id, payload=payload.model_dump())
 
 
@@ -143,6 +180,10 @@ def get_metrics(
     worker_id: uuid.UUID,
     service: WorkerService = Depends(get_worker_service),
 ):
+    """
+    The latest snapshot, held in memory until the run completes or the server restarts; 404 if there's none.
+    `replay` is only reported by replays: `speed` is how many times faster than realtime it's running.
+    """
     return service.get_metrics(worker_id)
 
 
@@ -153,6 +194,9 @@ def get_logs(
     db: Session = Depends(get_db),
     service: WorkerService = Depends(get_worker_service),
 ):
+    """
+    The container's last `tail` log lines. 404 if the run has no container (external, or failed before launching).
+    """
     return {"lines": service.get_logs(db, worker_id, tail=tail)}
 
 
@@ -163,6 +207,7 @@ def stream_logs(
     db: Session = Depends(get_db),
     service: WorkerService = Depends(get_worker_service),
 ):
+    """ The same, followed live as server-sent events: one `data: <line>` message per line. """
     log_stream = service.stream_logs(db, worker_id, tail=tail)
 
     # The stream can stay open for as long as the worker runs, so give the session's pooled connection back now

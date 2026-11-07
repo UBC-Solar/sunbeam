@@ -92,12 +92,26 @@ def _error_handler(status_code: int):
     return handle
 
 
+API_DESCRIPTION = """
+Runs and supervises sunbeam workers and serves the telemetry they write. Everything is reachable only inside the
+Tailnet, so there's no authentication.
+
+- **Events** are identified by id, except in the telemetry routes (`/events/{event_name}/...`), which use the name.
+  Signals are identified by name within their event.
+- **Datetimes** sent must have a time zone (`2026-07-20T12:00:00Z`); naive ones are 422. Datetimes returned are ISO
+  8601, except the telemetry routes' `timestamps`, which are epoch milliseconds.
+- **Errors** are `{"detail": "..."}`: 404 for something that doesn't exist, 409 for a clash with existing state (a
+  taken name, an event with an active worker), 400 for a valid request the server can't act on (an unknown edition
+  or git ref), 422 for a malformed request or a connection that fails its test on launch.
+"""
+
+
 def create_app(lifespan=lifespan) -> FastAPI:
     """
     Build the FastAPI application. Tests can pass lifespan=None to skip the
     Postgres/Docker startup checks and override dependencies instead.
     """
-    app = FastAPI(title="Sunbeam Server", lifespan=lifespan)
+    app = FastAPI(title="Sunbeam Server", description=API_DESCRIPTION, lifespan=lifespan)
     # Per app rather than global, so each test's app (and database) starts with no cached counts
     app.state.sample_counts = SampleCounts()
 
